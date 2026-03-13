@@ -1,0 +1,1 @@
+ALTER TABLE public.client_payments ADD COLUMN IF NOT EXISTS credit_used numeric NOT NULL DEFAULT 0;

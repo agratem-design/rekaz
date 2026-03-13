@@ -1,0 +1,1 @@
+powershell -ExecutionPolicy Bypass -File E:\github-sync\watcher.ps1

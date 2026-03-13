@@ -1,0 +1,1 @@
+ALTER TABLE purchases ADD COLUMN invoice_image_url text;

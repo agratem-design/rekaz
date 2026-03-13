@@ -1,0 +1,1 @@
+ALTER TABLE public.project_phases ADD COLUMN IF NOT EXISTS phase_category text NOT NULL DEFAULT 'contracting';

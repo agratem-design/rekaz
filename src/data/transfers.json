@@ -1,0 +1,59 @@
+{
+  "name": "transfers",
+  "displayName": "الدخول والخروج (حركات داخلية)",
+  "description": "سجل السلف والعهد داخل النظام — ربط بين الحسابات الداخلية للشركاء والموظفين وتتبّع الحالة حتى الإغلاق.",
+  "currency": "LYD",
+  "city": "زليتن",
+  "fields": [
+    { "name": "id", "type": "string", "primary": true, "description": "معرّف فريد" },
+    { "name": "type", "type": "enum", "label": "نوع الحركة", "options": ["loan", "advance"], "description": "loan = سلفة، advance = عهدة" },
+    { "name": "subtype", "type": "enum", "label": "التصنيف", "options": ["partner", "employee", "other", "permanent", "one-time"], "description": "تفصيل التصنيف" },
+    { "name": "partyId", "type": "string", "label": "الجهة / المستفيد", "description": "مفتاح مرجعي إلى partners/employees/clients أو اسم حر" },
+    { "name": "partyName", "type": "string", "label": "اسم الجهة", "description": "يُستخدم إن لم يكن هناك مرجع" },
+    { "name": "projectId", "type": "string", "label": "المشروع", "relation": { "collection": "projects", "field": "id" } },
+    { "name": "amount", "type": "number", "label": "المبلغ", "currency": "LYD" },
+    { "name": "date", "type": "date", "label": "التاريخ" },
+    { "name": "notes", "type": "text", "label": "ملاحظات" },
+    { "name": "status", "type": "enum", "label": "الحالة", "options": ["active", "closed"] },
+    { "name": "createdBy", "type": "string", "label": "أُدخل بواسطة", "relation": { "collection": "users", "field": "id" } },
+    { "name": "alertThreshold", "type": "number", "label": "حد التنبيه", "description": "خيار لإرسال إشعار عند تجاوز القيمة" },
+    { "name": "settlementTransactionId", "type": "string", "label": "معرّف تسوية الخزينة", "description": "يُسجل عند إغلاق السل��ة/العهدة لتحديث صفحة الخزينة" },
+    { "name": "attachments", "type": "array", "items": { "type": "object", "properties": { "filename": { "type": "string" }, "url": { "type": "string" } } } },
+    { "name": "createdAt", "type": "datetime" },
+    { "name": "updatedAt", "type": "datetime" }
+  ],
+  "ui": {
+    "columns": [
+      { "label": "الجهة / المستفيد", "field": "partyName", "width": 180, "sortable": true, "filterable": true },
+      { "label": "النوع", "field": "type", "width": 110, "sortable": true, "filterable": true },
+      { "label": "التصنيف", "field": "subtype", "width": 140 },
+      { "label": "المبلغ", "field": "amount", "width": 120 },
+      { "label": "التاريخ", "field": "date", "width": 120 },
+      { "label": "الحالة", "field": "status", "width": 100 },
+      { "label": "ملاحظات", "field": "notes", "width": 220 }
+    ],
+    "listPage": { "pageSize": 25, "defaultSort": { "field": "date", "direction": "desc" } },
+    "detailPage": { "showSettlementLink": true, "showAttachments": true }
+  },
+  "validations": {
+    "required": ["type", "amount", "date", "partyName"],
+    "amount": { "min": 1 }
+  },
+  "relations": [
+    { "name": "project", "localField": "projectId", "collection": "projects", "foreignField": "id", "select": ["id", "name"] },
+    { "name": "settlementTransaction", "localField": "settlementTransactionId", "collection": "treasury_transactions", "foreignField": "id", "select": ["id", "amount", "date"] }
+  ],
+  "endpoints": {
+    "create": "/api/transfers.create",
+    "read": "/api/transfers.read",
+    "update": "/api/transfers.update",
+    "delete": "/api/transfers.delete",
+    "close": "/api/transfers.close",
+    "export": "/api/transfers.export"
+  },
+  "sampleData": [
+    { "id": "tr_1", "type": "loan", "subtype": "partner", "partyId": "partner_1", "partyName": "شركة ألف", "projectId": "proj_A", "amount": 20000, "date": "2025-09-01", "notes": "سلفة لمشروع X", "status": "active" },
+    { "id": "tr_2", "type": "advance", "subtype": "permanent", "partyName": "حقيب يوسف", "amount": 15000, "date": "2025-08-15", "notes": "عهدة أدوات", "status": "active" },
+    { "id": "tr_3", "type": "loan", "subtype": "employee", "partyName": "أحمد علي", "amount": 8000, "date": "2025-07-10", "notes": "سلفة شخصية", "status": "closed", "settlementTransactionId": "tx_1001" }
+  ]
+}

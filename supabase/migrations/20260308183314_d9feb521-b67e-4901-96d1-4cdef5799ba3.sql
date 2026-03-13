@@ -1,0 +1,1 @@
+ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS theme_color text DEFAULT '30 55% 35%';

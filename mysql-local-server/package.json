@@ -1,0 +1,14 @@
+{
+  "name": "mysql-local-server",
+  "version": "1.0.0",
+  "description": "سيرفر محلي لربط منظومة إدارة المشاريع بقاعدة بيانات MySQL على Windows",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "mysql2": "^3.11.0",
+    "cors": "^2.8.5"
+  }
+}

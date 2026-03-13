@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS progress_tracking_enabled BOOLEAN DEFAULT false;
