@@ -1,0 +1,57 @@
+{
+  "name": "income",
+  "displayName": "الدخول (الإيرادات)",
+  "description": "تمثيل البنود المختلفة للدخول: خدمات مباشرة، إيرادات غير مباشرة، وتعزيزات الخزينة.",
+  "currency": "LYD",
+  "city": "زليتن",
+  "fields": [
+    { "name": "id", "type": "string", "primary": true, "description": "معرف فريد (UUID)" },
+    { "name": "type", "type": "enum", "label": "النوع", "options": ["service", "indirect", "treasury"], "description": "service = خدمات مباشرة، indirect = إيرادات غير مباشرة، treasury = تعزيز خزينة" },
+    { "name": "subtype", "type": "string", "label": "البند / التصنيف", "description": "مثل: materials, transport, development أو وصف مخصص" },
+    { "name": "projectId", "type": "string", "label": "المشروع", "relation": { "collection": "projects", "field": "id" } },
+    { "name": "clientId", "type": "string", "label": "العميل / الجهة", "relation": { "collection": "clients", "field": "id" } },
+    { "name": "amount", "type": "number", "label": "المبلغ", "currency": "LYD" },
+    { "name": "date", "type": "date", "label": "التاريخ" },
+    { "name": "paymentMethod", "type": "enum", "label": "طريقة الدفع", "options": ["cash", "transfer", "installments"] },
+    { "name": "status", "type": "enum", "label": "الحالة", "options": ["received", "expected"] },
+    { "name": "notes", "type": "text", "label": "ملاحظات" },
+    { "name": "attachments", "type": "array", "label": "مرفقات", "items": { "type": "object", "properties": { "filename": { "type": "string" }, "url": { "type": "string" } } } },
+    { "name": "createdBy", "type": "string", "label": "أُدخل بواسطة", "relation": { "collection": "users", "field": "id" } },
+    { "name": "createdAt", "type": "datetime" },
+    { "name": "updatedAt", "type": "datetime" }
+  ],
+  "ui": {
+    "columns": [
+      { "label": "الجهة / العميل", "field": "clientId", "width": 180, "sortable": true, "filterable": true },
+      { "label": "المشروع", "field": "projectId", "width": 180, "sortable": true, "filterable": true },
+      { "label": "البند", "field": "subtype", "width": 160, "sortable": true, "filterable": true },
+      { "label": "المبلغ", "field": "amount", "width": 120, "sortable": true, "filterable": false },
+      { "label": "التاريخ", "field": "date", "width": 120, "sortable": true, "filterable": true },
+      { "label": "طريقة الدفع", "field": "paymentMethod", "width": 120, "sortable": false, "filterable": true },
+      { "label": "الحالة", "field": "status", "width": 110, "sortable": true, "filterable": true },
+      { "label": "ملاحظات", "field": "notes", "width": 220 }
+    ],
+    "listPage": { "pageSize": 20, "defaultSort": { "field": "date", "direction": "desc" } },
+    "detailPage": { "showAttachments": true, "showAudit": true }
+  },
+  "validations": {
+    "required": ["type", "amount", "date"],
+    "amount": { "min": 0 }
+  },
+  "relations": [
+    { "name": "project", "localField": "projectId", "collection": "projects", "foreignField": "id", "select": ["id", "name"] },
+    { "name": "client", "localField": "clientId", "collection": "clients", "foreignField": "id", "select": ["id", "name"] }
+  ],
+  "endpoints": {
+    "create": "/api/income.create",
+    "read": "/api/income.read",
+    "update": "/api/income.update",
+    "delete": "/api/income.delete",
+    "export": "/api/income.export"
+  },
+  "sampleData": [
+    { "id": "inc_1", "type": "service", "subtype": "materials", "projectId": "proj_A", "clientId": "client_1", "amount": 125000, "date": "2025-09-05", "paymentMethod": "cash", "status": "received", "notes": "دفعة أولى" },
+    { "id": "inc_2", "type": "indirect", "subtype": "transport", "amount": 36000, "date": "2025-09-10", "paymentMethod": "transfer", "status": "received", "notes": "نقل مواد" },
+    { "id": "inc_3", "type": "treasury", "subtype": "development", "amount": 58000, "date": "2025-08-20", "paymentMethod": "transfer", "status": "received", "notes": "تعزيز خزينة" }
+  ]
+}

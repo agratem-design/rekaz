@@ -1,0 +1,59 @@
+{
+  "suppliers": [
+    {
+      "id": "s1",
+      "name": "شركة الإمداد للمواد الإنشائية",
+      "category": "مواد بناء",
+      "phone": "0912345678",
+      "email": "info@emedad.ly",
+      "projects": ["proj_A", "proj_B", "proj_C"],
+      "totalPurchases": 1250000,
+      "paymentStatus": "partial"
+    },
+    {
+      "id": "s2",
+      "name": "مؤسسة الجودة للحديد والصلب",
+      "category": "حديد وصلب",
+      "phone": "0923456789",
+      "email": "sales@quality-steel.ly",
+      "projects": ["proj_D", "proj_E"],
+      "totalPurchases": 875000,
+      "paymentStatus": "paid"
+    },
+    {
+      "id": "s3",
+      "name": "شركة النخبة للكهرباء",
+      "category": "كهرباء",
+      "phone": "0934567890",
+      "email": "contact@elite-electric.ly",
+      "projects": ["proj_F", "proj_G"],
+      "totalPurchases": 450000,
+      "paymentStatus": "processing"
+    },
+    {
+      "id": "s4",
+      "name": "مؤسسة التميز للسباكة",
+      "category": "سباكة",
+      "phone": "0945678901",
+      "email": "info@excellence-plumb.ly",
+      "projects": ["proj_H"],
+      "totalPurchases": 320000,
+      "paymentStatus": "paid"
+    }
+  ],
+  "projects": [
+    { "id": "proj_A", "name": "مشروع A", "budget": 500000, "spent": 375000 },
+    { "id": "proj_B", "name": "مشروع B", "budget": 750000, "spent": 675000 },
+    { "id": "proj_C", "name": "مشروع C", "budget": 300000, "spent": 150000 },
+    { "id": "proj_D", "name": "مشروع D", "budget": 420000, "spent": 420000 },
+    { "id": "proj_E", "name": "مشروع E", "budget": 260000, "spent": 135000 },
+    { "id": "proj_F", "name": "مشروع F", "budget": 200000, "spent": 90000 },
+    { "id": "proj_G", "name": "مشروع G", "budget": 180000, "spent": 120000 },
+    { "id": "proj_H", "name": "مشروع H", "budget": 150000, "spent": 50000 }
+  ],
+  "purchases": [
+    { "id": "p1", "projectId": "proj_A", "supplierId": "s1", "invoice": "inv_p1.pdf", "date": "2025-09-12", "items": [{ "name": "أسمنت", "qty": 100, "price": 500 }, { "name": "حديد", "qty": 50, "price": 2000 }], "status": "paid" },
+    { "id": "p2", "projectId": "proj_B", "supplierId": "s1", "invoice": "inv_p2.pdf", "date": "2025-10-02", "items": [{ "name": "رمل", "qty": 200, "price": 150 }], "status": "due" },
+    { "id": "p3", "projectId": "proj_C", "supplierId": "s3", "invoice": null, "date": "2025-09-20", "items": [{ "name": "أسلاك", "qty": 50, "price": 1000 }], "status": "paid" }
+  ]
+}
