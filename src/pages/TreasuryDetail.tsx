@@ -16,13 +16,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowRight, Wallet, Plus, TrendingUp, TrendingDown, ArrowUpDown, Save, X, Landmark, ArrowLeftRight, Printer, FolderOpen, User, ClipboardList, Handshake
+  ArrowRight, Wallet, Plus, TrendingUp, TrendingDown, ArrowUpDown, Save, X, Landmark,
+  ArrowLeftRight, Banknote, Calendar, ShieldAlert, CreditCard,
+  TrendingUp as TrendUp, Filter, Printer, FolderOpen, User, ClipboardList, Handshake
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
-import { openReceiptPrintWindow } from "@/lib/printStyles";
+import { openPrintWindow, openReceiptPrintWindow } from "@/lib/printStyles";
 
 const defaultSourceSuggestions = [
   "نقداً",
@@ -72,6 +74,32 @@ const TreasuryDetail = () => {
     reason: "",
     date: new Date().toISOString().split("T")[0],
   });
+
+  // ── فلتر التاريخ لكشف الحركات ──
+  const [txDateFrom, setTxDateFrom] = useState("");
+  const [txDateTo, setTxDateTo] = useState("");
+  const [txPeriodPreset, setTxPeriodPreset] = useState<"today"|"week"|"month"|"year"|"custom"|"all">("all");
+  const [txTypeFilter, setTxTypeFilter] = useState("all");
+
+  const applyPreset = (preset: "today"|"week"|"month"|"year"|"all") => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const today = fmt(now);
+    if (preset === "all") { setTxDateFrom(""); setTxDateTo(""); }
+    else if (preset === "today") { setTxDateFrom(today); setTxDateTo(today); }
+    else if (preset === "week") {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+      setTxDateFrom(fmt(start)); setTxDateTo(today);
+    } else if (preset === "month") {
+      setTxDateFrom(`${now.getFullYear()}-${pad(now.getMonth()+1)}-01`);
+      setTxDateTo(today);
+    } else if (preset === "year") {
+      setTxDateFrom(`${now.getFullYear()}-01-01`);
+      setTxDateTo(today);
+    }
+    setTxPeriodPreset(preset);
+  };
 
   const { data: treasury, isLoading: loadingTreasury } = useQuery({
     queryKey: ["treasury", id],
@@ -288,6 +316,30 @@ const TreasuryDetail = () => {
     return Array.from(sources);
   }, [transactions]);
 
+  // ── جدول الحركات المفلترة حسب التاريخ والنوع
+  const filteredTransactions = useMemo(() => {
+    if (!transactions) return [];
+    return transactions.filter(tx => {
+      // فلتر التاريخ
+      if (txDateFrom && tx.date < txDateFrom) return false;
+      if (txDateTo && tx.date > txDateTo) return false;
+      // فلتر النوع
+      if (txTypeFilter === "deposit") return tx.type === "deposit";
+      if (txTypeFilter === "withdrawal") return tx.type === "withdrawal";
+      if (txTypeFilter === "client_payment") return tx.source === "client_payment";
+      if (txTypeFilter === "purchase_payments") return tx.source === "purchase_payments" || tx.reference_type === "purchase_payment";
+      if (txTypeFilter === "expense") return tx.source === "expenses" || tx.reference_type === "expense";
+      if (txTypeFilter === "transfer") return tx.source === "transfer";
+      return true;
+    });
+  }, [transactions, txDateFrom, txDateTo, txTypeFilter]);
+
+  const periodStats = useMemo(() => {
+    const totalIn = filteredTransactions.filter(t => t.type === "deposit").reduce((s, t) => s + Number(t.amount), 0);
+    const totalOut = filteredTransactions.filter(t => t.type === "withdrawal").reduce((s, t) => s + Number(t.amount), 0);
+    return { totalIn, totalOut, net: totalIn - totalOut, count: filteredTransactions.length };
+  }, [filteredTransactions]);
+
   // Compute stats
   const stats = useMemo(() => {
     const deposits = transactions?.filter(t => t.type === "deposit").reduce((s, t) => s + Number(t.amount), 0) || 0;
@@ -307,6 +359,109 @@ const TreasuryDetail = () => {
     const netProfit = clientPayments - (purchaseWithdrawals + expenseWithdrawals);
     return { deposits, withdrawals, purchaseTotal: purchaseWithdrawals + expenseWithdrawals, clientPayments, purchaseWithdrawals, expenseWithdrawals, netProfit };
   }, [transactions]);
+
+  // طباعة كشف الفترة لهذه الخزينة
+  const handlePrintPeriodStatement = () => {
+    if (!treasury) return;
+    const periodLabel = txPeriodPreset === "all" ? "جميع الفترات"
+      : txPeriodPreset === "today" ? "اليوم"
+      : txPeriodPreset === "week" ? "هذا الأسبوع"
+      : txPeriodPreset === "month" ? "هذا الشهر"
+      : txPeriodPreset === "year" ? "هذه السنة"
+      : `من ${txDateFrom || "..."} إلى ${txDateTo || "..."}`;
+
+    const reportTitle = `كشف حركات خزينة ${treasury.name} — ${periodLabel}`;
+
+    const rowsHtml = filteredTransactions.map((tx, idx) => {
+      const isDeposit = tx.type === "deposit";
+      const amtColor = isDeposit ? "#15803d" : "#b91c1c";
+      const amtSign = isDeposit ? "+" : "-";
+
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td style="text-align: center;">${format(new Date(tx.date), "yyyy-MM-dd")}</td>
+          <td style="text-align: center;">${translateSource(tx.source) || tx.source || "عام"}</td>
+          <td style="text-align: right; padding-right: 8px;">${tx.description || tx.notes || "-"}</td>
+          <td style="text-align: center; color: ${amtColor}; font-weight: bold;" dir="ltr">
+            ${amtSign}${formatCurrencyLYD(Number(tx.amount))}
+          </td>
+          <td style="text-align: center; font-weight: bold;" dir="ltr">
+            ${formatCurrencyLYD(Number(tx.balance_after || 0))}
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    const contentHtml = `
+      <div class="print-area">
+        <div class="print-content">
+          <!-- Report Header -->
+          <div class="print-report-header">
+            <div class="print-report-title">كشف حركات خزينة: ${treasury.name}</div>
+            <div class="print-report-subtitle">الفترة: ${periodLabel}</div>
+            <div class="print-report-meta">
+              الرصيد الحالي: ${formatCurrencyLYD(treasury.balance)} | عدد الحركات: ${filteredTransactions.length} حركة ${txDateFrom ? `| من: ${txDateFrom}` : ''} ${txDateTo ? `| إلى: ${txDateTo}` : ''}
+            </div>
+          </div>
+
+          <!-- Financial Summary Section -->
+          <div class="print-section">
+            <div class="print-section-title">ملخص التدفق المالي لهذه الخزينة للفترة</div>
+            <table class="print-summary-table">
+              <thead>
+                <tr>
+                  <th style="width: 33.33%;">إجمالي المقبوضات (الإيداعات)</th>
+                  <th style="width: 33.33%;">إجمالي المدفوعات (السحوبات)</th>
+                  <th style="width: 33.33%;">صافي التدفق المالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="color: #15803d; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.totalIn)}</td>
+                  <td style="color: #b91c1c; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.totalOut)}</td>
+                  <td style="color: ${periodStats.net >= 0 ? "#15803d" : "#b91c1c"}; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.net)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Detailed Transactions Table -->
+          <div class="print-section">
+            <div class="print-section-title">سجل الحركات التفصيلي</div>
+            <table class="print-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px;">ر.م</th>
+                  <th style="width: 95px;">التاريخ</th>
+                  <th style="width: 130px;">المصدر / النوع</th>
+                  <th style="text-align: right; padding-right: 8px;">البيان / الوصف</th>
+                  <th style="width: 120px;">المبلغ</th>
+                  <th style="width: 120px;">الرصيد بعدها</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align: right; padding-right: 12px; font-weight: bold;">
+                    إجمالي صافي التدفق للفترة (${filteredTransactions.length} حركة)
+                  </td>
+                  <td style="text-align: center; color: ${periodStats.net >= 0 ? "#15803d" : "#b91c1c"}; font-weight: bold;" dir="ltr">
+                    ${formatCurrencyLYD(periodStats.net)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    openPrintWindow(reportTitle, contentHtml, companySettings);
+  };
 
   if (loadingTreasury) {
     return (
@@ -439,9 +594,87 @@ const TreasuryDetail = () => {
       {/* Transactions */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">حركات الخزينة</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="h-5 w-5 text-primary" />
+              <CardTitle className="text-lg">حركات الخزينة</CardTitle>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* أزرار الفترات السريعة */}
+              {(["all","today","week","month","year"] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => applyPreset(p)}
+                  className={`text-xs px-3 py-1 rounded-lg border transition-all ${
+                    txPeriodPreset === p
+                      ? "bg-primary text-primary-foreground border-primary font-semibold"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                  }`}
+                >
+                  {{ all:"الكل", today:"اليوم", week:"هذا الأسبوع", month:"هذا الشهر", year:"هذه السنة" }[p]}
+                </button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrintPeriodStatement}
+                className="h-8 rounded-lg text-xs border-primary/20 hover:bg-primary/5 hover:text-primary"
+              >
+                <Printer className="h-3.5 w-3.5 ml-1.5" />
+                طباعة كشف الحركة
+              </Button>
+            </div>
+          </div>
+          {/* فلتر مخصص + نوع الحركة */}
+          <div className="flex items-center gap-3 flex-wrap mt-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">من:</label>
+              <input
+                type="date"
+                value={txDateFrom}
+                onChange={e => { setTxDateFrom(e.target.value); setTxPeriodPreset("custom"); }}
+                className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">إلى:</label>
+              <input
+                type="date"
+                value={txDateTo}
+                onChange={e => { setTxDateTo(e.target.value); setTxPeriodPreset("custom"); }}
+                className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+              />
+            </div>
+            <select
+              value={txTypeFilter}
+              onChange={e => setTxTypeFilter(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+            >
+              <option value="all">جميع الحركات</option>
+              <option value="deposit">إيداعات</option>
+              <option value="withdrawal">سحوبات</option>
+              <option value="client_payment">مقبوضات زبائن</option>
+              <option value="purchase_payments">مدفوعات موردين/فنيين</option>
+              <option value="expense">مصروفات</option>
+              <option value="transfer">تحويلات</option>
+            </select>
+          </div>
+          {/* إجماليات الفترة */}
+          <div className="grid grid-cols-3 gap-3 mt-3 p-3 bg-muted/30 rounded-xl border border-border/40">
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground">إجمالي دخل الفترة</p>
+              <p className="text-sm font-bold text-emerald-600">+{formatCurrencyLYD(periodStats.totalIn)}</p>
+            </div>
+            <div className="text-center border-x border-border/40">
+              <p className="text-[10px] text-muted-foreground">إجمالي خروج الفترة</p>
+              <p className="text-sm font-bold text-rose-600">-{formatCurrencyLYD(periodStats.totalOut)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground">صافي التدفق</p>
+              <p className={`text-sm font-bold ${periodStats.net >= 0 ? "text-primary" : "text-destructive"}`}>
+                {periodStats.net >= 0 ? "+" : ""}{formatCurrencyLYD(periodStats.net)}
+              </p>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -452,14 +685,14 @@ const TreasuryDetail = () => {
           ) : (
             <>
               {/* Manual transactions */}
-              {transactions && transactions.length > 0 && (
+              {filteredTransactions && filteredTransactions.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-semibold mb-3 text-sm text-muted-foreground">الإيداعات والحركات اليدوية</h3>
+                  <h3 className="font-semibold mb-3 text-sm text-muted-foreground">حركات الخزينة ({filteredTransactions.length})</h3>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>التاريخ</TableHead>
-                        <TableHead>النوع</TableHead>
+                        <TableHead>نوع الحركة</TableHead>
                         <TableHead>المبلغ</TableHead>
                         <TableHead>العمولة</TableHead>
                         <TableHead>المصدر</TableHead>
@@ -469,8 +702,23 @@ const TreasuryDetail = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.map((tx) => {
+                      {filteredTransactions.map((tx) => {
                         const isClientPayment = tx.source === "client_payment";
+                        const isPurchasePayment = tx.source === "purchase_payments" || tx.reference_type === "purchase_payment";
+                        const isExpense = tx.source === "expenses" || tx.reference_type === "expense";
+                        const isTransfer = tx.source === "transfer";
+
+                        // لون الصف حسب نوع الحركة
+                        const rowBg = isClientPayment
+                          ? "bg-emerald-500/5"
+                          : isPurchasePayment
+                            ? "bg-rose-500/5"
+                            : isExpense
+                              ? "bg-orange-500/5"
+                              : isTransfer
+                                ? "bg-purple-500/5"
+                                : "";
+
                         // Enrich with purchase details (phase, project, client)
                         let linkedPurchase: any = null;
                         if (tx.reference_type === "purchase" && tx.reference_id) {
@@ -483,18 +731,37 @@ const TreasuryDetail = () => {
                         }
 
                         return (
-                          <TableRow key={tx.id} className={isClientPayment ? "bg-primary/5" : ""}>
+                          <TableRow key={tx.id} className={rowBg}>
                             <TableCell>{format(new Date(tx.date), "yyyy-MM-dd")}</TableCell>
                             <TableCell>
-                              <Badge
-                                variant={tx.source === 'transfer' ? 'outline' : tx.type === 'deposit' ? 'default' : 'destructive'}
-                                className={tx.source === 'transfer' ? 'border-purple-500 text-purple-700 bg-purple-50 dark:bg-purple-950 dark:text-purple-300' : ''}>
-                                {tx.source === 'transfer'
-                                  ? (tx.type === 'deposit' ? '↙ نقل وارد' : '↗ نقل صادر')
-                                  : tx.type === 'deposit' ? 'إيداع' : tx.type === 'withdrawal' ? 'سحب' : tx.type}
-                              </Badge>
+                              {isClientPayment ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 border text-[10px]">
+                                  <TrendingUp className="h-3 w-3 ml-1" />مقبوض زبون
+                                </Badge>
+                              ) : isPurchasePayment ? (
+                                <Badge className="bg-rose-500/10 text-rose-700 border-rose-500/30 border text-[10px]">
+                                  <TrendingDown className="h-3 w-3 ml-1" />دفع مورد/فني
+                                </Badge>
+                              ) : isExpense ? (
+                                <Badge className="bg-orange-500/10 text-orange-700 border-orange-500/30 border text-[10px]">
+                                  <TrendingDown className="h-3 w-3 ml-1" />مصروف
+                                </Badge>
+                              ) : isTransfer ? (
+                                <Badge
+                                  variant={tx.type === 'deposit' ? 'outline' : 'outline'}
+                                  className="border-purple-500 text-purple-700 bg-purple-50 dark:bg-purple-950 dark:text-purple-300 text-[10px]"
+                                >
+                                  {tx.type === 'deposit' ? '\u2199 نقل وارد' : '\u2197 نقل صادر'}
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant={tx.type === 'deposit' ? 'default' : 'destructive'}
+                                >
+                                  {tx.type === 'deposit' ? 'إيداع' : tx.type === 'withdrawal' ? 'سحب' : tx.type}
+                                </Badge>
+                              )}
                             </TableCell>
-                            <TableCell className={tx.source === 'transfer' ? 'text-purple-600 font-bold' : tx.type === 'deposit' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+                            <TableCell className={isTransfer ? 'text-purple-600 font-bold' : isClientPayment ? 'text-emerald-600 font-bold' : tx.type === 'withdrawal' ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
                               {tx.type === "deposit" ? "+" : "-"}{formatCurrencyLYD(Number(tx.amount))}
                             </TableCell>
                             <TableCell>
@@ -551,8 +818,8 @@ const TreasuryDetail = () => {
                                 return tx.description || "-";
                               })()}
                               {isClientPayment && (
-                                <div className="mt-1 p-2 rounded bg-primary/5 border border-primary/10 text-xs">
-                                  <p className="text-muted-foreground">تسديد من الزبون</p>
+                                <div className="mt-1 p-2 rounded bg-emerald-500/5 border border-emerald-500/10 text-xs">
+                                  <p className="text-emerald-700">تسديد مستلم من الزبون</p>
                                 </div>
                               )}
                             </TableCell>
@@ -623,10 +890,10 @@ const TreasuryDetail = () => {
                 </div>
               )}
 
-              {(!transactions || transactions.length === 0) && (!purchases || purchases.length === 0) && (
+              {(!filteredTransactions || filteredTransactions.length === 0) && (!purchases || purchases.length === 0) && (
                 <div className="text-center py-12 text-muted-foreground">
                   <ArrowUpDown className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>لا توجد حركات بعد</p>
+                  <p>لا توجد حركات في هذه الفترة</p>
                 </div>
               )}
             </>

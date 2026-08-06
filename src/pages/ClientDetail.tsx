@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -19,6 +19,7 @@ import {
   Mail,
   MapPin,
   Building,
+  Building2,
   FolderOpen,
   FileText,
   DollarSign,
@@ -30,6 +31,11 @@ import {
   Plus,
   Hammer,
   Paintbrush,
+  CreditCard,
+  CheckCircle2,
+  AlertTriangle,
+  Receipt,
+  Info,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatCurrencyLYD } from "@/lib/currency";
@@ -43,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +60,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select";
 
 type Client = {
@@ -151,7 +160,11 @@ const statusColors: Record<string, string> = {
 const methodLabels: Record<string, string> = {
   cash: "نقدي (كاش)",
   cheque: "صك مصرفي",
-  transfer: "تحويل مصرفي",
+  check: "صك مصرفي",
+  transfer: "تحويل بنكي",
+  bank_transfer: "تحويل بنكي",
+  bank: "تحويل بنكي",
+  installments: "أقساط",
 };
 
 export default function ClientDetail() {
@@ -279,6 +292,44 @@ export default function ClientDetail() {
     return list;
   }, [treasuries, selectedParentTreasuryId, paymentMethod]);
 
+  // ── Auto-select parent treasury based on selected project ──
+  useEffect(() => {
+    if (!parentTreasuries || parentTreasuries.length === 0) return;
+
+    if (selectedProjectId && selectedProjectId !== "none") {
+      const proj = projects?.find((p) => p.id === selectedProjectId);
+      if (proj) {
+        const pType = proj.project_type;
+        const matchedParent = parentTreasuries.find(
+          (t: any) =>
+            t.project_category === pType ||
+            (pType === "contracting" && (t.name.includes("مقاولات") || t.name.includes("المقاولات"))) ||
+            (pType === "finishing" && (t.name.includes("تشطيب") || t.name.includes("التشطيب")))
+        );
+        if (matchedParent) {
+          setSelectedParentTreasuryId(matchedParent.id);
+          return;
+        }
+      }
+    }
+
+    // Default to first parent treasury if none selected yet
+    if (!selectedParentTreasuryId && parentTreasuries.length > 0) {
+      setSelectedParentTreasuryId(parentTreasuries[0].id);
+    }
+  }, [selectedProjectId, parentTreasuries, projects, paymentDialogOpen]);
+
+  // ── Auto-select child treasury based on parent treasury and payment method ──
+  useEffect(() => {
+    if (filteredChildTreasuries && filteredChildTreasuries.length > 0) {
+      if (!selectedTreasuryId || !filteredChildTreasuries.some((t) => t.id === selectedTreasuryId)) {
+        setSelectedTreasuryId(filteredChildTreasuries[0].id);
+      }
+    } else {
+      setSelectedTreasuryId("");
+    }
+  }, [filteredChildTreasuries, selectedParentTreasuryId, paymentMethod]);
+
   // Fetch other related data for billing calculations
   const { data: phases } = useQuery<Phase[]>({
     queryKey: ["client-phases", id],
@@ -293,7 +344,7 @@ export default function ClientDetail() {
   const { data: projectItems } = useQuery<ProjectItem[]>({
     queryKey: ["client-items", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("project_items").select("id, phase_id, total_price");
+      const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price");
       if (error) throw error;
       return data;
     },
@@ -303,7 +354,7 @@ export default function ClientDetail() {
   const { data: purchases } = useQuery<Purchase[]>({
     queryKey: ["client-purchases", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("purchases").select("id, phase_id, total_amount, rental_id");
+      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, rental_id");
       if (error) throw error;
       return data;
     },
@@ -571,6 +622,43 @@ export default function ClientDetail() {
     };
   }, [payments]);
 
+  // Map of project payments
+  const projectPaymentsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    payments?.forEach((p: any) => {
+      if (p.project_id) {
+        map[p.project_id] = (map[p.project_id] || 0) + Number(p.amount || 0);
+      }
+    });
+    return map;
+  }, [payments]);
+
+  // Selected project metrics
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === "none" || !projects) return null;
+    return projects.find((p) => p.id === selectedProjectId) || null;
+  }, [selectedProjectId, projects]);
+
+  const selectedProjectBill = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === "none") return 0;
+    return clientFinancials.projectBills[selectedProjectId] || 0;
+  }, [selectedProjectId, clientFinancials.projectBills]);
+
+  const selectedProjectPaid = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === "none") return 0;
+    return projectPaymentsMap[selectedProjectId] || 0;
+  }, [selectedProjectId, projectPaymentsMap]);
+
+  const selectedProjectRemaining = Math.max(0, selectedProjectBill - selectedProjectPaid);
+
+  const contractingProjectsForSelect = useMemo(() => {
+    return projects?.filter((p) => p.project_type === "contracting") || [];
+  }, [projects]);
+
+  const finishingProjectsForSelect = useMemo(() => {
+    return projects?.filter((p) => p.project_type === "finishing") || [];
+  }, [projects]);
+
   // Print Payment Receipt (إيصال قبض)
   const handlePrintReceipt = async (payment: any) => {
     // 1. Fetch allocations for this payment on the fly
@@ -729,7 +817,14 @@ export default function ClientDetail() {
     if (!client) return;
 
     const dateStr = format(new Date(), "yyyy/MM/dd", { locale: ar });
-    
+
+    const headerBg = companySettings?.print_table_header_color || '#B4A078';
+    const headerText = companySettings?.print_header_text_color || '#ffffff';
+    const titleColor = companySettings?.print_section_title_color || '#7A5A10';
+    const borderColor = companySettings?.print_table_border_color || '#d1d5db';
+    const borderWidth = companySettings?.print_border_width ?? 1;
+    const borderCss = `border: ${borderWidth}px solid ${borderColor};`;
+
     const contractingProjects = projects?.filter((p) => p.project_type === "contracting") || [];
     const finishingProjects = projects?.filter((p) => p.project_type === "finishing") || [];
 
@@ -739,9 +834,9 @@ export default function ClientDetail() {
       const billAmount = clientFinancials.projectBills[p.id] || 0;
       contractingBillsHTML += `
         <tr>
-          <td>${p.name}</td>
-          <td style="text-align: center;">${statusLabels[p.status] || p.status}</td>
-          <td style="text-align: center; font-weight: bold;">${billAmount.toLocaleString()} د.ل</td>
+          <td style="padding: 8px; ${borderCss} font-weight: bold;">${p.name}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center;">${statusLabels[p.status] || p.status}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center; font-weight: bold; font-family: 'Cairo', sans-serif;">${billAmount.toLocaleString()} د.ل</td>
         </tr>
       `;
     });
@@ -752,191 +847,153 @@ export default function ClientDetail() {
       const billAmount = clientFinancials.projectBills[p.id] || 0;
       finishingBillsHTML += `
         <tr>
-          <td>${p.name}</td>
-          <td style="text-align: center;">${statusLabels[p.status] || p.status}</td>
-          <td style="text-align: center; font-weight: bold;">${billAmount.toLocaleString()} د.ل</td>
+          <td style="padding: 8px; ${borderCss} font-weight: bold;">${p.name}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center;">${statusLabels[p.status] || p.status}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center; font-weight: bold; font-family: 'Cairo', sans-serif;">${billAmount.toLocaleString()} د.ل</td>
         </tr>
       `;
     });
 
-    // Payments list
+    // Payments list HTML
     let paymentsHTML = "";
     payments?.forEach((p, idx) => {
+      const projName = p.projects?.name ? `${p.projects.name} (${p.projects.project_type === "contracting" ? "مقاولات" : "تشطيب"})` : "رصيد عام للزبون";
+      const methodStr = methodLabels[p.payment_method] || (p.payment_method === "cash" ? "نقدي (كاش)" : p.payment_method === "cheque" || p.payment_method === "check" ? "صك مصرفي" : "تحويل بنكي");
       paymentsHTML += `
         <tr>
-          <td style="text-align: center;">${idx + 1}</td>
-          <td style="text-align: center;">${format(new Date(p.date), "yyyy/MM/dd")}</td>
-          <td style="text-align: center; font-weight: bold; color: green;">${p.amount.toLocaleString()} د.ل</td>
-          <td style="text-align: center;">${methodLabels[p.payment_method] || p.payment_method}</td>
-          <td>${p.treasuries?.name || "---"}</td>
-          <td>${p.notes || "---"}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center;">${idx + 1}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center;">${format(new Date(p.date), "yyyy/MM/dd")}</td>
+          <td style="padding: 8px; ${borderCss} font-weight: bold;">${projName}</td>
+          <td style="padding: 8px; ${borderCss} text-align: center; font-weight: bold; color: #15803d; font-family: 'Cairo', sans-serif;">${p.amount.toLocaleString()} د.ل</td>
+          <td style="padding: 8px; ${borderCss} text-align: center;">${methodStr}</td>
+          <td style="padding: 8px; ${borderCss}">${p.treasuries?.name || "---"}</td>
+          <td style="padding: 8px; ${borderCss}">${p.notes || "---"}</td>
         </tr>
       `;
     });
 
-    const printHTML = `
-      <style>
-        .statement-container {
-          direction: rtl;
-          font-family: 'Cairo', sans-serif;
-          color: #000;
-        }
-        .header-section {
-          text-align: center;
-          margin-bottom: 25px;
-          border-bottom: 2px solid #000;
-          padding-bottom: 15px;
-        }
-        .client-info-table {
-          width: 100%;
-          margin-bottom: 25px;
-        }
-        .client-info-table td {
-          padding: 5px;
-          font-size: 11pt;
-        }
-        .summary-box {
-          display: flex;
-          justify-content: space-around;
-          background-color: #f8f9fa;
-          border: 1px solid #ddd;
-          padding: 15px;
-          margin-bottom: 25px;
-          border-radius: 8px;
-        }
-        .summary-item {
-          text-align: center;
-        }
-        .summary-value {
-          font-size: 14pt;
-          font-weight: bold;
-          margin-top: 5px;
-        }
-        .section-header {
-          border-bottom: 1.5px solid #000;
-          padding-bottom: 5px;
-          margin-top: 25px;
-          margin-bottom: 10px;
-          font-size: 12pt;
-          font-weight: bold;
-        }
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 20px;
-        }
-        .data-table th, .data-table td {
-          border: 1px solid #000;
-          padding: 8px;
-          font-size: 10pt;
-        }
-        .data-table th {
-          background-color: #f2f2f2;
-          font-weight: bold;
-        }
-      </style>
-      <div class="statement-container">
-        <div class="header-section">
-          <h2>كشف حساب تفصيلي للعميل</h2>
-          <p>التاريخ: ${dateStr}</p>
+    const contentHtml = `
+      <div class="print-area" style="box-shadow: none; margin: 0; padding: 20px; direction: rtl; font-family: 'Cairo', sans-serif;">
+        <!-- Title Banner -->
+        <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid ${titleColor}; padding-bottom: 12px;">
+          <h2 style="font-size: 18pt; font-weight: bold; color: ${titleColor}; margin: 0; font-family: 'Cairo', sans-serif;">كشف حساب تفصيلي للعميل</h2>
+          <div style="font-size: 10pt; color: #666; margin-top: 5px;">تاريخ التقرير: ${dateStr}</div>
         </div>
 
-        <table class="client-info-table">
-          <tr>
-            <td style="width: 15%; font-weight: bold;">اسم العميل:</td>
-            <td>${client.name}</td>
-            <td style="width: 15%; font-weight: bold;">رقم الهاتف:</td>
-            <td>${client.phone || "---"}</td>
-          </tr>
-          <tr>
-            <td style="font-weight: bold;">المدينة/العنوان:</td>
-            <td>${client.city || "---"} - ${client.address || "---"}</td>
-            <td style="font-weight: bold;">البريد الإلكتروني:</td>
-            <td>${client.email || "---"}</td>
-          </tr>
-        </table>
+        <!-- Client Info Block -->
+        <div style="margin-bottom: 20px;">
+          <table style="width: 100%; border-collapse: collapse; ${borderCss}">
+            <tbody>
+              <tr>
+                <td style="padding: 8px; background-color: ${headerBg}; color: ${headerText}; font-weight: bold; width: 18%; ${borderCss}">اسم العميل</td>
+                <td style="padding: 8px; font-weight: bold; ${borderCss}">${client.name}</td>
+                <td style="padding: 8px; background-color: ${headerBg}; color: ${headerText}; font-weight: bold; width: 18%; ${borderCss}">رقم الهاتف</td>
+                <td style="padding: 8px; ${borderCss}">${client.phone || "---"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; background-color: ${headerBg}; color: ${headerText}; font-weight: bold; ${borderCss}">المدينة / العنوان</td>
+                <td style="padding: 8px; ${borderCss}">${client.city || "---"} - ${client.address || "---"}</td>
+                <td style="padding: 8px; background-color: ${headerBg}; color: ${headerText}; font-weight: bold; ${borderCss}">البريد الإلكتروني</td>
+                <td style="padding: 8px; ${borderCss}">${client.email || "---"}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div class="summary-box">
-          <div class="summary-item">
-            <div>إجمالي الأعمال والبنود</div>
-            <div class="summary-value" style="color: #000;">${clientFinancials.totalBilled.toLocaleString()} د.ل</div>
-            <div style="font-size: 8.5pt; color: #555; margin-top: 4px;">
+        <!-- Financial Summary Banner Box -->
+        <div style="display: flex; justify-content: space-around; background-color: #fafafa; border: 1.5px solid ${titleColor}; border-radius: 10px; padding: 15px; margin-bottom: 25px;">
+          <div style="text-align: center;">
+            <div style="font-size: 10pt; color: #555; font-weight: bold;">إجمالي الأعمال والبنود</div>
+            <div style="font-size: 14pt; font-weight: 900; color: #1e293b; margin-top: 4px; font-family: 'Cairo', sans-serif;">${clientFinancials.totalBilled.toLocaleString()} د.ل</div>
+            <div style="font-size: 8.5pt; color: #64748b; margin-top: 4px;">
               مقاولات: ${clientFinancials.contractingBilled.toLocaleString()} د.ل | تشطيب: ${clientFinancials.finishingBilled.toLocaleString()} د.ل
             </div>
           </div>
-          <div class="summary-item">
-            <div>إجمالي المسدد</div>
-            <div class="summary-value" style="color: green;">${clientFinancials.totalPaid.toLocaleString()} د.ل</div>
+          <div style="text-align: center; border-right: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; padding: 0 20px;">
+            <div style="font-size: 10pt; color: #555; font-weight: bold;">إجمالي المسدد</div>
+            <div style="font-size: 14pt; font-weight: 900; color: #15803d; margin-top: 4px; font-family: 'Cairo', sans-serif;">${clientFinancials.totalPaid.toLocaleString()} د.ل</div>
           </div>
-          <div class="summary-item">
-            <div>القيمة المتبقية المستحقة</div>
-            <div class="summary-value" style="color: ${clientFinancials.remaining > 0 ? "red" : "green"};">
+          <div style="text-align: center;">
+            <div style="font-size: 10pt; color: #555; font-weight: bold;">القيمة المتبقية المستحقة</div>
+            <div style="font-size: 14pt; font-weight: 900; color: ${clientFinancials.remaining > 0 ? "#b91c1c" : "#15803d"}; margin-top: 4px; font-family: 'Cairo', sans-serif;">
               ${clientFinancials.remaining.toLocaleString()} د.ل
             </div>
           </div>
         </div>
 
-        <h3 class="section-header" style="display: flex; justify-content: space-between;">
-          <span>مشاريع المقاولات (${contractingProjects.length})</span>
-          <span style="font-size: 10.5pt; font-weight: normal;">إجمالي القسم: <strong>${clientFinancials.contractingBilled.toLocaleString()} د.ل</strong></span>
-        </h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>اسم المشروع</th>
-              <th style="width: 20%; text-align: center;">حالة المشروع</th>
-              <th style="width: 30%; text-align: center;">قيمة الأعمال المنجزة</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${contractingBillsHTML || `<tr><td colspan="3" style="text-align: center;">لا توجد مشاريع مقاولات مسجلة</td></tr>`}
-          </tbody>
-        </table>
+        <!-- Contracting Projects Section -->
+        <div style="margin-bottom: 25px;">
+          <div style="font-weight: bold; font-size: 11pt; color: ${titleColor}; border-bottom: 1.5px solid ${titleColor}; padding-bottom: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; flex-direction: row-reverse;">
+            <span>إجمالي المطالبات: ${clientFinancials.contractingBilled.toLocaleString()} د.ل</span>
+            <span>مشاريع المقاولات (${contractingProjects.length})</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; text-align: right; ${borderCss}">
+            <thead>
+              <tr style="background-color: ${headerBg}; color: ${headerText};">
+                <th style="padding: 8px; ${borderCss}">اسم المشروع</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 20%;">حالة المشروع</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 30%;">قيمة الأعمال المنجزة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${contractingBillsHTML || `<tr><td colspan="3" style="padding: 12px; text-align: center; ${borderCss}">لا توجد مشاريع مقاولات مسجلة</td></tr>`}
+            </tbody>
+          </table>
+        </div>
 
-        <h3 class="section-header" style="display: flex; justify-content: space-between;">
-          <span>مشاريع التشطيبات (${finishingProjects.length})</span>
-          <span style="font-size: 10.5pt; font-weight: normal;">إجمالي القسم: <strong>${clientFinancials.finishingBilled.toLocaleString()} د.ل</strong></span>
-        </h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>اسم المشروع</th>
-              <th style="width: 20%; text-align: center;">حالة المشروع</th>
-              <th style="width: 30%; text-align: center;">قيمة الأعمال المنجزة</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${finishingBillsHTML || `<tr><td colspan="3" style="text-align: center;">لا توجد مشاريع تشطيب مسجلة</td></tr>`}
-          </tbody>
-        </table>
+        <!-- Finishing Projects Section -->
+        <div style="margin-bottom: 25px;">
+          <div style="font-weight: bold; font-size: 11pt; color: ${titleColor}; border-bottom: 1.5px solid ${titleColor}; padding-bottom: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; flex-direction: row-reverse;">
+            <span>إجمالي المطالبات: ${clientFinancials.finishingBilled.toLocaleString()} د.ل</span>
+            <span>مشاريع التشطيبات (${finishingProjects.length})</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; text-align: right; ${borderCss}">
+            <thead>
+              <tr style="background-color: ${headerBg}; color: ${headerText};">
+                <th style="padding: 8px; ${borderCss}">اسم المشروع</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 20%;">حالة المشروع</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 30%;">قيمة الأعمال المنجزة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${finishingBillsHTML || `<tr><td colspan="3" style="padding: 12px; text-align: center; ${borderCss}">لا توجد مشاريع تشطيب مسجلة</td></tr>`}
+            </tbody>
+          </table>
+        </div>
 
-        <h3 class="section-header" style="margin-top: 25px;">جدول الدفعات والتسديدات المستلمة</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 6%;">ر.م</th>
-              <th style="width: 15%;">تاريخ السداد</th>
-              <th style="width: 20%;">قيمة الدفعة</th>
-              <th style="width: 18%;">طريقة الدفع</th>
-              <th style="width: 20%;">الخزينة/الحساب المستلم</th>
-              <th>ملاحظات</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${paymentsHTML || `<tr><td colspan="6" style="text-align: center;">لا توجد دفعات مسجلة</td></tr>`}
-          </tbody>
-        </table>
+        <!-- Payments Section -->
+        <div style="margin-bottom: 25px;">
+          <div style="font-weight: bold; font-size: 11pt; color: ${titleColor}; border-bottom: 1.5px solid ${titleColor}; padding-bottom: 4px; margin-bottom: 8px;">
+            جدول الدفعات والتسديدات المستلمة (${payments?.length || 0})
+          </div>
+          <table style="width: 100%; border-collapse: collapse; text-align: right; ${borderCss}">
+            <thead>
+              <tr style="background-color: ${headerBg}; color: ${headerText};">
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 5%;">ر.م</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 14%;">تاريخ السداد</th>
+                <th style="padding: 8px; ${borderCss} width: 22%;">المشروع</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 18%;">قيمة الدفعة</th>
+                <th style="padding: 8px; ${borderCss} text-align: center; width: 15%;">طريقة الدفع</th>
+                <th style="padding: 8px; ${borderCss} width: 16%;">الخزينة/الحساب</th>
+                <th style="padding: 8px; ${borderCss}">ملاحظات</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paymentsHTML || `<tr><td colspan="7" style="padding: 12px; text-align: center; ${borderCss}">لا توجد دفعات مسجلة</td></tr>`}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
 
-    // Force header/footer enabled for plain paper statement printing
+    // Force header/footer enabled for statement printing
     const printSettings = companySettings ? {
       ...companySettings,
       print_header_enabled: true,
       print_footer_enabled: true,
     } : null;
 
-    openPrintWindow(`كشف حساب - ${client.name}`, printHTML, printSettings);
+    openPrintWindow(`كشف حساب - ${client.name}`, contentHtml, printSettings);
   };
 
   if (clientLoading || projectsLoading) {
@@ -972,120 +1029,260 @@ export default function ClientDetail() {
         <div className="flex gap-2">
           <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold">
+              <Button className="gap-2 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 rounded-xl px-5 h-11">
                 <Plus className="h-4 w-4" />
-                <span>إضافة دفعة سداد</span>
+                <span>إضافة دفعة سداد للزبون</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md bg-background" dir="rtl">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-foreground font-bold">
-                  <Wallet className="h-5 w-5 text-primary" />
-                  <span>تسجيل دفعة سداد للزبون</span>
+            <DialogContent className="max-w-xl bg-background p-6 rounded-2xl border border-border shadow-2xl overflow-y-auto max-h-[90vh]" dir="rtl">
+              <DialogHeader className="pb-3 border-b border-border/40">
+                <DialogTitle className="flex items-center gap-2 text-foreground font-extrabold text-lg">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <span>تسجيل دفعة سداد للزبون: {client.name}</span>
                 </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
+                  إدخال الدفعة المالية المستلمة وتوجيهها للمشروع الخزينة المناسبة مع احتساب المتبقي تلقائياً.
+                </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleAddPaymentSubmit} className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="pay-amount">قيمة الدفعة (د.ل) *</Label>
-                  <Input
-                    id="pay-amount"
-                    type="number"
-                    step="0.01"
-                    required
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    placeholder="0.00 د.ل"
-                    className="text-lg font-bold"
-                  />
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>نوع المشروع *</Label>
-                    <Select
-                      value={paymentProjectType}
-                      onValueChange={(val: any) => {
-                        setPaymentProjectType(val);
-                        setSelectedProjectId("");
-                      }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">عام / الكل</SelectItem>
-                        <SelectItem value="contracting">مقاولات</SelectItem>
-                        <SelectItem value="finishing">تشطيبات</SelectItem>
-                      </SelectContent>
-                    </Select>
+              {/* ── Summary Cards Box (المستحقات والمتبقي الحقيقي) ── */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-2">
+                {/* العميل ككل */}
+                <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-amber-800 dark:text-amber-300 font-semibold">
+                    <span>إجمالي المتبقي المستحق على الزبون</span>
+                    <Coins className="h-4 w-4 text-amber-600" />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>المشروع المستهدف</Label>
-                    <Select
-                      value={selectedProjectId}
-                      onValueChange={setSelectedProjectId}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={paymentProjectType === "all" ? "اختر مشروعاً (اختياري)..." : "اختر المشروع..."} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">بدون مشروع (رصيد عام)</SelectItem>
-                        {filteredProjectsForPayment.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.project_type === "contracting" ? "مقاولات" : "تشطيبات"})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono">
+                    {formatCurrencyLYD(clientFinancials.remaining)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-amber-500/15 flex justify-between">
+                    <span>إجمالي المطالبات: {formatCurrencyLYD(clientFinancials.totalBilled)}</span>
+                    <span>المسدد: {formatCurrencyLYD(clientFinancials.totalPaid)}</span>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="pay-date">تاريخ القبض والسداد *</Label>
-                  <Input
-                    id="pay-date"
-                    type="date"
-                    required
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
+                {/* المشروع المختار (عند اختياره) */}
+                <div className={`p-3.5 rounded-xl border space-y-1 transition-all ${
+                  selectedProjectId && selectedProjectId !== "none"
+                    ? "bg-blue-500/5 border-blue-500/20"
+                    : "bg-muted/30 border-border/40 opacity-70"
+                }`}>
+                  <div className="flex items-center justify-between text-xs font-semibold text-blue-800 dark:text-blue-300">
+                    <span className="truncate">
+                      {selectedProjectId && selectedProjectId !== "none"
+                        ? `المتبقي على مشروع: ${selectedProject?.name || ''}`
+                        : "متبقي المشروع المستهدف"}
+                    </span>
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="text-xl font-black text-blue-700 dark:text-blue-400 font-mono">
+                    {selectedProjectId && selectedProjectId !== "none"
+                      ? formatCurrencyLYD(selectedProjectRemaining)
+                      : "حدد مشروعاً بالأسفل"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-blue-500/15 flex justify-between">
+                    {selectedProjectId && selectedProjectId !== "none" ? (
+                      <>
+                        <span>مطالبات المشروع: {formatCurrencyLYD(selectedProjectBill)}</span>
+                        <span>المسدد: {formatCurrencyLYD(selectedProjectPaid)}</span>
+                      </>
+                    ) : (
+                      <span>اختر المشروع لعرض المتبقي المستحق عليه</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleAddPaymentSubmit} className="space-y-4 pt-1">
+                {/* 1. قيمة الدفعة الحالية + حاسبة المتبقي الحيّة */}
+                <div className="space-y-2 p-4 rounded-xl bg-card border border-border/60 shadow-sm">
+                  <Label htmlFor="pay-amount" className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                    <Wallet className="h-4 w-4 text-emerald-600" />
+                    <span>قيمة الدفعة المستلمة (د.ل) *</span>
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="pay-amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="h-14 text-2xl font-black text-center rounded-xl border-emerald-500/30 focus:border-emerald-600 bg-background"
+                      dir="ltr"
+                    />
+                    {Number(paymentAmount) > 0 && (
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">د.ل</span>
+                    )}
+                  </div>
+
+                  {/* المؤشر والتأثير الحي لمبلغ الدفعة على المتبقي */}
+                  {Number(paymentAmount) > 0 && (
+                    <div className="mt-3 p-3 rounded-xl bg-muted/40 border border-border/50 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between font-bold">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Receipt className="h-3.5 w-3.5 text-primary" />
+                          <span>المتبقي المستحق الجديد للزبون بعد السداد:</span>
+                        </span>
+                        <span className="text-sm font-extrabold font-mono text-emerald-700 dark:text-emerald-400">
+                          {formatCurrencyLYD(Math.max(0, clientFinancials.remaining - Number(paymentAmount)))}
+                        </span>
+                      </div>
+
+                      {selectedProjectId && selectedProjectId !== "none" && (
+                        <div className="flex items-center justify-between font-bold pt-1 border-t border-border/40">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                            <span>المتبقي الجديد لمشروع ({selectedProject?.name}):</span>
+                          </span>
+                          <span className="text-sm font-extrabold font-mono text-blue-700 dark:text-blue-400">
+                            {formatCurrencyLYD(Math.max(0, selectedProjectRemaining - Number(paymentAmount)))}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-1 flex items-center gap-1 text-[11px]">
+                        {Number(paymentAmount) > (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining : clientFinancials.remaining) && (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining > 0 : clientFinancials.remaining > 0) ? (
+                          <Badge variant="outline" className="border-amber-500/40 text-amber-700 bg-amber-500/10 gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>يوجد رصيد فائض بقيمة {formatCurrencyLYD(Number(paymentAmount) - (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining : clientFinancials.remaining))} سيُحسب لصالح رصيد العميل العام</span>
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 bg-emerald-500/10 gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>الدفعة تخفض الدين المستحق بنجاح</span>
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                {/* 2. اختيار المشروع المستهدف (قائمة واحدة منظمة بأسماء المشاريع والمتبقي) */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span>المشروع المستهدف بالسداد *</span>
+                  </Label>
+                  <Select
+                    value={selectedProjectId}
+                    onValueChange={(val) => setSelectedProjectId(val)}
+                    dir="rtl"
+                  >
+                    <SelectTrigger className="h-11 rounded-xl border-border/80 text-sm font-medium">
+                      <SelectValue placeholder="اختر المشروع المستهدف..." />
+                    </SelectTrigger>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="none" className="font-semibold">
+                        بدون مشروع محدد (تسديد عام لحساب الزبون)
+                      </SelectItem>
+
+                      {contractingProjectsForSelect.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="text-amber-700 dark:text-amber-400 font-extrabold text-xs px-2 py-1 bg-amber-500/10 rounded my-1">
+                            مشاريع المقاولات ({contractingProjectsForSelect.length})
+                          </SelectLabel>
+                          {contractingProjectsForSelect.map((p) => {
+                            const rem = Math.max(0, (clientFinancials.projectBills[p.id] || 0) - (projectPaymentsMap[p.id] || 0));
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <span className="font-bold">{p.name}</span>
+                                  <span className="text-xs text-muted-foreground font-mono">
+                                    (متبقي: {rem > 0 ? `${formatCurrencyLYD(rem)}` : "مسدد بالكامل"})
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectGroup>
+                      )}
+
+                      {finishingProjectsForSelect.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="text-blue-700 dark:text-blue-400 font-extrabold text-xs px-2 py-1 bg-blue-500/10 rounded my-1">
+                            مشاريع التشطيبات ({finishingProjectsForSelect.length})
+                          </SelectLabel>
+                          {finishingProjectsForSelect.map((p) => {
+                            const rem = Math.max(0, (clientFinancials.projectBills[p.id] || 0) - (projectPaymentsMap[p.id] || 0));
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <span className="font-bold">{p.name}</span>
+                                  <span className="text-xs text-muted-foreground font-mono">
+                                    (متبقي: {rem > 0 ? `${formatCurrencyLYD(rem)}` : "مسدد بالكامل"})
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 3. تاريخ السداد وطريقة الدفع */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>طريقة الدفع *</Label>
+                    <Label htmlFor="pay-date" className="text-xs font-semibold flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>تاريخ القبض والسداد *</span>
+                    </Label>
+                    <Input
+                      id="pay-date"
+                      type="date"
+                      required
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className="h-10 rounded-xl"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>طريقة الدفع *</span>
+                    </Label>
                     <Select
                       value={paymentMethod}
-                      onValueChange={(val) => {
-                        setPaymentMethod(val);
-                        setSelectedTreasuryId("");
-                      }}
+                      onValueChange={(val) => setPaymentMethod(val)}
+                      dir="rtl"
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="h-10 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent dir="rtl">
                         <SelectItem value="cash">نقداً (كاش)</SelectItem>
                         <SelectItem value="cheque">صك مصرفي</SelectItem>
                         <SelectItem value="transfer">تحويل بنكي</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
 
-                  <div className="space-y-2 col-span-2">
-                    <Label>القسم / الخزينة العامة *</Label>
+                {/* 4. القسم والخزينة الفرعية المستلمة */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <FolderOpen className="h-3.5 w-3.5 text-primary" />
+                      <span>القسم / الخزينة الرئيسية *</span>
+                    </Label>
                     <Select
                       value={selectedParentTreasuryId}
-                      onValueChange={(val) => {
-                        setSelectedParentTreasuryId(val);
-                        setSelectedTreasuryId("");
-                      }}
+                      onValueChange={(val) => setSelectedParentTreasuryId(val)}
+                      dir="rtl"
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="h-10 rounded-xl">
                         <SelectValue placeholder="اختر القسم..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent dir="rtl">
                         {parentTreasuries.map((pt) => (
                           <SelectItem key={pt.id} value={pt.id}>
                             {pt.name}
@@ -1094,44 +1291,67 @@ export default function ClientDetail() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <Wallet className="h-3.5 w-3.5 text-primary" />
+                      <span>الحساب / الفرع المستلم *</span>
+                    </Label>
+                    <Select
+                      value={selectedTreasuryId}
+                      onValueChange={setSelectedTreasuryId}
+                      disabled={!selectedParentTreasuryId}
+                      dir="rtl"
+                    >
+                      <SelectTrigger className="h-10 rounded-xl">
+                        <SelectValue placeholder={selectedParentTreasuryId ? "اختر الفرع..." : "حدد القسم أولاً"} />
+                      </SelectTrigger>
+                      <SelectContent dir="rtl">
+                        {filteredChildTreasuries.map((ct) => (
+                          <SelectItem key={ct.id} value={ct.id}>
+                            {ct.name} ({ct.treasury_type === 'cash' ? 'نقدي' : 'بنك'}) - رصيد: {formatCurrencyLYD(ct.balance || 0)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
+                {/* 5. ملاحظات */}
                 <div className="space-y-2">
-                  <Label>الخزينة أو الحساب المستلم الفرعي *</Label>
-                  <Select
-                    value={selectedTreasuryId}
-                    onValueChange={setSelectedTreasuryId}
-                    disabled={!selectedParentTreasuryId}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={selectedParentTreasuryId ? "اختر الحساب الفرعي..." : "حدد القسم أولاً"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredChildTreasuries.map((ct) => (
-                        <SelectItem key={ct.id} value={ct.id}>
-                          {ct.name} ({ct.treasury_type === 'cash' ? 'نقدي' : 'بنك'}) - رصيد: {ct.balance.toLocaleString()} د.ل
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pay-notes">ملاحظات / البيان</Label>
+                  <Label htmlFor="pay-notes" className="text-xs font-semibold">ملاحظات / البيان</Label>
                   <Textarea
                     id="pay-notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="اكتب ملاحظات السداد أو رقم الشيك هنا..."
+                    placeholder="اكتب أي ملاحظات على الدفعة أو رقم الصك..."
                     rows={2}
+                    className="rounded-xl text-xs"
                   />
                 </div>
 
-                <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1 cursor-pointer font-bold" disabled={addPaymentMutation.isPending}>
-                    {addPaymentMutation.isPending ? "جاري التسجيل..." : "تسجيل الدفعة"}
+                {/* أزرار الإجراءات */}
+                <div className="flex gap-3 pt-3 border-t border-border/40">
+                  <Button
+                    type="submit"
+                    className="flex-1 h-11 text-sm font-extrabold cursor-pointer rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-md shadow-emerald-600/20"
+                    disabled={addPaymentMutation.isPending || Number(paymentAmount) <= 0 || !selectedTreasuryId}
+                  >
+                    {addPaymentMutation.isPending ? (
+                      "جاري الحفظ..."
+                    ) : (
+                      <>
+                        <Wallet className="h-4 w-4" />
+                        <span>تسجيل الدفعة والإضافة للخزينة</span>
+                      </>
+                    )}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)} className="cursor-pointer">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPaymentDialogOpen(false)}
+                    className="cursor-pointer h-11 rounded-xl px-5"
+                  >
                     إلغاء
                   </Button>
                 </div>

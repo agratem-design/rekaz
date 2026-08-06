@@ -308,6 +308,7 @@ const ProjectPurchases = () => {
         phase_id: phaseId || null,
         project_item_id: data.project_item_id || null,
         supplier_id: isLabor ? null : (data.supplier_id || null),
+        technician_id: isLabor && selectedLaborType === "registered" ? (selectedTechnicianId || null) : null,
         date: data.date,
         invoice_number: data.invoice_number || null,
         status,
@@ -625,6 +626,8 @@ const ProjectPurchases = () => {
       title: "",
       total_amount_direct: "0",
     });
+    setSelectedLaborType("station");
+    setSelectedTechnicianId("");
     setSelectedParentTreasuryId(defaultParentId);
   };
 
@@ -651,6 +654,8 @@ const ProjectPurchases = () => {
       title: "",
       total_amount_direct: "0",
     });
+    setSelectedLaborType("station");
+    setSelectedTechnicianId("");
     setSelectedParentTreasuryId(defaultParentId);
     setDialogOpen(true);
   };
@@ -666,6 +671,14 @@ const ProjectPurchases = () => {
     setEditingPurchase(purchase);
     const pType = (purchase as any).purchase_type || "material";
     const isLabor = pType === "labor";
+    const techId = (purchase as any).technician_id;
+    if (techId) {
+      setSelectedLaborType("registered");
+      setSelectedTechnicianId(techId);
+    } else {
+      setSelectedLaborType("station");
+      setSelectedTechnicianId("");
+    }
     setFormData({
       supplier_id: purchase.supplier_id || "",
       project_item_id: (purchase as any).project_item_id || "",

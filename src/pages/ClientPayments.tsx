@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -77,7 +77,6 @@ const ClientPayments = () => {
   const [paymentDate, setPaymentDate] = useState(today());
   const [selectedTreasuryId, setSelectedTreasuryId] = useState("");
   const [selectedParentTreasuryId, setSelectedParentTreasuryId] = useState("");
-  const [paymentProjectType, setPaymentProjectType] = useState<"all" | "contracting" | "finishing">("all");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [notes, setNotes] = useState("");
 
@@ -313,11 +312,16 @@ const ClientPayments = () => {
   // ── computed ────────────────────────────────────────────────────────────
   const amount = parseFloat(paymentAmount) || 0;
 
-  const filteredProjectsForPayment = useMemo(() => {
-    if (!clientSummary?.projects) return [];
-    if (paymentProjectType === "all") return clientSummary.projects;
-    return clientSummary.projects.filter(p => (p as any).project_type === paymentProjectType);
-  }, [clientSummary?.projects, paymentProjectType]);
+  // نوع المشروع يُشتَق تلقائياً من المشروع المختار
+  const selectedProjectData = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === "none") return null;
+    return clientSummary?.projects.find(p => p.id === selectedProjectId) || null;
+  }, [clientSummary?.projects, selectedProjectId]);
+
+  const paymentProjectType = useMemo(() => {
+    if (!selectedProjectData) return "all";
+    return (selectedProjectData as any).project_type as "contracting" | "finishing";
+  }, [selectedProjectData]);
 
   const contractingProjects = useMemo(() => {
     return clientSummary?.projects.filter(p => (p as any).project_type === "contracting") || [];
@@ -330,20 +334,18 @@ const ClientPayments = () => {
   const totalOutstanding = useMemo(() => {
     if (!clientSummary?.projects) return 0;
     if (selectedProjectId && selectedProjectId !== "none") {
-      const targetProj = clientSummary.projects.find(p => p.id === selectedProjectId);
-      return targetProj ? targetProj.outstanding : 0;
+      return selectedProjectData?.outstanding || 0;
     }
-    return filteredProjectsForPayment.reduce((sum, p) => sum + (p.outstanding || 0), 0);
-  }, [clientSummary?.projects, selectedProjectId, filteredProjectsForPayment]);
+    return clientSummary.projects.reduce((sum, p) => sum + (p.outstanding || 0), 0);
+  }, [clientSummary?.projects, selectedProjectId, selectedProjectData]);
 
   const totalPaid = useMemo(() => {
     if (!clientSummary?.projects) return 0;
     if (selectedProjectId && selectedProjectId !== "none") {
-      const targetProj = clientSummary.projects.find(p => p.id === selectedProjectId);
-      return targetProj ? targetProj.paid : 0;
+      return selectedProjectData?.paid || 0;
     }
-    return filteredProjectsForPayment.reduce((sum, p) => sum + (p.paid || 0), 0);
-  }, [clientSummary?.projects, selectedProjectId, filteredProjectsForPayment]);
+    return clientSummary.projects.reduce((sum, p) => sum + (p.paid || 0), 0);
+  }, [clientSummary?.projects, selectedProjectId, selectedProjectData]);
 
   const remaining = totalOutstanding - amount;
   const isSurplus = amount > totalOutstanding && totalOutstanding > 0;
@@ -355,6 +357,21 @@ const ClientPayments = () => {
     treasuries?.filter(t => !t.parent_id) ?? [], [treasuries]);
   const subTreasuries = useMemo(() =>
     treasuries?.filter(t => !!t.parent_id) ?? [], [treasuries]);
+
+  // اقتراح الخزينة الرئيسية بناءً على نوع المشروع
+  const suggestedParentTreasuries = useMemo(() => {
+    if (!parentTreasuries.length) return [];
+    if (paymentProjectType === "all") return parentTreasuries;
+    const matched = parentTreasuries.filter((t: any) => {
+      if (t.project_category) return t.project_category === paymentProjectType;
+      if (paymentProjectType === "contracting") return t.name.includes("مقاولات");
+      if (paymentProjectType === "finishing") return t.name.includes("تشطيب");
+      return false;
+    });
+    const others = parentTreasuries.filter((t: any) => !matched.some(m => m.id === t.id));
+    return [...matched, ...others];
+  }, [parentTreasuries, paymentProjectType]);
+
   const filteredChildTreasuries = useMemo(() => {
     if (!selectedParentTreasuryId) return [];
     let list = subTreasuries.filter(t => t.parent_id === selectedParentTreasuryId);
@@ -365,6 +382,37 @@ const ClientPayments = () => {
     }
     return list;
   }, [subTreasuries, selectedParentTreasuryId, paymentMethod]);
+
+  // ── اختيار الخزينة الرئيسية تلقائياً عند اختيار الزبون / تغيير المشروع ──
+  useEffect(() => {
+    if (!parentTreasuries.length) return;
+
+    let matched: any = null;
+    if (selectedProjectId && selectedProjectId !== "none" && paymentProjectType !== "all") {
+      matched = parentTreasuries.find(
+        (t: any) => t.project_category === paymentProjectType ||
+          (paymentProjectType === "contracting" && t.name.includes("مقاولات")) ||
+          (paymentProjectType === "finishing" && t.name.includes("تشطيب"))
+      );
+    }
+
+    const targetParentId = matched ? matched.id : (selectedParentTreasuryId || parentTreasuries[0]?.id || "");
+    
+    if (targetParentId && targetParentId !== selectedParentTreasuryId) {
+      setSelectedParentTreasuryId(targetParentId);
+    }
+  }, [selectedProjectId, paymentProjectType, parentTreasuries, selectedParentTreasuryId]);
+
+  // ── اختيار الخزينة الفرعية تلقائياً عند تغير الخزينة الرئيسية أو طريقة الدفع ──
+  useEffect(() => {
+    if (filteredChildTreasuries.length > 0) {
+      if (!selectedTreasuryId || !filteredChildTreasuries.some(t => t.id === selectedTreasuryId)) {
+        setSelectedTreasuryId(filteredChildTreasuries[0].id);
+      }
+    } else {
+      setSelectedTreasuryId("");
+    }
+  }, [filteredChildTreasuries, selectedTreasuryId]);
 
   // General audit log calculations
   const filteredAllPayments = useMemo(() => {
@@ -450,7 +498,6 @@ const ClientPayments = () => {
       setNotes("");
       setSelectedParentTreasuryId("");
       setSelectedTreasuryId("");
-      setPaymentProjectType("all");
       setSelectedProjectId("");
     },
     onError: (err: any) => {
@@ -794,53 +841,99 @@ const ClientPayments = () => {
                 </Select>
               </div>
 
-              {/* Project type + Target project selector */}
+              {/* Project selector + General Treasury selector بجانب بعضهما */}
               {selectedClientId && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-primary" />
-                      نوع المشروع
-                    </Label>
-                    <Select
-                      value={paymentProjectType}
-                      onValueChange={(val: any) => {
-                        setPaymentProjectType(val);
-                        setSelectedProjectId("");
-                      }}
-                      dir="rtl"
-                    >
-                      <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">عام / الكل</SelectItem>
-                        <SelectItem value="contracting">مقاولات</SelectItem>
-                        <SelectItem value="finishing">تشطيبات</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* المشروع المستهدف */}
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold flex items-center gap-1.5">
                       <Building2 className="h-3.5 w-3.5 text-primary" />
                       المشروع المستهدف
+                      {selectedProjectData && (
+                        <Badge
+                          variant="outline"
+                          className={`text-[9px] px-1.5 py-0 mr-1 ${
+                            paymentProjectType === "contracting"
+                              ? "bg-amber-500/10 border-amber-500/20 text-amber-700"
+                              : "bg-purple-500/10 border-purple-500/20 text-purple-700"
+                          }`}
+                        >
+                          {paymentProjectType === "contracting" ? "مقاولات" : "تشطيبات"}
+                        </Badge>
+                      )}
                     </Label>
                     <Select
                       value={selectedProjectId}
-                      onValueChange={setSelectedProjectId}
+                      onValueChange={(val) => {
+                        setSelectedProjectId(val);
+                      }}
                       dir="rtl"
+                      disabled={summaryLoading}
                     >
                       <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                        <SelectValue placeholder={paymentProjectType === "all" ? "اختر مشروعاً (اختياري)..." : "اختر المشروع..."} />
+                        <SelectValue placeholder={summaryLoading ? "جاري التحميل..." : "اختر المشروع (أو رصيد عام)"} />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">بدون مشروع (رصيد عام)</SelectItem>
-                        {filteredProjectsForPayment.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.project_type === "contracting" ? "مقاولات" : "تشطيبات"})
-                          </SelectItem>
-                        ))}
+                      <SelectContent dir="rtl">
+                        <SelectItem value="none">بدون مشروع محدد (رصيد عام للزبون)</SelectItem>
+                        {contractingProjects.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="text-amber-700 dark:text-amber-400 font-bold">مشاريع المقاولات</SelectLabel>
+                            {contractingProjects.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                                {(p as any).outstanding > 0 ? ` — متبقي: ${((p as any).outstanding as number).toLocaleString("ar-LY")} د.ل` : " — مسدد"}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        {finishingProjects.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="text-purple-700 dark:text-purple-400 font-bold">مشاريع التشطيبات</SelectLabel>
+                            {finishingProjects.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                                {(p as any).outstanding > 0 ? ` — متبقي: ${((p as any).outstanding as number).toLocaleString("ar-LY")} د.ل` : " — مسدد"}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* القسم / الخزينة العامة */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                      <Landmark className="h-3.5 w-3.5 text-primary" />
+                      القسم / الخزينة العامة <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={selectedParentTreasuryId}
+                      onValueChange={val => {
+                        setSelectedParentTreasuryId(val);
+                        setSelectedTreasuryId("");
+                      }}
+                      dir="rtl"
+                      disabled={!selectedClientId}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
+                        <SelectValue placeholder="اختر القسم..." />
+                      </SelectTrigger>
+                      <SelectContent dir="rtl">
+                        {suggestedParentTreasuries.map((parent: any) => {
+                          const isMatched = (parent.project_category === paymentProjectType || 
+                                            (paymentProjectType === "contracting" && parent.name.includes("مقاولات")) || 
+                                            (paymentProjectType === "finishing" && parent.name.includes("تشطيب"))) && paymentProjectType !== "all";
+                          return (
+                            <SelectItem key={parent.id} value={parent.id}>
+                              <span className="flex items-center gap-1.5">
+                                {isMatched && <span className="h-1.5 w-1.5 rounded-full bg-primary inline-block" />}
+                                {parent.name}
+                                {isMatched && <span className="text-[10px] text-primary">(مقترح)</span>}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -950,34 +1043,6 @@ const ClientPayments = () => {
                 </div>
               </div>
 
-              {/* General Treasury selector */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold flex items-center gap-1.5">
-                  <Landmark className="h-3.5 w-3.5 text-primary" />
-                  القسم / الخزينة العامة <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={selectedParentTreasuryId}
-                  onValueChange={val => {
-                    setSelectedParentTreasuryId(val);
-                    setSelectedTreasuryId("");
-                  }}
-                  dir="rtl"
-                  disabled={!selectedClientId}
-                >
-                  <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                    <SelectValue placeholder="اختر القسم..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentTreasuries.map(parent => (
-                      <SelectItem key={parent.id} value={parent.id}>
-                        {parent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Sub Treasury selector */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5">
@@ -1080,28 +1145,44 @@ const ClientPayments = () => {
                   const projObj = (p as any).projects;
                   const projTypeStr = projObj?.project_type === "contracting" ? "مقاولات" : projObj?.project_type === "finishing" ? "تشطيب" : "";
                   const projectName = projObj?.name ? `${projObj.name}${projTypeStr ? ` (${projTypeStr})` : ''}` : "رصيد عام للزبون";
-                  const treasury = treasuries?.find(t => t.id === p.treasury_id);
+                  const subTreasury = treasuries?.find(t => t.id === p.treasury_id);
+                  const parentTreasury = subTreasury?.parent_id ? treasuries?.find(t => t.id === subTreasury.parent_id) : null;
                   const isExpanded = expandedIds.has(p.id);
 
                   return (
                     <Collapsible key={p.id} open={isExpanded} onOpenChange={() => toggleExpand(p.id)}>
                       <div className="rounded-lg border border-border/40 bg-card overflow-hidden transition-all hover:border-primary/20">
-                        <CollapsibleTrigger className="w-full p-3 flex items-center justify-between hover:bg-accent/30 transition-colors text-right">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-bold text-sm text-primary">{formatCurrencyLYD(Number(p.amount))}</p>
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium">
-                                {p.payment_method === "cash" ? "كاش" : p.payment_method === "check" ? "شيك" : "تحويل"}
-                              </Badge>
+                        <div className="flex items-center">
+                          <CollapsibleTrigger asChild>
+                            <div className="flex-1 p-3 flex items-center justify-between hover:bg-accent/30 transition-colors cursor-pointer text-right">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-sm text-primary">{formatCurrencyLYD(Number(p.amount))}</p>
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium">
+                                    {p.payment_method === "cash" ? "كاش" : p.payment_method === "check" ? "شيك" : "تحويل"}
+                                  </Badge>
+                                </div>
+                                <p className="text-[11px] font-semibold text-foreground truncate mt-0.5">
+                                  {clientName}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span>{format(new Date(p.date), "dd MMM yyyy", { locale: ar })}</span>
+                                  <span>·</span>
+                                  <span className="font-medium text-foreground">{projectName}</span>
+                                </p>
+                                {subTreasury && (
+                                  <div className="mt-1 flex items-center gap-1 text-[10px]">
+                                    <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold inline-flex items-center gap-1">
+                                      <Landmark className="h-3 w-3" />
+                                      القسم: {parentTreasury ? parentTreasury.name : "عام"} ⬅ الفرع: {subTreasury.name}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                             </div>
-                            <p className="text-[11px] font-semibold text-foreground truncate mt-0.5">
-                              {clientName}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {format(new Date(p.date), "dd MMM yyyy", { locale: ar })} · {projectName}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 mr-2" onClick={e => e.stopPropagation()}>
+                          </CollapsibleTrigger>
+                          <div className="flex items-center gap-1 px-2 border-r border-border/30">
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1129,9 +1210,8 @@ const ClientPayments = () => {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                            {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                           </div>
-                        </CollapsibleTrigger>
+                        </div>
                         <CollapsibleContent>
                           <div className="px-3 pb-3 pt-1.5 text-xs text-muted-foreground space-y-1.5 border-t border-border/30 bg-muted/20">
                             {treasury && (
@@ -1182,7 +1262,7 @@ const ClientPayments = () => {
                   ) : (
                     <>
                       {/* Section 1: Contracting Projects */}
-                      {(paymentProjectType === "all" || paymentProjectType === "contracting") && contractingProjects.length > 0 && (
+                      {contractingProjects.length > 0 && (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between px-1">
                             <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
@@ -1196,12 +1276,14 @@ const ClientPayments = () => {
                           <div className="space-y-1.5">
                             {contractingProjects.map(proj => {
                               const isSelected = selectedProjectId === proj.id;
+                              const afterPayment = amount > 0 && isSelected ? proj.outstanding - amount : null;
                               return (
                                 <div
                                   key={proj.id}
                                   onClick={() => {
                                     setSelectedProjectId(proj.id);
-                                    setPaymentProjectType("contracting");
+                                    setSelectedParentTreasuryId("");
+                                    setSelectedTreasuryId("");
                                   }}
                                   className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
                                     isSelected
@@ -1219,6 +1301,13 @@ const ClientPayments = () => {
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
                                       سدّد: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrencyLYD(proj.paid)}</span>
                                     </p>
+                                    {afterPayment !== null && isSelected && (
+                                      <p className={`text-[10px] font-semibold mt-0.5 ${
+                                        afterPayment <= 0 ? "text-emerald-600" : "text-orange-600"
+                                      }`}>
+                                        {afterPayment <= 0 ? "المتبقي بعد الدفع: مسدد بالكامل" : `المتبقي بعد الدفع: ${formatCurrencyLYD(afterPayment)}`}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-left shrink-0 mr-2">
                                     {proj.outstanding > 0 ? (
@@ -1239,7 +1328,7 @@ const ClientPayments = () => {
                       )}
 
                       {/* Section 2: Finishing Projects */}
-                      {(paymentProjectType === "all" || paymentProjectType === "finishing") && finishingProjects.length > 0 && (
+                      {finishingProjects.length > 0 && (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between px-1">
                             <span className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
@@ -1253,12 +1342,14 @@ const ClientPayments = () => {
                           <div className="space-y-1.5">
                             {finishingProjects.map(proj => {
                               const isSelected = selectedProjectId === proj.id;
+                              const afterPayment = amount > 0 && isSelected ? proj.outstanding - amount : null;
                               return (
                                 <div
                                   key={proj.id}
                                   onClick={() => {
                                     setSelectedProjectId(proj.id);
-                                    setPaymentProjectType("finishing");
+                                    setSelectedParentTreasuryId("");
+                                    setSelectedTreasuryId("");
                                   }}
                                   className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
                                     isSelected
@@ -1276,6 +1367,13 @@ const ClientPayments = () => {
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
                                       سدّد: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrencyLYD(proj.paid)}</span>
                                     </p>
+                                    {afterPayment !== null && isSelected && (
+                                      <p className={`text-[10px] font-semibold mt-0.5 ${
+                                        afterPayment <= 0 ? "text-emerald-600" : "text-orange-600"
+                                      }`}>
+                                        {afterPayment <= 0 ? "المتبقي بعد الدفع: مسدد بالكامل" : `المتبقي بعد الدفع: ${formatCurrencyLYD(afterPayment)}`}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-left shrink-0 mr-2">
                                     {proj.outstanding > 0 ? (
@@ -1294,6 +1392,12 @@ const ClientPayments = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* تلميح: كيفية دفع الموردين والفنيين */}
+                      <div className="p-3 rounded-xl bg-muted/40 border border-border/40 text-[10px] text-muted-foreground">
+                        <p className="font-semibold text-foreground mb-0.5">ملاحظة هامة:</p>
+                        <p>هذه المعلومات تساعدك في تحديد المبلغ المناسب فقط. لدفع الموردين والفنيين، ادخل لصفحة المورد أو الفني واختر المشروع لتسجيل الدفع من الخزينة.</p>
+                      </div>
                     </>
                   )}
                 </CardContent>
@@ -1318,19 +1422,24 @@ const ClientPayments = () => {
                     return (
                       <Collapsible key={p.id} open={isExpanded} onOpenChange={() => toggleExpand(p.id)}>
                         <div className="rounded-lg border border-border/40 bg-card overflow-hidden transition-all hover:border-primary/20">
-                          <CollapsibleTrigger className="w-full p-3 flex items-center justify-between hover:bg-accent/30 transition-colors text-right">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-sm text-primary">{formatCurrencyLYD(Number(p.amount))}</p>
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                  {p.payment_method === "cash" ? "كاش" : p.payment_method === "check" ? "شيك" : "تحويل"}
-                                </Badge>
+                          <div className="flex items-center">
+                            <CollapsibleTrigger asChild>
+                              <div className="flex-1 p-3 flex items-center justify-between hover:bg-accent/30 transition-colors cursor-pointer text-right">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-bold text-sm text-primary">{formatCurrencyLYD(Number(p.amount))}</p>
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                      {p.payment_method === "cash" ? "كاش" : p.payment_method === "check" ? "شيك" : "تحويل"}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    {format(new Date(p.date), "dd MMM yyyy", { locale: ar })} · {projectName || "رصيد عام للزبون"}
+                                  </p>
+                                </div>
+                                {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                               </div>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {format(new Date(p.date), "dd MMM yyyy", { locale: ar })} · {projectName || "رصيد عام للزبون"}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0 mr-2" onClick={e => e.stopPropagation()}>
+                            </CollapsibleTrigger>
+                            <div className="flex items-center gap-1 px-2 border-r border-border/30">
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1358,9 +1467,8 @@ const ClientPayments = () => {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
-                              {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                             </div>
-                          </CollapsibleTrigger>
+                          </div>
                           <CollapsibleContent>
                             <div className="px-3 pb-3 pt-1.5 text-xs text-muted-foreground space-y-1.5 border-t border-border/30 bg-muted/20">
                               {treasury && (

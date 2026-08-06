@@ -42,7 +42,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { useNavigate } from "react-router-dom";
-import { openReceiptPrintWindow } from "@/lib/printStyles";
+import { openPrintWindow, openReceiptPrintWindow } from "@/lib/printStyles";
+import { getElementLabels } from "@/lib/elementLabels";
 
 interface Treasury {
   id: string;
@@ -72,6 +73,29 @@ const Treasuries = () => {
   // Transaction filter states
   const [txSearchQuery, setTxSearchQuery] = useState("");
   const [txTypeFilter, setTxTypeFilter] = useState<string>("all");
+  const [txDateFrom, setTxDateFrom] = useState("");
+  const [txDateTo, setTxDateTo] = useState("");
+  const [txPeriodPreset, setTxPeriodPreset] = useState<"today"|"week"|"month"|"year"|"custom"|"all">("all");
+
+  const applyTxPreset = (preset: "today"|"week"|"month"|"year"|"all") => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const today = fmt(now);
+    if (preset === "all") { setTxDateFrom(""); setTxDateTo(""); }
+    else if (preset === "today") { setTxDateFrom(today); setTxDateTo(today); }
+    else if (preset === "week") {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
+      setTxDateFrom(fmt(start)); setTxDateTo(today);
+    } else if (preset === "month") {
+      setTxDateFrom(`${now.getFullYear()}-${pad(now.getMonth()+1)}-01`);
+      setTxDateTo(today);
+    } else if (preset === "year") {
+      setTxDateFrom(`${now.getFullYear()}-01-01`);
+      setTxDateTo(today);
+    }
+    setTxPeriodPreset(preset);
+  };
 
   const [transferForm, setTransferForm] = useState({
     fromTreasuryId: "",
@@ -201,7 +225,7 @@ const Treasuries = () => {
   const activeAdvances = transfers?.filter(t => t.type === "advance" && t.status === "active") || [];
   const totalActiveAdvances = activeAdvances.reduce((sum, t) => sum + Number(t.amount), 0);
 
-  // Filtered Transactions
+  // Filtered Transactions (including date filter)
   const filteredTransactions = useMemo(() => {
     return allTransactions.filter(tx => {
       const matchesType = txTypeFilter === "all" 
@@ -228,9 +252,18 @@ const Treasuries = () => {
         (tx.amount && tx.amount.toString().includes(q))
       );
 
-      return matchesType && matchesSearch;
+      const matchesDateFrom = !txDateFrom || tx.date >= txDateFrom;
+      const matchesDateTo = !txDateTo || tx.date <= txDateTo;
+
+      return matchesType && matchesSearch && matchesDateFrom && matchesDateTo;
     });
-  }, [allTransactions, txTypeFilter, txSearchQuery]);
+  }, [allTransactions, txTypeFilter, txSearchQuery, txDateFrom, txDateTo]);
+
+  const periodStats = useMemo(() => {
+    const totalIn = filteredTransactions.filter(t => t.type === "deposit").reduce((s, t) => s + Number(t.amount), 0);
+    const totalOut = filteredTransactions.filter(t => t.type === "withdrawal").reduce((s, t) => s + Number(t.amount), 0);
+    return { totalIn, totalOut, net: totalIn - totalOut, count: filteredTransactions.length };
+  }, [filteredTransactions]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData & { parent_id?: string | null }) => {
@@ -399,6 +432,108 @@ const Treasuries = () => {
       treasuryName: tx.treasuries?.name || undefined,
       notes: tx.notes || undefined,
     }, companySettings);
+  };
+
+  // طباعة كشف الفترة (الحركات المفلترة) بالنمط الموحد للطباعة
+  const handlePrintPeriodStatement = () => {
+    const periodLabel = txPeriodPreset === "all" ? "جميع الفترات"
+      : txPeriodPreset === "today" ? "اليوم"
+      : txPeriodPreset === "week" ? "هذا الأسبوع"
+      : txPeriodPreset === "month" ? "هذا الشهر"
+      : txPeriodPreset === "year" ? "هذه السنة"
+      : `من ${txDateFrom || "..."} إلى ${txDateTo || "..."}`;
+
+    const reportTitle = `كشف حركات الخزائن — ${periodLabel}`;
+
+    const rowsHtml = filteredTransactions.map((tx, idx) => {
+      const isDeposit = tx.type === "deposit";
+      const amtColor = isDeposit ? "#15803d" : "#b91c1c";
+      const amtSign = isDeposit ? "+" : "-";
+
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td style="text-align: center;">${tx.date}</td>
+          <td style="text-align: center;">${tx.treasuries?.name || "عام"}</td>
+          <td style="text-align: right; padding-right: 8px;">${tx.description || tx.source || "-"}</td>
+          <td style="text-align: center; color: ${amtColor}; font-weight: bold;" dir="ltr">
+            ${amtSign}${formatCurrencyLYD(Number(tx.amount))}
+          </td>
+          <td style="text-align: center; font-weight: bold;" dir="ltr">
+            ${formatCurrencyLYD(Number(tx.balance_after || 0))}
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    const contentHtml = `
+      <div class="print-area">
+        <div class="print-content">
+          <!-- Report Header -->
+          <div class="print-report-header">
+            <div class="print-report-title">كشف حركات الخزائن الشامل</div>
+            <div class="print-report-subtitle">الفترة: ${periodLabel}</div>
+            <div class="print-report-meta">
+              عدد الحركات: ${filteredTransactions.length} حركة ${txDateFrom ? `| من: ${txDateFrom}` : ''} ${txDateTo ? `| إلى: ${txDateTo}` : ''}
+            </div>
+          </div>
+
+          <!-- Financial Summary Section -->
+          <div class="print-section">
+            <div class="print-section-title">ملخص التدفق المالي للفترة</div>
+            <table class="print-summary-table">
+              <thead>
+                <tr>
+                  <th style="width: 33.33%;">إجمالي الإيداعات (الدخل)</th>
+                  <th style="width: 33.33%;">إجمالي السحوبات (الخروج)</th>
+                  <th style="width: 33.33%;">صافي التدفق المالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="color: #15803d; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.totalIn)}</td>
+                  <td style="color: #b91c1c; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.totalOut)}</td>
+                  <td style="color: ${periodStats.net >= 0 ? "#15803d" : "#b91c1c"}; font-weight: bold;" dir="ltr">${formatCurrencyLYD(periodStats.net)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Detailed Transactions Table -->
+          <div class="print-section">
+            <div class="print-section-title">سجل الحركات التفصيلي</div>
+            <table class="print-table">
+              <thead>
+                <tr>
+                  <th style="width: 45px;">ر.م</th>
+                  <th style="width: 95px;">التاريخ</th>
+                  <th style="width: 130px;">الخزينة</th>
+                  <th style="text-align: right; padding-right: 8px;">البيان / الحركة</th>
+                  <th style="width: 120px;">المبلغ</th>
+                  <th style="width: 120px;">الرصيد بعدها</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align: right; padding-right: 12px; font-weight: bold;">
+                    إجمالي صافي التدفق للفترة (${filteredTransactions.length} حركة)
+                  </td>
+                  <td style="text-align: center; color: ${periodStats.net >= 0 ? "#15803d" : "#b91c1c"}; font-weight: bold;" dir="ltr">
+                    ${formatCurrencyLYD(periodStats.net)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    openPrintWindow(reportTitle, contentHtml, companySettings);
   };
 
   if (isLoading) {
@@ -696,18 +831,64 @@ const Treasuries = () => {
       {activeTab === "transactions" && (
         <div className="space-y-4">
           {/* Controls & Filters */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-4 rounded-2xl border border-border/40">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="بحث في الحركات أو الخزائن..."
-                value={txSearchQuery}
-                onChange={(e) => setTxSearchQuery(e.target.value)}
-                className="pr-9 h-9 text-xs rounded-xl bg-background"
-              />
+          <div className="flex flex-col gap-3 bg-muted/20 p-4 rounded-2xl border border-border/40">
+            {/* صف 1: أزرار الفترات السريعة */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {(["all","today","week","month","year"] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => applyTxPreset(p)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                    txPeriodPreset === p
+                      ? "bg-amber-500 text-white border-amber-500 font-semibold shadow-sm"
+                      : "border-border/60 text-muted-foreground hover:border-amber-500/40 hover:text-amber-600"
+                  }`}
+                >
+                  {{ all:"الكل", today:"اليوم", week:"هذا الأسبوع", month:"هذا الشهر", year:"هذه السنة" }[p]}
+                </button>
+              ))}
+              <div className="mr-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrintPeriodStatement}
+                  className="h-8 rounded-xl border-amber-500/20 hover:bg-amber-500/5 hover:text-amber-600 text-xs"
+                >
+                  <Printer className="h-3.5 w-3.5 ml-1.5" />
+                  طباعة كشف الفترة
+                </Button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            {/* صف 2: فلتر مخصص + بحث + نوع */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="بحث في الحركات أو الخزائن..."
+                  value={txSearchQuery}
+                  onChange={(e) => setTxSearchQuery(e.target.value)}
+                  className="pr-9 h-9 text-xs rounded-xl bg-background"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">من:</label>
+                <input
+                  type="date"
+                  value={txDateFrom}
+                  onChange={e => { setTxDateFrom(e.target.value); setTxPeriodPreset("custom"); }}
+                  className="h-9 rounded-xl border border-border bg-background px-2 text-xs"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">إلى:</label>
+                <input
+                  type="date"
+                  value={txDateTo}
+                  onChange={e => { setTxDateTo(e.target.value); setTxPeriodPreset("custom"); }}
+                  className="h-9 rounded-xl border border-border bg-background px-2 text-xs"
+                />
+              </div>
               <Select value={txTypeFilter} onValueChange={setTxTypeFilter}>
                 <SelectTrigger className="w-full sm:w-48 h-9 text-xs rounded-xl bg-background">
                   <SelectValue placeholder="نوع الحركة" />
