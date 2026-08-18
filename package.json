@@ -8,7 +8,24 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test:financial": "node scripts/test-phase-15-accounting-invariants.mjs",
+    "test:navigation": "node scripts/navigation-tests/navigation-safety-invariants.mjs",
+    "test:ux-phase2": "node scripts/navigation-tests/ux-phase-2-invariants.mjs",
+    "test:ux-phase3": "node scripts/navigation-tests/ux-phase-3-invariants.mjs",
+    "test:ux-phase4": "node scripts/navigation-tests/ux-phase-4-invariants.mjs && node scripts/navigation-tests/ux-phase-4-live-db-tests.mjs",
+    "test:contracting-semantics": "node scripts/financial-tests/contracting-semantics-invariants.mjs",
+    "test:contracting-technician-staffing": "node scripts/financial-tests/contracting-technician-staffing-invariants.mjs",
+    "test:finishing-technician-canonical": "node scripts/financial-tests/finishing-technician-canonical-invariants.mjs",
+    "test:project-workspace-ia": "node scripts/navigation-tests/project-workspace-ia-invariants.mjs",
+    "test:project-treasury-domains": "node scripts/financial-tests/project-treasury-domains-invariants.mjs",
+    "test:supplier-technician-project-settlement": "node scripts/financial-tests/supplier-technician-project-settlement-invariants.mjs",
+    "test:canonical-navigation": "node scripts/navigation-tests/canonical-navigation-invariants.mjs",
+    "test:sidebar-ui": "node scripts/navigation-tests/sidebar-ui-invariants.mjs",
+    "test:all": "node scripts/run-all-tests.mjs",
+    "desktop:start": "electron desktop/main.cjs",
+    "desktop:build": "node desktop/build.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -65,6 +82,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
@@ -72,6 +90,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^43.4.0",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",

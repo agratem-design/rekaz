@@ -1,0 +1,436 @@
+/**
+ * Financial Core Domain Calculation Module (Pure Node.js ESM Mirror)
+ * Single Source of Truth for Financial Tests
+ */
+
+export function calculateProjectFinancials(data) {
+  const projectId = data.project.id;
+  const projectType = data.project.project_type || "contracting";
+  const finishingPercentage = Number(data.project.finishing_percentage || 0);
+
+  // 1. Client Receipts (Authoritative: client_payments where project_id = projectId)
+  const cashReceived = (data.clientPayments || [])
+    .filter(cp => cp.project_id === projectId || (!cp.project_id && (data.clientPayments?.length === 1)))
+    .reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
+
+  // Credit Applied: client_credit_applications where target_project_id = projectId and status !== 'reversed'
+  const creditApplied = (data.creditApplications || [])
+    .filter(ca => ca.target_project_id === projectId && ca.status !== "reversed")
+    .reduce((sum, ca) => sum + Number(ca.amount || 0), 0);
+
+  // 2. Purchases Classification & Deduplication (Mutually Exclusive)
+  const allPurchases = data.purchases || [];
+  
+  const rentalPurchasesRows = allPurchases.filter(
+    p => p.purchase_type === "rental" || Boolean(p.rental_id)
+  );
+  const laborPurchasesRows = allPurchases.filter(
+    p => (p.purchase_type === "labor" || Boolean(p.technician_id)) && !p.rental_id
+  );
+  const servicePurchasesRows = allPurchases.filter(
+    p => p.purchase_type === "service" && !p.rental_id && !p.technician_id
+  );
+  const materialPurchasesRows = allPurchases.filter(
+    p => (p.purchase_type === "material" || !p.purchase_type) && !p.rental_id && !p.technician_id && p.purchase_type !== "service" && p.purchase_type !== "labor"
+  );
+
+  const materials = materialPurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
+  const supplierServices = servicePurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
+  
+  // Equipment Rentals: use rentalPurchasesRows total OR data.rentals (deduplicated)
+  const rentalPurchasesTotal = rentalPurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
+  const standaloneRentalsTotal = (data.rentals || []).reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+  const equipmentRentals = rentalPurchasesTotal > 0 ? rentalPurchasesTotal : standaloneRentalsTotal;
+
+  // Technician Earned Work (Accrual): technician_progress_records > 0 ? records : labor purchases
+  const techProgressEarned = (data.techProgressRecords || []).reduce(
+    (sum, r) => sum + Number(r.earned_amount || 0),
+    0
+  );
+  const laborPurchasesTotal = laborPurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
+  const technicianEarned = techProgressEarned > 0 ? techProgressEarned : laborPurchasesTotal;
+
+  // Direct Project Expenses: expenses strictly belonging to this project (project_id IS NOT NULL)
+  const directProjectExpenses = (data.expenses || [])
+    .filter(e => e.project_id === projectId || (Boolean(e.project_id) && !projectId))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  const otherEligibleDirectCosts = 0;
+
+  const totalDirectIncurredCost = materials + supplierServices + technicianEarned + equipmentRentals + directProjectExpenses + otherEligibleDirectCosts;
+
+  const breakdown = {
+    materials,
+    supplierServices,
+    technicianEarned,
+    equipmentRentals,
+    directProjectExpenses,
+    otherEligibleDirectCosts,
+    totalDirectIncurredCost,
+  };
+
+  // 3. Cash Flow / Liabilities Calculations (Strictly from Payment Tables)
+  const supplierPurchaseIds = new Set([...materialPurchasesRows, ...servicePurchasesRows, ...rentalPurchasesRows].map(p => p.id));
+  const laborPurchaseIds = new Set(laborPurchasesRows.map(p => p.id));
+
+  const allPurchasePayments = data.purchasePayments || [];
+  const supplierPaid = allPurchasePayments
+    .filter(pp => supplierPurchaseIds.has(pp.purchase_id || ""))
+    .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
+
+  const totalSupplierPurchases = materials + supplierServices + rentalPurchasesTotal;
+  const supplierRemaining = totalSupplierPurchases - supplierPaid;
+
+  const technicianPaid = allPurchasePayments
+    .filter(pp => laborPurchaseIds.has(pp.purchase_id || ""))
+    .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
+
+  const technicianRemaining = technicianEarned - technicianPaid;
+  const paidExpenses = directProjectExpenses;
+
+  // Pure Cash Flow: actual Cash In is strictly actual cash payments (credit applied does not enter cash flow)
+  const actualCashIn = cashReceived;
+  const actualCashOut = supplierPaid + technicianPaid + paidExpenses;
+  const netCashFlow = actualCashIn - actualCashOut;
+
+  const cashFlow = {
+    actualCashIn,
+    actualCashOut,
+    netCashFlow,
+    supplierPaid,
+    supplierRemaining,
+    technicianPaid,
+    technicianRemaining,
+    paidExpenses,
+  };
+
+  // 4. Commercial & Client Obligation Model
+  let contractValue = 0;
+  let clientObligation = 0;
+  let companyFee = 0;
+  let projectRevenue = 0;
+  let projectCost = 0;
+  let grossProfit = 0;
+  let profitMarginPercent = 0;
+  let eligibleCostBase = 0;
+
+  if (projectType === "finishing") {
+    // FINISHING (Cost Plus / Management Fee):
+    eligibleCostBase = totalDirectIncurredCost;
+    
+    companyFee = (eligibleCostBase * finishingPercentage) / 100;
+    clientObligation = eligibleCostBase + companyFee;
+    contractValue = clientObligation;
+    
+    projectRevenue = clientObligation;
+    projectCost = eligibleCostBase;
+    grossProfit = companyFee;
+    profitMarginPercent = projectRevenue > 0 ? (grossProfit / projectRevenue) * 100 : 0;
+  } else {
+    // CONTRACTING (Fixed Contract / BOQ Items):
+    eligibleCostBase = totalDirectIncurredCost;
+    
+    const contractsTotal = (data.contracts || [])
+      .filter(c => c.status !== "cancelled")
+      .reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const itemsTotal = (data.projectItems || []).reduce(
+      (sum, i) => sum + Number(i.total_price || 0),
+      0
+    );
+    
+    contractValue = contractsTotal > 0 ? contractsTotal : (itemsTotal > 0 ? itemsTotal : Number(data.project.budget || 0));
+    clientObligation = contractValue;
+    companyFee = 0;
+    
+    projectRevenue = contractValue;
+    projectCost = totalDirectIncurredCost;
+    grossProfit = projectRevenue - projectCost;
+    profitMarginPercent = projectRevenue > 0 ? (grossProfit / projectRevenue) * 100 : 0;
+  }
+
+  // 5. Settlement & Remaining (FC-02 Canonical Model)
+  const cashApplicable = Math.min(cashReceived, clientObligation);
+  const totalSettled = cashApplicable + creditApplied;
+  const clientRemaining = Math.max(0, clientObligation - totalSettled);
+  const excessCashGenerated = Math.max(0, cashReceived - clientObligation);
+
+  return {
+    projectId,
+    projectType,
+    eligibleCostBase,
+    breakdown,
+    finishingPercentage,
+    companyFee,
+    contractValue,
+    clientObligation,
+    cashReceived,
+    cashApplicable,
+    creditApplied,
+    totalSettled,
+    clientPaid: totalSettled, // Backward-compatible alias
+    clientRemaining,
+    excessCashGenerated,
+    projectRevenue,
+    projectCost,
+    grossProfit,
+    profitMarginPercent,
+    cashFlow,
+  };
+}
+
+/**
+ * Calculate Client-Level Aggregate Financials & Available Credit (FC-02)
+ */
+export function calculateClientFinancials(clientData) {
+  const clientId = clientData.client.id;
+  const projects = clientData.projects || [];
+  
+  // 1. Calculate each project's financials
+  const projectSummaries = projects.map(project => {
+    const projContracts = (clientData.contracts || []).filter(c => c.project_id === project.id);
+    const projItems = (clientData.projectItems || []).filter(i => i.project_id === project.id);
+    const projPurchases = (clientData.purchases || []).filter(p => p.project_id === project.id);
+    const projPayments = (clientData.purchasePayments || []);
+    const projProgress = (clientData.techProgressRecords || []).filter(t => t.project_id === project.id);
+    const projRentals = (clientData.rentals || []).filter(r => r.project_id === project.id);
+    const projExpenses = (clientData.expenses || []).filter(e => e.project_id === project.id);
+    const projClientPayments = (clientData.clientPayments || []).filter(cp => cp.project_id === project.id);
+    const projCreditApps = (clientData.creditApplications || []).filter(ca => ca.target_project_id === project.id);
+
+    return calculateProjectFinancials({
+      project,
+      contracts: projContracts,
+      projectItems: projItems,
+      purchases: projPurchases,
+      purchasePayments: projPayments,
+      techProgressRecords: projProgress,
+      rentals: projRentals,
+      expenses: projExpenses,
+      clientPayments: projClientPayments,
+      creditApplications: projCreditApps,
+    });
+  });
+
+  // 2. Client-level Cash & Overpayment Credit Calculation
+  const directClientCash = (clientData.clientPayments || [])
+    .filter(cp => cp.client_id === clientId && !cp.project_id)
+    .reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
+
+  const totalProjectCashReceived = projectSummaries.reduce((sum, ps) => sum + ps.cashReceived, 0);
+  const totalCashReceived = directClientCash + totalProjectCashReceived;
+
+  const totalOverpaymentCredit = projectSummaries.reduce((sum, ps) => sum + ps.excessCashGenerated, 0);
+  const totalCreditCreated = directClientCash + totalOverpaymentCredit;
+
+  const totalCreditApplied = (clientData.creditApplications || [])
+    .filter(ca => ca.client_id === clientId && ca.status !== "reversed")
+    .reduce((sum, ca) => sum + Number(ca.amount || 0), 0);
+
+  const clientAvailableCredit = Math.max(0, totalCreditCreated - totalCreditApplied);
+
+  const totalObligations = projectSummaries.reduce((sum, ps) => sum + ps.clientObligation, 0);
+  const totalSettled = projectSummaries.reduce((sum, ps) => sum + ps.totalSettled, 0);
+  const netClientRemaining = Math.max(0, totalObligations - totalSettled);
+
+  return {
+    clientId,
+    totalObligations,
+    totalCashReceived,
+    totalCreditCreated,
+    totalCreditApplied,
+    clientAvailableCredit,
+    totalSettled,
+    netClientRemaining,
+    projectSummaries,
+  };
+}
+
+/**
+ * Validate Client Credit Application
+ */
+export function validateCreditApplication(params) {
+  const { clientId, targetProjectId, amount, clientData } = params;
+
+  if (!amount || amount <= 0) {
+    return { isValid: false, error: "المبلغ المطلوب تطبيقه يجب أن يكون أكبر من الصفر." };
+  }
+
+  // 1. Same-client check
+  const targetProject = (clientData.projects || []).find(p => p.id === targetProjectId);
+  if (!targetProject) {
+    return { isValid: false, error: "المشروع المستهدف غير موجود." };
+  }
+  if (targetProject.client_id !== clientId) {
+    return { isValid: false, error: "حظر تطبيقي: لا يمكن استخدام رصيد العميل لصالح مشروع يتبع عميلاً آخر." };
+  }
+
+  // 2. Client available credit check
+  const clientFinancials = calculateClientFinancials(clientData);
+  if (amount > clientFinancials.clientAvailableCredit) {
+    return {
+      isValid: false,
+      error: `المبلغ المطلوب (${amount} د.ل) يتجاوز الرصيد الدائن المتاح للزبون (${clientFinancials.clientAvailableCredit} د.ل).`,
+    };
+  }
+
+  // 3. Target project remaining check
+  const targetProjSummary = clientFinancials.projectSummaries.find(ps => ps.projectId === targetProjectId);
+  if (targetProjSummary && amount > targetProjSummary.clientRemaining) {
+    return {
+      isValid: false,
+      error: `المبلغ المطلوب (${amount} د.ل) يتجاوز المتبقي المستحق على المشروع المستهدف (${targetProjSummary.clientRemaining} د.ل).`,
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validate Cash Payment Deletion/Reversal for Credit Safety
+ */
+export function validateCashPaymentReversal(params) {
+  const { paymentId, clientData } = params;
+  const payment = (clientData.clientPayments || []).find(cp => cp.id === paymentId);
+  if (!payment) {
+    return { canReverse: true };
+  }
+
+  const currentFinancials = calculateClientFinancials(clientData);
+  
+  let excessFromThisPayment = 0;
+  if (!payment.project_id) {
+    excessFromThisPayment = Number(payment.amount || 0);
+  } else {
+    const projSummary = currentFinancials.projectSummaries.find(ps => ps.projectId === payment.project_id);
+    if (projSummary) {
+      excessFromThisPayment = projSummary.excessCashGenerated;
+    }
+  }
+
+  if (excessFromThisPayment > 0) {
+    if (currentFinancials.clientAvailableCredit < excessFromThisPayment) {
+      const consumedCredit = excessFromThisPayment - currentFinancials.clientAvailableCredit;
+      return {
+        canReverse: false,
+        error: `حظر أمان: لا يمكن حذف أو عكس سند القبض لأن رصيداً بقيمة (${consumedCredit} د.ل) تم استخدامه مسبقاً في تسديد مشاريع أخرى. يجب إلغاء استخدام الرصيد في تلك المشاريع أولاً.`,
+      };
+    }
+  }
+
+  return { canReverse: true };
+}
+
+/**
+ * CONTRACTING BOQ ITEM PROFITABILITY HELPER (MIRROR FOR TEST SUITE)
+ */
+export function calculateContractingItemProfitability(input) {
+  const itemId = input.item.id;
+  const itemName = input.item.name || "بند مقايسة";
+
+  // 1. Commercial Customer Value (Explicit nullish authority: total_price if not null, else qty * unit_price)
+  const commercialValue =
+    input.item.total_price !== null && input.item.total_price !== undefined
+      ? Number(input.item.total_price)
+      : Number(input.item.quantity || 0) * Number(input.item.unit_price || 0);
+
+  // 2. Single Commercial Progress Authority (project_items.progress only)
+  const rawProgress = Number(input.item.progress || 0);
+  const approvedProgressPercent = Math.max(0, Math.min(100, isNaN(rawProgress) ? 0 : rawProgress));
+  const approvedCompletionRatio = approvedProgressPercent / 100;
+  const earnedCommercialValueToDate = commercialValue * approvedCompletionRatio;
+
+  // 3. Labor Incurred: SUM(technician_progress_records.earned_amount WHERE project_item_id = item.id)
+  const itemTechRecords = (input.techProgressRecords || []).filter(
+    r => r.project_item_id === itemId
+  );
+
+  const techMap = new Map();
+  let laborIncurred = 0;
+
+  for (const r of itemTechRecords) {
+    const rawEarned = Number(r.earned_amount || 0);
+    const earned = rawEarned > 0 ? rawEarned : Number(r.quantity_completed || 0) * Number(r.rate || 0);
+    laborIncurred += earned;
+
+    const techId = r.technician_id || "unknown";
+    techMap.set(techId, (techMap.get(techId) || 0) + earned);
+  }
+
+  const technicianBreakdown = [];
+  for (const [technicianId, earnedAmount] of techMap.entries()) {
+    technicianBreakdown.push({ technicianId, earnedAmount });
+  }
+
+  // 4. Material & Service Purchases Incurred (Matching FC-01 classification)
+  const itemPurchases = (input.purchases || []).filter(
+    p => p.project_item_id === itemId
+  );
+
+  const materialPurchasesRows = itemPurchases.filter(
+    p =>
+      (p.purchase_type === "material" || !p.purchase_type) &&
+      !p.rental_id &&
+      !p.technician_id &&
+      p.purchase_type !== "service" &&
+      p.purchase_type !== "labor"
+  );
+  const servicePurchasesRows = itemPurchases.filter(
+    p => p.purchase_type === "service" && !p.rental_id && !p.technician_id
+  );
+
+  const materialPurchasesIncurred = materialPurchasesRows.reduce(
+    (sum, p) => sum + Number(p.total_amount || 0),
+    0
+  );
+  const supplierServicesIncurred = servicePurchasesRows.reduce(
+    (sum, p) => sum + Number(p.total_amount || 0),
+    0
+  );
+
+  // 5. Direct Expenses Incurred: SUM(expenses.amount WHERE project_item_id = item.id)
+  const itemExpenses = (input.expenses || []).filter(
+    e => e.project_item_id === itemId
+  );
+  const directExpensesIncurred = itemExpenses.reduce(
+    (sum, e) => sum + Number(e.amount || 0),
+    0
+  );
+
+  // 6. Total Attributed Direct Incurred Cost
+  const totalAttributedItemIncurred =
+    laborIncurred +
+    materialPurchasesIncurred +
+    supplierServicesIncurred +
+    directExpensesIncurred;
+
+  // 7. Actual-to-Date Gross Profit
+  const actualToDateGrossProfit = earnedCommercialValueToDate - totalAttributedItemIncurred;
+
+  // 8. Actual-to-Date Margin % (N/A / null when earned value <= 0)
+  const actualToDateMarginPercent =
+    earnedCommercialValueToDate > 0
+      ? (actualToDateGrossProfit / earnedCommercialValueToDate) * 100
+      : null;
+
+  // 9. Unearned Commercial Contract Value
+  const unearnedContractValue = Math.max(0, commercialValue - earnedCommercialValueToDate);
+
+  return {
+    itemId,
+    itemName,
+    commercialValue,
+    approvedProgressPercent,
+    approvedCompletionRatio,
+    earnedCommercialValueToDate,
+    laborIncurred,
+    materialPurchasesIncurred,
+    supplierServicesIncurred,
+    directExpensesIncurred,
+    totalAttributedItemIncurred,
+    actualToDateGrossProfit,
+    actualToDateMarginPercent,
+    unearnedContractValue,
+    technicianBreakdown,
+  };
+}
+

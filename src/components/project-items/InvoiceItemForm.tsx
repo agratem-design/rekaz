@@ -1071,6 +1071,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
               }
 
               saveMutation.mutate({
+                general_item_id: inlineItem.generalItemId || null,
                 name: inlineItem.name,
                 description: inlineItem.description || null,
                 measurement_type: detectedType,

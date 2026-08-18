@@ -1178,6 +1178,24 @@ const Settings = () => {
                   </div>
                 </Link>
 
+                {/* 7. Database Backup */}
+                <Link to="/database-backup" className="group">
+                  <div className="h-full flex items-start gap-4 p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 cursor-pointer">
+                    <div className="p-3 rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                      <Database className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-foreground">النسخ الاحتياطي لقاعدة البيانات</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        التحكم في النسخ الاحتياطي الصامت لتطبيق سطح المكتب، المزامنة مع Google Drive واستعادة البيانات.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+
               </div>
             </CardContent>
           </Card>

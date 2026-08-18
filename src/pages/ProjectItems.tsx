@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { InvoiceItemForm } from "@/components/project-items/InvoiceItemForm";
 import { safeEvaluate } from "@/lib/safeFormula";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -166,7 +166,11 @@ const detectMeasurementType = (config: MeasurementConfig | null): MeasurementTyp
 };
 
 const ProjectItems = () => {
-  const { id: projectId, phaseId } = useParams<{ id: string; phaseId?: string }>();
+  const { id: projectId, phaseId: routePhaseId } = useParams<{ id: string; phaseId?: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryPhaseId = searchParams.get("phase");
+  const effectivePhaseId = routePhaseId || queryPhaseId || undefined;
   const queryClient = useQueryClient();
   const inlineDropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
@@ -244,9 +248,33 @@ const ProjectItems = () => {
     enabled: !!projectId,
   });
 
+  // Fetch current phase details if in phase context (validating project ownership)
+  const { data: currentPhase } = useQuery({
+    queryKey: ["phase-meta-for-items", effectivePhaseId, projectId],
+    queryFn: async () => {
+      if (!effectivePhaseId || !projectId) return null;
+      const { data, error } = await supabase
+        .from("project_phases")
+        .select("id, name, phase_number, status, project_id")
+        .eq("id", effectivePhaseId)
+        .eq("project_id", projectId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!effectivePhaseId && !!projectId,
+  });
+
+  // Canonical redirect for legacy ?phase= parameter when routePhaseId is not set
+  useEffect(() => {
+    if (queryPhaseId && !routePhaseId && projectId && currentPhase) {
+      navigate(`/projects/${projectId}/phases/${queryPhaseId}/items`, { replace: true });
+    }
+  }, [queryPhaseId, routePhaseId, projectId, currentPhase, navigate]);
+
   // Fetch project items with engineer info and technician costs
   const { data: items, isLoading: itemsLoading } = useQuery({
-    queryKey: ["project-items", projectId, phaseId],
+    queryKey: ["project-items", projectId, effectivePhaseId],
     queryFn: async () => {
       let query = supabase
         .from("project_items")
@@ -261,8 +289,8 @@ const ProjectItems = () => {
         .eq("project_id", projectId!)
         .order("created_at", { ascending: false });
       
-      if (phaseId) {
-        query = query.eq("phase_id", phaseId);
+      if (effectivePhaseId) {
+        query = query.eq("phase_id", effectivePhaseId);
       }
       
       const { data, error } = await query;
@@ -504,7 +532,7 @@ const ProjectItems = () => {
 
       const payload = {
         project_id: projectId!,
-        phase_id: phaseId || null,
+        phase_id: effectivePhaseId || null,
         name: data.name,
         description: data.description || null,
         measurement_type: data.measurement_type,
@@ -623,6 +651,7 @@ const ProjectItems = () => {
         const customData = importItemsData[item.id];
         return {
           project_id: projectId!,
+          phase_id: effectivePhaseId || null,
           name: item.name,
           description: item.description,
           measurement_type: item.measurement_type,
@@ -904,27 +933,67 @@ const ProjectItems = () => {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        {/* Phase Context Banner (if inside a Phase) */}
+        {effectivePhaseId && currentPhase && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <span className="text-xs text-muted-foreground">أنت تتصفح حالياً بنود مرحلة:</span>
+                <span className="font-bold text-foreground mr-1.5">{currentPhase.name}</span>
+                <Badge variant="outline" className="text-[10px] mr-2">
+                  #{currentPhase.phase_number || 1}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer"
+                onClick={() => navigate(`/projects/${projectId}/phases/${effectivePhaseId}`)}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                <span>مساحة عمل المرحلة</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                onClick={() => navigate(`/projects/${projectId}/items`)}
+              >
+                <span>عرض جميع بنود المشروع</span>
+              </Button>
+            </div>
+          </div>
+        )}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">فاتورة بنود المقاولات</h1>
-          <p className="text-muted-foreground">
-            {project.name}
-            {project?.clients?.name && (
-              <>
-                {" - "}
-                <Link 
-                  to={`/projects/client/${project.client_id}`}
-                  className="text-primary hover:underline"
-                >
-                  {project.clients.name}
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">
+              {effectivePhaseId && currentPhase
+                ? `بنود مقايسة ${currentPhase.name}`
+                : "فاتورة بنود المقاولات"}
+            </h1>
+            <p className="text-muted-foreground">
+              {effectivePhaseId && currentPhase
+                ? `إدارة وتكاليف بنود هذه المرحلة للمشروع: ${project.name}`
+                : project.name}
+              {project?.clients?.name && (
+                <>
+                  {" - "}
+                  <Link 
+                    to={`/projects/client/${project.client_id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {project.clients.name}
+                  </Link>
+                </>
+              )}
+            </p>
+          </div>
         <div className="flex gap-2">
           {items && items.some((item: any) => item._raw_total_price === 0 && item.quantity > 0 && item.unit_price > 0) && (
             <Button
@@ -1799,7 +1868,7 @@ const ProjectItems = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مرحلة (المشروع الرئيسي)</SelectItem>
-                  {projectPhases?.filter(p => p.id !== phaseId).map((phase) => (
+                  {projectPhases?.filter(p => p.id !== ((itemToMove as any)?.phase_id || effectivePhaseId)).map((phase) => (
                     <SelectItem key={phase.id} value={phase.id}>
                       {phase.name}
                     </SelectItem>
@@ -1853,7 +1922,7 @@ const ProjectItems = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مرحلة (المشروع الرئيسي)</SelectItem>
-                  {projectPhases?.filter(p => p.id !== phaseId).map((phase) => (
+                  {projectPhases?.filter(p => p.id !== effectivePhaseId).map((phase) => (
                     <SelectItem key={phase.id} value={phase.id}>
                       {phase.name}
                     </SelectItem>
@@ -1910,7 +1979,8 @@ const ProjectItems = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 };
 

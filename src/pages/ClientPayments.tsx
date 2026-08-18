@@ -470,21 +470,6 @@ const ClientPayments = () => {
         status: "received",
         reference_id: payment.id,
       });
-
-      // 3. Log Treasury Transaction
-      const clientObj = clients?.find((c) => c.id === selectedClientId);
-      await supabase.from("treasury_transactions").insert({
-        treasury_id: selectedTreasuryId,
-        type: "deposit",
-        amount: amount,
-        balance_after: 0,
-        description: `تسديد من الزبون: ${clientObj?.name || ""}`,
-        date: paymentDate,
-        source: "client_payment",
-        reference_type: "client_payment",
-        reference_id: payment.id,
-        notes: notes || null,
-      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-outstanding", selectedClientId] });
@@ -507,40 +492,10 @@ const ClientPayments = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (paymentId: string) => {
-      // Get allocations to restore purchase paid_amount
-      const { data: allocs } = await supabase
-        .from("client_payment_allocations")
-        .select("reference_id, reference_type, amount")
-        .eq("payment_id", paymentId);
-
-      if (allocs && allocs.length > 0) {
-        for (const alloc of allocs) {
-          if (alloc.reference_type === "purchase" || alloc.reference_type === "rental") {
-            const { data: purchase } = await supabase
-              .from("purchases")
-              .select("paid_amount, total_amount")
-              .eq("id", alloc.reference_id)
-              .maybeSingle();
-
-            if (purchase) {
-              const newPaid = Math.max(0, Number(purchase.paid_amount) - Number(alloc.amount));
-              const newStatus = newPaid === 0 ? "due" : newPaid < Number(purchase.total_amount) ? "partial" : "paid";
-              await supabase
-                .from("purchases")
-                .update({ paid_amount: newPaid, status: newStatus })
-                .eq("id", alloc.reference_id);
-            }
-          }
-        }
-      }
-
       // Delete associated income transaction
-      await supabase.from("income").delete().eq("reference_id", paymentId);
+      await (supabase.from("income") as any).delete().eq("reference_id", paymentId);
 
-      // Delete associated treasury transaction
-      await supabase.from("treasury_transactions").delete().eq("reference_id", paymentId);
-
-      // Delete payment (cascade will handle allocations)
+      // Delete payment (database trigger handles treasury transaction & balance cleanly)
       const { error } = await supabase.from("client_payments").delete().eq("id", paymentId);
       if (error) throw error;
     },
@@ -592,8 +547,7 @@ const ClientPayments = () => {
       if (error) throw error;
 
       // Update associated income
-      await supabase
-        .from("income")
+      await (supabase.from("income" as any) as any)
         .update({
           amount: amountVal,
           date: data.date,
@@ -604,8 +558,8 @@ const ClientPayments = () => {
 
       // Update associated treasury_transaction
       if (data.treasury_id) {
-        const { error: txErr } = await supabase
-          .from("treasury_transactions")
+        const { error: txErr } = await (supabase
+          .from("treasury_transactions" as any) as any)
           .update({
             treasury_id: data.treasury_id,
             amount: amountVal,
@@ -676,7 +630,7 @@ const ClientPayments = () => {
     const dateStr = format(new Date(payment.date), "dd/MM/yyyy");
     const matchedProjectName = payment.projects?.name || clientSummary?.projects?.find(p => p.id === payment.project_id)?.name || "رصيد عام للزبون";
 
-    const borderStyle = `border: ${companySettings?.print_border_width ?? 1}px solid ${companySettings?.print_table_border_color || "#ccc"};`;
+    const borderStyle = `border: 1px solid ${companySettings?.print_table_border_color || "#ccc"};`;
 
     const contentHtml = `
       <div class="print-area" style="box-shadow: none; margin: 0; padding: 20px; direction: rtl;">
@@ -829,7 +783,7 @@ const ClientPayments = () => {
                     </Button>
                   )}
                 </div>
-                <Select value={selectedClientId} onValueChange={v => { setSelectedClientId(v); setPaymentAmount(""); setSelectedProjectId(""); setPaymentProjectType("all"); }} dir="rtl">
+                <Select value={selectedClientId} onValueChange={v => { setSelectedClientId(v); setPaymentAmount(""); setSelectedProjectId(""); }} dir="rtl">
                   <SelectTrigger className="h-11 rounded-xl border-primary/20 focus:border-primary text-base">
                     <SelectValue placeholder="اختر الزبون..." />
                   </SelectTrigger>
@@ -1214,10 +1168,10 @@ const ClientPayments = () => {
                         </div>
                         <CollapsibleContent>
                           <div className="px-3 pb-3 pt-1.5 text-xs text-muted-foreground space-y-1.5 border-t border-border/30 bg-muted/20">
-                            {treasury && (
+                            {subTreasury && (
                               <div className="flex items-center gap-1.5">
-                                {treasury.treasury_type === "cash" ? <Wallet className="h-3.5 w-3.5 text-primary" /> : <Landmark className="h-3.5 w-3.5 text-primary" />}
-                                <span>الخزينة المودع فيها: {treasury.name}</span>
+                                {subTreasury.treasury_type === "cash" ? <Wallet className="h-3.5 w-3.5 text-primary" /> : <Landmark className="h-3.5 w-3.5 text-primary" />}
+                                <span>الخزينة المودع فيها: {parentTreasury ? `${parentTreasury.name} - ` : ''}{subTreasury.name}</span>
                               </div>
                             )}
                             {p.notes && <p className="leading-relaxed"><strong className="text-foreground">ملاحظات:</strong> {p.notes}</p>}

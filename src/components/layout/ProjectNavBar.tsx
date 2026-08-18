@@ -22,8 +22,11 @@ import {
   Printer,
   MoreHorizontal,
   Receipt,
+  Sparkles,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -34,33 +37,42 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { ProjectSwitcher } from "@/components/project/ProjectSwitcher";
 
 type NavTab = {
   name: string;
   href: string;
   icon: React.ElementType;
   group: "main" | "finance" | "management";
+  isContractingOnly?: boolean;
 };
 
-const getProjectTabs = (projectId: string, phaseId?: string): NavTab[] => {
-  const base = phaseId ? `/projects/${projectId}/phases/${phaseId}` : `/projects/${projectId}`;
+const getProjectTabs = (projectId: string, isFinishing: boolean): NavTab[] => {
+  const tabs: NavTab[] = [
+    { name: "لوحة المشروع", href: `/projects/${projectId}`, icon: FolderKanban, group: "main" },
+  ];
 
-  if (!phaseId) {
-    return [
-      { name: "المراحل", href: `/projects/${projectId}/phases`, icon: Layers, group: "main" },
-      { name: "العقود", href: `/projects/${projectId}/contracts`, icon: Receipt, group: "finance" },
-    ];
+  if (!isFinishing) {
+    tabs.push({ name: "بنود المقايسة", href: `/projects/${projectId}/items`, icon: Package, group: "main", isContractingOnly: true });
   }
 
-  return [
-    { name: "البنود", href: `${base}/items`, icon: Package, group: "main" },
-    { name: "نسب الإنجاز", href: `${base}/progress`, icon: TrendingUp, group: "main" },
-    // Finance
-    { name: "المشتريات", href: `${base}/purchases`, icon: ShoppingCart, group: "finance" },
-    { name: "المصروفات", href: `${base}/expenses`, icon: Coins, group: "finance" },
-    { name: "العقود", href: `${base}/contracts`, icon: Receipt, group: "finance" },
-    { name: "المعدات", href: `${base}/equipment`, icon: Wrench, group: "finance" },
-  ];
+  tabs.push(
+    { name: "المراحل", href: `/projects/${projectId}/phases`, icon: Layers, group: "main" },
+    { name: isFinishing ? "المشتريات والخدمات" : "المشتريات", href: `/projects/${projectId}/purchases`, icon: ShoppingCart, group: "finance" },
+    { name: "المصروفات", href: `/projects/${projectId}/expenses`, icon: Coins, group: "finance" },
+    { name: "إيصالات القبض", href: `/projects/${projectId}/payments`, icon: Receipt, group: "finance" }
+  );
+
+  if (!isFinishing) {
+    tabs.push({ name: "نسب الإنجاز", href: `/projects/${projectId}/progress`, icon: TrendingUp, group: "main", isContractingOnly: true });
+  }
+
+  tabs.push(
+    { name: "العقود", href: `/projects/${projectId}/contracts`, icon: Receipt, group: "finance" },
+    { name: "المعدات", href: `/projects/${projectId}/equipment`, icon: Wrench, group: "finance" }
+  );
+
+  return tabs;
 };
 
 export function ProjectNavBar() {
@@ -101,28 +113,23 @@ export function ProjectNavBar() {
 
   if (!id) return null;
 
-  const allTabs = getProjectTabs(id, phaseId);
-
   const isFinishing = (project as any)?.project_type === "finishing";
+  const allTabs = getProjectTabs(id, isFinishing);
 
   // Filter tabs by role and project type
   const visibleTabs = allTabs.filter((tab) => {
-    if (isFinishing) {
-      // Finishing projects use phases but have no contracting items (البنود)
-      return tab.name !== "البنود";
+    if (isFinishing && tab.isContractingOnly) {
+      return false;
     }
     if (isEngineer) {
-      // Engineers can see main tabs but not finance (except equipment)
+      // Engineers can see main tabs and equipment
       return tab.group === "main" || tab.name === "المعدات" || tab.group === "management";
     }
     return true;
   });
 
-  // Determine which tabs appear in the scrollable bar (main + finance)
-  // and which go into the "more" overflow dropdown
-  const primaryGroups = ["main", "finance"];
-  const primaryTabs = visibleTabs.filter((t) => primaryGroups.includes(t.group));
-  const managementTabs = visibleTabs.filter((t) => t.group === "management");
+  const primaryTabs = visibleTabs;
+  const managementTabs: NavTab[] = [];
 
   const isTabActive = (tab: NavTab) => {
     const path = location.pathname;
@@ -169,22 +176,10 @@ export function ProjectNavBar() {
               <span>المشاريع</span>
             </Link>
 
-            {clientName && (
-              <>
-                <ChevronRight className="h-3 w-3 shrink-0" />
-                <Link
-                  to={`/projects/client/${(project as any)?.client_id}`}
-                  className="hover:text-foreground transition-colors truncate max-w-[90px] cursor-pointer"
-                >
-                  {clientName}
-                </Link>
-              </>
-            )}
-
             <ChevronRight className="h-3 w-3 shrink-0" />
             <Link
               to={`/projects/${id}/phases`}
-              className="hover:text-primary transition-colors font-semibold text-foreground truncate max-w-[160px] cursor-pointer"
+              className="hover:text-primary transition-colors font-semibold text-foreground truncate max-w-[180px] cursor-pointer"
             >
               {project?.name || "..."}
             </Link>
@@ -200,8 +195,37 @@ export function ProjectNavBar() {
           </div>
         </div>
 
-        {/* Right: Quick Action Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+          {/* Right: Project Switcher & Quick Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Project Type Badge */}
+          <Badge
+            variant="outline"
+            className={`text-[11px] px-2 py-0.5 font-bold flex items-center gap-1 ${
+              isFinishing
+                ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20"
+                : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20"
+            }`}
+          >
+            {isFinishing ? (
+              <>
+                <Sparkles className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                <span>تشطيبات</span>
+              </>
+            ) : (
+              <>
+                <Building2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <span>مقاولات</span>
+              </>
+            )}
+          </Badge>
+
+          {/* Project Switcher */}
+          <ProjectSwitcher
+            currentProjectId={id}
+            currentProjectName={project?.name}
+            currentProjectType={project?.project_type as any}
+          />
+
           {/* Print Report — visible for non-engineers */}
           {!isEngineer && (
             <Button
@@ -211,20 +235,20 @@ export function ProjectNavBar() {
               className="gap-1.5 h-8 px-3 cursor-pointer text-xs"
             >
               <Printer className="h-3.5 w-3.5" />
-              <span>طباعة التقرير</span>
+              <span className="hidden sm:inline">طباعة التقرير</span>
             </Button>
           )}
 
           {/* Settings — visible for admin */}
           {isAdmin && (
             <Button
-              variant={location.pathname.includes("/edit") ? "default" : "ghost"}
+              variant={location.pathname.includes("/settings") || location.pathname.includes("/edit") ? "default" : "ghost"}
               size="sm"
-              onClick={() => navigate(`/projects/${id}/edit`)}
+              onClick={() => navigate(`/projects/${id}/settings`)}
               className="gap-1.5 h-8 px-3 cursor-pointer text-xs"
             >
               <Settings className="h-3.5 w-3.5" />
-              <span>إعدادات</span>
+              <span className="hidden sm:inline">إعدادات</span>
             </Button>
           )}
         </div>

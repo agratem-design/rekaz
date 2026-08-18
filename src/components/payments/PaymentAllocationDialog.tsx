@@ -1,3 +1,14 @@
+/**
+ * @deprecated LEGACY / NON-AUTHORITATIVE COMPONENT
+ * 
+ * FINAL BUSINESS RULE:
+ * Client Payments are pure PROJECT-LEVEL RECEIPTS with ZERO invoice/purchase/phase allocation.
+ * Cash collected increases project collections and reduces project remaining balance directly.
+ * 
+ * Active client receipt workflows must NOT use this dialog.
+ * Preserved solely for backward compatibility with historical records.
+ */
+
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
 import {
   Select,
   SelectContent,
@@ -146,10 +159,6 @@ export default function PaymentAllocationDialog({
     }
   }, [open, invoices, allTreasuries]);
 
-  const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen) onClose();
-  };
-
   // Computed values
   const stats = useMemo(() => {
     const selected = allocations.filter(a => a.selected && a.amount > 0);
@@ -168,6 +177,45 @@ export default function PaymentAllocationDialog({
 
     return { totalBase, totalFee, totalWithFee: totalBase + totalFee, totalRemaining, totalRemainingWithFee, selectedCount, totalCount, coveragePercent };
   }, [allocations]);
+
+  const actualAmount = parseFloat(bulkAmount) || stats.totalWithFee;
+  const surplus = Math.max(0, actualAmount - stats.totalWithFee);
+
+  const isDirty = useMemo(() => {
+    if (!open) return false;
+    return (
+      actualAmount > 0 ||
+      (Boolean(formData.notes) && formData.notes.trim().length > 0) ||
+      allocations.some((a) => a.amount > 0)
+    );
+  }, [open, actualAmount, formData.notes, allocations]);
+
+  const {
+    showConfirmDialog: showUnsavedDialog,
+    setShowConfirmDialog,
+    requestAction,
+    confirmDiscard: handleConfirmDiscard,
+    cancelDiscard: handleCancelDiscard,
+  } = useUnsavedChangesGuard({
+    isDirty,
+    isSubmitting: isSaving,
+    onDiscard: () => {
+      onClose();
+    },
+  });
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      if (isSaving) return; // Block closing while mutation is in flight
+      if (isDirty) {
+        requestAction(() => {
+          onClose();
+        });
+      } else {
+        onClose();
+      }
+    }
+  };
 
   // Group by phase
   const phaseGroups = useMemo(() => {
@@ -277,9 +325,6 @@ export default function PaymentAllocationDialog({
       })
     );
   };
-
-  const actualAmount = parseFloat(bulkAmount) || stats.totalWithFee;
-  const surplus = Math.max(0, actualAmount - stats.totalWithFee);
 
   const handleSave = () => {
     onSave({ ...formData, actualAmount }, allocations);
@@ -572,7 +617,7 @@ export default function PaymentAllocationDialog({
             </div>
           )}
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-none">
+            <Button variant="outline" disabled={isSaving} onClick={() => handleOpenChange(false)} className="flex-1 sm:flex-none">
               إلغاء
             </Button>
             <Button
@@ -590,6 +635,12 @@ export default function PaymentAllocationDialog({
           </div>
         </div>
       </DialogContent>
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onOpenChange={setShowConfirmDialog}
+        onConfirmDiscard={handleConfirmDiscard}
+        onStay={handleCancelDiscard}
+      />
     </Dialog>
   );
 }

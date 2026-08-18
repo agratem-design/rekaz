@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { DeterministicBreadcrumb } from "@/components/navigation/DeterministicBreadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,7 +218,7 @@ const TreasuryDetail = () => {
     },
   });
 
-  const otherTreasuries = allTreasuries?.filter(t => t.id !== id && t.parent_id === treasury?.parent_id && t.parent_id !== null) || [];
+  const otherTreasuries = allTreasuries?.filter(t => t.id !== id) || [];
 
   // Transfer mutation
   const transferMutation = useMutation({
@@ -227,35 +228,14 @@ const TreasuryDetail = () => {
       if (form.amount <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر");
       if (treasury.balance < form.amount) throw new Error("الرصيد غير كافٍ للنقل");
 
-      // إدراج حركتين فقط - التريجر auto_sync_treasury_balance يتولى تحديث الأرصدة تلقائياً
-      const { error: e1 } = await supabase.from("treasury_transactions").insert([{
-        treasury_id: id!,
-        type: "withdrawal",
-        amount: form.amount,
-        balance_after: 0, // سيُحسب بواسطة التريجر
-        source: "transfer",
-        source_details: `نقل إلى: ${dest.name}${form.reason ? ` - ${form.reason}` : ""}`,
-        description: `نقل أموال إلى ${dest.name}`,
-        date: form.date,
-        reference_id: form.destinationId,
-        reference_type: "transfer",
-      }]);
-      if (e1) throw e1;
-
-      const { error: e2 } = await supabase.from("treasury_transactions").insert([{
-        treasury_id: form.destinationId,
-        type: "deposit",
-        amount: form.amount,
-        balance_after: 0, // سيُحسب بواسطة التريجر
-        source: "transfer",
-        source_details: `نقل من: ${treasury.name}${form.reason ? ` - ${form.reason}` : ""}`,
-        description: `نقل أموال من ${treasury.name}`,
-        date: form.date,
-        reference_id: id!,
-        reference_type: "transfer",
-      }]);
-      if (e2) throw e2;
-      // ملاحظة: التريجر auto_sync_treasury_balance يحدث الأرصدة تلقائياً
+      const { error } = await supabase.rpc("transfer_between_treasuries" as any, {
+        p_from_treasury_id: id!,
+        p_to_treasury_id: form.destinationId,
+        p_amount: form.amount,
+        p_date: form.date,
+        p_notes: form.reason || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["treasury", id] });
@@ -477,12 +457,18 @@ const TreasuryDetail = () => {
 
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Breadcrumb */}
+      <DeterministicBreadcrumb
+        items={[
+          { label: "الخزائن والحسابات", href: "/treasuries" },
+          { label: treasury?.name || "تفاصيل الخزينة", isCurrent: true },
+        ]}
+        fallbackBackHref="/treasuries"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/treasuries")}>
-            <ArrowRight className="h-5 w-5" />
-          </Button>
           <div className="p-2 rounded-lg bg-primary/10">
             {treasury.treasury_type === "bank" ? (
               <Landmark className="h-6 w-6 text-primary" />

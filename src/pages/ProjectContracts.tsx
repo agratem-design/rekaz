@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -94,7 +94,7 @@ export default function ProjectContracts() {
   const [notes, setNotes] = useState("");
   const [phaseId, setPhaseId] = useState<string>("");
   const [contractItems, setContractItems] = useState<
-    { id: string; name: string; quantity: number; unit_price: number; project_item_id: string; general_item_id: string }[]
+    { id: string; name: string; quantity: number; unit_price: number; project_item_id: string; general_item_id: string; measurement_factor?: number | null }[]
   >([]);
 
   const { data: project } = useQuery({
@@ -170,7 +170,7 @@ export default function ProjectContracts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_items")
-        .select("id, name, unit_price, quantity")
+        .select("id, name, unit_price, quantity, measurement_factor")
         .eq("project_id", projectId!);
       if (error) throw error;
       return data;
@@ -467,23 +467,22 @@ export default function ProjectContracts() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            عقود المشروع
-          </h1>
-          <p className="text-sm text-muted-foreground">{project?.name}</p>
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              عقود المشروع
+            </h1>
+            <p className="text-xs text-muted-foreground">عقود واتفاقيات المشروع والالتزامات التعاقدية</p>
+          </div>
+          <Button className="gap-2" onClick={openNewForm}>
+            <Plus className="h-4 w-4" />
+            عقد جديد
+          </Button>
         </div>
-        <Button className="gap-2" onClick={openNewForm}>
-          <Plus className="h-4 w-4" />
-          عقد جديد
-        </Button>
-      </div>
 
       {/* Stats */}
       <div className="grid gap-3 grid-cols-3">
@@ -952,6 +951,7 @@ export default function ProjectContracts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 }

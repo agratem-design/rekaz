@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { formatCurrencyLYD } from "@/lib/currency";
 import { openPrintWindow } from "@/lib/printStyles";
 import html2pdf from "html2pdf.js";
 import { toast } from "sonner";
+import { ProjectFinancialSummaryCards } from "@/components/projects/ProjectFinancialSummaryCards";
 
 type ReportType = "client-detailed" | "client-summary" | "company-detailed" | "company-summary";
 
@@ -118,6 +119,20 @@ const ProjectReport = () => {
         `)
         .eq("project_id", id!)
         .order("date", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["project-contracts-report", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("*")
+        .eq("project_id", id!)
+        .order("created_at");
       if (error) throw error;
       return data;
     },
@@ -270,22 +285,43 @@ const ProjectReport = () => {
     return unitMap[type] || "وحدة";
   };
 
+  const contractsTotal = contracts.reduce(
+    (sum, c) => sum + Number(c.amount || 0),
+    0
+  );
+
   const totalItemsValue = projectItems.reduce(
     (sum, item) => sum + Number(item.total_price || 0),
     0
   );
 
-  const totalPurchases = purchases.reduce(
+  const contractValue = contractsTotal > 0 ? contractsTotal : (totalItemsValue > 0 ? totalItemsValue : Number(project?.budget || 0));
+
+  const materialPurchasesRows = (purchases || []).filter(
+    p => p.purchase_type === "material" || (!p.purchase_type && p.supplier_id)
+  );
+  const totalPurchases = materialPurchasesRows.reduce(
     (sum, p) => sum + Number(p.total_amount || 0),
     0
   );
+  const materialPurchaseIds = new Set(materialPurchasesRows.map(p => p.id));
+  const totalPurchasesPaid = purchasePayments
+    .filter(pay => materialPurchaseIds.has((pay as any).purchase_id || (pay as any).purchases?.id))
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const supplierRemaining = totalPurchases - totalPurchasesPaid;
 
-  const totalExpenses = expenses.reduce(
-    (sum, e) => sum + Number(e.amount || 0),
+  const technicianPurchasesRows = (purchases || []).filter(
+    p => p.purchase_type === "labor"
+  );
+  const totalLaborCostFromPurchases = technicianPurchasesRows.reduce(
+    (sum, p) => sum + Number(p.total_amount || 0),
     0
   );
-
-  const totalLaborCost = projectItems.reduce((sum, item) => {
+  const laborPurchaseIds = new Set(technicianPurchasesRows.map(p => p.id));
+  const totalLaborPaid = purchasePayments
+    .filter(pay => laborPurchaseIds.has((pay as any).purchase_id || (pay as any).purchases?.id))
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const totalLaborCostFromItems = projectItems.reduce((sum, item) => {
     const itemLaborCost = (item.project_item_technicians || []).reduce(
       (s: number, t: any) => s + Number(t.total_cost || 0),
       0
@@ -293,13 +329,16 @@ const ProjectReport = () => {
     return sum + itemLaborCost;
   }, 0);
 
-  const totalClientPaid = clientPayments.reduce(
-    (sum, p) => sum + Number(p.amount || 0),
+  const totalLaborCost = totalLaborCostFromPurchases > 0 ? totalLaborCostFromPurchases : totalLaborCostFromItems;
+  const technicianRemaining = totalLaborCost - totalLaborPaid;
+
+  const totalExpenses = expenses.reduce(
+    (sum, e) => sum + Number(e.amount || 0),
     0
   );
 
-  const totalPurchasesPaid = purchases.reduce(
-    (sum, p) => sum + Number(p.paid_amount || 0),
+  const totalClientPaid = clientPayments.reduce(
+    (sum, p) => sum + Number(p.amount || 0),
     0
   );
 
@@ -309,8 +348,14 @@ const ProjectReport = () => {
   );
 
   const totalCosts = totalPurchases + totalExpenses + totalLaborCost + totalRentals;
-  const clientRemaining = totalItemsValue - totalClientPaid;
-  const netProfit = totalClientPaid - totalCosts;
+  const clientRemaining = contractValue - totalClientPaid;
+  const grossProfit = contractValue - totalCosts;
+  const netProfit = grossProfit;
+
+  // Cash Flow calculations
+  const cashCollected = totalClientPaid;
+  const cashPaid = totalPurchasesPaid + totalLaborPaid + totalExpenses;
+  const netProjectCashFlow = cashCollected - cashPaid;
 
   // Finishing-specific calculations
   const cashTransactions: any[] = [];
@@ -382,17 +427,13 @@ const ProjectReport = () => {
   }
 
   return (
-    <>
+    <ProjectWorkspaceLayout>
       <div className="space-y-6" dir="rtl">
-        <div className="no-print">
-          <ProjectNavBar />
-        </div>
-
         {/* Page Header - Not Printed */}
         <div className="flex items-center justify-between no-print">
           <div>
-            <h1 className="text-3xl font-bold">تقرير المشروع</h1>
-            <p className="text-muted-foreground">{project.name}</p>
+            <h1 className="text-2xl font-bold">التقرير المالي والحسابي</h1>
+            <p className="text-xs text-muted-foreground">تقرير شامل لطباعة وتصدير كشوفات المشروع</p>
           </div>
         </div>
 
@@ -437,33 +478,33 @@ const ProjectReport = () => {
 
               {/* Financial Summary */}
               <div className="space-y-4">
-                <h2 className="text-xl font-bold border-b pb-2">الملخص المالي</h2>
+                <h2 className="text-xl font-bold border-b pb-2">الملخص المالي الأساسي</h2>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-primary/10 rounded-lg p-3 text-center">
-                    <p className="text-xs text-muted-foreground">قيمة البنود (العقد)</p>
-                    <p className="text-lg font-bold text-primary">{formatCurrencyLYD(totalItemsValue)}</p>
+                    <p className="text-xs text-muted-foreground">قيمة العقد / البنود</p>
+                    <p className="text-lg font-bold text-primary">{formatCurrencyLYD(contractValue)}</p>
                   </div>
                   <div className="bg-green-500/10 rounded-lg p-3 text-center">
                     <p className="text-xs text-muted-foreground">تسديد الزبون</p>
                     <p className="text-lg font-bold text-green-600">{formatCurrencyLYD(totalClientPaid)}</p>
                   </div>
                   <div className="bg-orange-500/10 rounded-lg p-3 text-center">
-                    <p className="text-xs text-muted-foreground">إجمالي التكاليف</p>
+                    <p className="text-xs text-muted-foreground">إجمالي التكاليف المعتمدة</p>
                     <p className="text-lg font-bold text-orange-600">{formatCurrencyLYD(totalCosts)}</p>
                   </div>
-                  <div className={`rounded-lg p-3 text-center ${netProfit >= 0 ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
-                    <p className="text-xs text-muted-foreground">صافي الربح المحقق</p>
-                    <p className={`text-lg font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatCurrencyLYD(netProfit)}</p>
+                  <div className={`rounded-lg p-3 text-center ${grossProfit >= 0 ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
+                    <p className="text-xs text-muted-foreground">مجمل الربح التقديري</p>
+                    <p className={`text-lg font-bold ${grossProfit >= 0 ? 'text-green-600' : 'text-destructive'}`}>{formatCurrencyLYD(grossProfit)}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-sm">
                   <div className="p-2 rounded bg-muted/50 text-center">
-                    <p className="text-xs text-muted-foreground">المشتريات</p>
+                    <p className="text-xs text-muted-foreground">مشتريات المواد</p>
                     <p className="font-semibold">{formatCurrencyLYD(totalPurchases)}</p>
                   </div>
                   <div className="p-2 rounded bg-muted/50 text-center">
-                    <p className="text-xs text-muted-foreground">المصروفات</p>
-                    <p className="font-semibold">{formatCurrencyLYD(totalExpenses)}</p>
+                    <p className="text-xs text-muted-foreground">أجور الفنيين</p>
+                    <p className="font-semibold">{formatCurrencyLYD(totalLaborCost)}</p>
                   </div>
                   <div className="p-2 rounded bg-muted/50 text-center">
                     <p className="text-xs text-muted-foreground">
@@ -487,6 +528,13 @@ const ProjectReport = () => {
               </div>
             </div>
           </Card>
+        )}
+
+        {/* Full 6-Section Financial Overview Cards */}
+        {id && (
+          <div className="no-print">
+            <ProjectFinancialSummaryCards projectId={id} />
+          </div>
         )}
 
         {/* Print & PDF Export Buttons */}
@@ -1070,20 +1118,20 @@ const ProjectReport = () => {
                 <table className="print-summary-table">
                   <thead>
                     <tr>
-                      <th>قيمة البنود</th>
+                      <th>قيمة العقد / البنود</th>
                       <th>المدفوع من الزبون</th>
                       <th>{clientRemaining < 0 ? "رصيد دائن للزبون" : "المتبقي على الزبون"}</th>
                       {!isClientReport && (
                         <>
                           <th>إجمالي التكاليف</th>
-                          <th>صافي الربح</th>
+                          <th>مجمل الربح التقديري</th>
                         </>
                       )}
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td>{formatCurrencyLYD(totalItemsValue)}</td>
+                      <td>{formatCurrencyLYD(contractValue)}</td>
                       <td style={{ color: "#1a5f1a", fontWeight: "bold" }}>{formatCurrencyLYD(totalClientPaid)}</td>
                       <td style={{ color: clientRemaining > 0 ? "#b91c1c" : "#1a5f1a", fontWeight: "bold" }}>
                         {clientRemaining < 0 ? `${formatCurrencyLYD(Math.abs(clientRemaining))} (له)` : clientRemaining === 0 ? "0 د.ل (مسدد)" : formatCurrencyLYD(clientRemaining)}
@@ -1091,8 +1139,8 @@ const ProjectReport = () => {
                       {!isClientReport && (
                         <>
                           <td style={{ color: "#b91c1c", fontWeight: "bold" }}>{formatCurrencyLYD(totalCosts)}</td>
-                          <td style={{ color: netProfit >= 0 ? "#1a5f1a" : "#b91c1c", fontWeight: "bold" }}>
-                            {formatCurrencyLYD(netProfit)}
+                          <td style={{ color: grossProfit >= 0 ? "#1a5f1a" : "#b91c1c", fontWeight: "bold" }}>
+                            {formatCurrencyLYD(grossProfit)}
                           </td>
                         </>
                       )}
@@ -1102,26 +1150,47 @@ const ProjectReport = () => {
 
                 {/* Detailed costs breakdown - Company only */}
                 {!isClientReport && (
-                  <table className="print-summary-table" style={{ marginTop: "8px" }}>
-                    <thead>
-                      <tr>
-                        <th>المشتريات</th>
-                        <th>الإيجارات</th>
-                        <th>المصروفات</th>
-                        <th>تكاليف العمالة</th>
-                        <th>إجمالي التكاليف</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>{formatCurrencyLYD(totalPurchases)}</td>
-                        <td>{formatCurrencyLYD(totalRentals)}</td>
-                        <td>{formatCurrencyLYD(totalExpenses)}</td>
-                        <td>{formatCurrencyLYD(totalLaborCost)}</td>
-                        <td style={{ fontWeight: "bold" }}>{formatCurrencyLYD(totalCosts)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <>
+                    <table className="print-summary-table" style={{ marginTop: "8px" }}>
+                      <thead>
+                        <tr>
+                          <th>المشتريات</th>
+                          <th>الإيجارات</th>
+                          <th>المصروفات المباشرة</th>
+                          <th>تكاليف العمالة</th>
+                          <th>إجمالي التكاليف المعتمدة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>{formatCurrencyLYD(totalPurchases)}</td>
+                          <td>{formatCurrencyLYD(totalRentals)}</td>
+                          <td>{formatCurrencyLYD(totalExpenses)}</td>
+                          <td>{formatCurrencyLYD(totalLaborCost)}</td>
+                          <td style={{ fontWeight: "bold" }}>{formatCurrencyLYD(totalCosts)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table className="print-summary-table" style={{ marginTop: "8px" }}>
+                      <thead>
+                        <tr>
+                          <th>المقبوض نقداً من الزبون</th>
+                          <th>المدفوع نقداً للموردين والعمالة والمصروفات</th>
+                          <th>صافي التدفق النقدي الفعلي للمشروع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ color: "#1a5f1a", fontWeight: "bold" }}>{formatCurrencyLYD(cashCollected)}</td>
+                          <td style={{ color: "#b91c1c", fontWeight: "bold" }}>{formatCurrencyLYD(cashPaid)}</td>
+                          <td style={{ color: netProjectCashFlow >= 0 ? "#1a5f1a" : "#b91c1c", fontWeight: "bold" }}>
+                            {formatCurrencyLYD(netProjectCashFlow)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </>
                 )}
               </div>
             </div>
@@ -1135,7 +1204,7 @@ const ProjectReport = () => {
           </div>
         </div>
       </div>
-    </>
+    </ProjectWorkspaceLayout>
   );
 };
 

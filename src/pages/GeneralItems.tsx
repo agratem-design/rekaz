@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Pencil, Trash2, Ruler, Square, Box, Package,
   Calculator, Settings, Search, X, ChevronDown, ChevronUp,
-  Layers, Tag, Hash, FileText
+  Layers, Tag, Hash, FileText, Users
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ContractClauseTemplates from "./ContractClauseTemplates";
@@ -122,13 +122,42 @@ const GeneralItems = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("general_project_items")
-        .select("*")
+        .select(`
+          *,
+          general_item_technician_requirements (
+            id,
+            technician_type_id,
+            required_count,
+            notes,
+            technician_types (id, name, code)
+          )
+        `)
         .order("category", { ascending: true })
         .order("name",     { ascending: true });
       if (error) throw error;
-      return data as GeneralItem[];
+      return (data as unknown) as (GeneralItem & { general_item_technician_requirements?: any[] })[];
     },
   });
+
+  const { data: technicianTypes = [] } = useQuery<any[]>({
+    queryKey: ["technician-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("technician_types" as any)
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return (data as any[]) || [];
+    },
+  });
+
+  const [techRequirements, setTechRequirements] = useState<Array<{
+    id?: string;
+    technician_type_id: string;
+    required_count: number;
+    notes?: string;
+  }>>([]);
 
   const { data: measurementConfigs = [] } = useQuery({
     queryKey: ["measurement-configs"],
@@ -239,12 +268,38 @@ const GeneralItems = () => {
         notes:              data.notes || null,
         measurement_config_id: data.measurement_config_id || null,
       };
+      let generalItemId = editingItem?.id;
+
       if (editingItem) {
         const { error } = await supabase.from("general_project_items").update(payload).eq("id", editingItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("general_project_items").insert(payload);
+        const { data: inserted, error } = await supabase.from("general_project_items").insert(payload).select("id").single();
         if (error) throw error;
+        generalItemId = inserted.id;
+      }
+
+      // Persist technician requirements template
+      if (generalItemId) {
+        // Delete previous requirements for this general item
+        await (supabase
+          .from("general_item_technician_requirements" as any)
+          .delete() as any)
+          .eq("general_item_id", generalItemId);
+
+        // Insert valid requirements
+        const validReqs = techRequirements.filter(r => r.technician_type_id && r.required_count > 0);
+        if (validReqs.length > 0) {
+          const { error: reqErr } = await (supabase
+            .from("general_item_technician_requirements" as any)
+            .insert(validReqs.map(r => ({
+              general_item_id: generalItemId,
+              technician_type_id: r.technician_type_id,
+              required_count: Number(r.required_count),
+              notes: r.notes || null,
+            }))) as any);
+          if (reqErr) throw reqErr;
+        }
       }
     },
     onSuccess: () => {
@@ -274,15 +329,17 @@ const GeneralItems = () => {
     setDialogOpen(false);
     setEditingItem(null);
     setFormData(emptyForm);
+    setTechRequirements([]);
   };
 
   const openNew = () => {
     setEditingItem(null);
     setFormData(emptyForm);
+    setTechRequirements([]);
     setDialogOpen(true);
   };
 
-  const openEdit = (item: GeneralItem) => {
+  const openEdit = (item: GeneralItem & { general_item_technician_requirements?: any[] }) => {
     setEditingItem(item);
     setFormData({
       name:               item.name,
@@ -296,6 +353,14 @@ const GeneralItems = () => {
       component_values:   {},
       measurement_factor: "1",
     });
+    setTechRequirements(
+      (item.general_item_technician_requirements || []).map(r => ({
+        id: r.id,
+        technician_type_id: r.technician_type_id,
+        required_count: r.required_count,
+        notes: r.notes || "",
+      }))
+    );
     setDialogOpen(true);
   };
 
@@ -832,6 +897,103 @@ const GeneralItems = () => {
                 rows={3}
                 className="resize-none text-right"
               />
+            </div>
+
+            {/* Technician Requirements Template */}
+            <div className="space-y-3 pt-3 border-t border-border/60">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-bold flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  احتياج الفنيين النمطي (قالب التعيينات)
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTechRequirements(prev => [
+                      ...prev,
+                      { technician_type_id: technicianTypes[0]?.id || "", required_count: 1, notes: "" }
+                    ]);
+                  }}
+                  className="h-7 text-xs gap-1 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  إضافة تخصص فني
+                </Button>
+              </div>
+
+              {techRequirements.length === 0 ? (
+                <div className="p-3 border border-dashed rounded-xl text-center text-xs text-muted-foreground bg-muted/10">
+                  لا توجد تخصصات فنية محددة كمتطلب لهذا البند النمطي (اختياري).
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {techRequirements.map((req, idx) => (
+                    <div key={idx} className="p-3 rounded-xl border border-border/80 bg-muted/20 space-y-2">
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-6">
+                          <Label className="text-[11px] text-muted-foreground">تخصص الفني</Label>
+                          <Select
+                            value={req.technician_type_id}
+                            onValueChange={(val) => {
+                              setTechRequirements(prev => prev.map((r, i) => i === idx ? { ...r, technician_type_id: val } : r));
+                            }}
+                            dir="rtl"
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="اختر التخصص" />
+                            </SelectTrigger>
+                            <SelectContent dir="rtl">
+                              {technicianTypes.map((t: any) => (
+                                <SelectItem key={t.id} value={t.id} className="text-xs">
+                                  {t.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-4">
+                          <Label className="text-[11px] text-muted-foreground">العدد المطلوب</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={req.required_count || 1}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 1);
+                              setTechRequirements(prev => prev.map((r, i) => i === idx ? { ...r, required_count: val } : r));
+                            }}
+                            className="h-8 text-xs text-center"
+                          />
+                        </div>
+                        <div className="col-span-2 flex justify-end pt-4">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setTechRequirements(prev => prev.filter((_, i) => i !== idx));
+                            }}
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Input
+                          placeholder="ملاحظات المتطلب (اختياري)..."
+                          value={req.notes || ""}
+                          onChange={(e) => {
+                            setTechRequirements(prev => prev.map((r, i) => i === idx ? { ...r, notes: e.target.value } : r));
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

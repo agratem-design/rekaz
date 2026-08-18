@@ -3,9 +3,14 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { DesktopBackupNotifier } from "@/components/desktop/DesktopBackupNotifier";
+import { ProjectRouteGuard } from "@/components/navigation/ProjectRouteGuard";
+import { LegacyPhaseRedirect } from "@/components/navigation/LegacyPhaseRedirect";
+import { LegacyEditRedirect } from "@/components/navigation/LegacyEditRedirect";
+import ProjectOverviewHub from "./pages/ProjectOverviewHub";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
@@ -47,6 +52,7 @@ import ProjectCustody from "./pages/ProjectCustody";
 import Custody from "./pages/Custody";
 import CustodyDetail from "./pages/CustodyDetail";
 import ProjectPhases from "./pages/ProjectPhases";
+import PhaseWorkspace from "./pages/PhaseWorkspace";
 import ProjectPayments from "./pages/ProjectPayments";
 import ProjectContracts from "./pages/ProjectContracts";
 import ContractClauseTemplates from "./pages/ContractClauseTemplates";
@@ -60,17 +66,34 @@ import CalendarPage from "./pages/Calendar";
 import InvoiceControl from "./pages/InvoiceControl";
 import ClientPayments from "./pages/ClientPayments";
 import Debts from "./pages/Debts";
+import DatabaseBackup from "./pages/DatabaseBackup";
 
 const queryClient = new QueryClient();
 
+// In Electron packaged builds (file://), standard BrowserRouter breaks on deep paths / reloads.
+// We auto-detect electron/file protocol and seamlessly use HashRouter.
+const isDesktopApp = typeof window !== 'undefined' && (
+  window.location.protocol === 'file:' || 
+  navigator.userAgent.toLowerCase().includes('electron') ||
+  Boolean((window as any).electron)
+);
+
+const AppRouter = ({ children }: { children: React.ReactNode }) => {
+  if (isDesktopApp) {
+    return <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{children}</HashRouter>;
+  }
+  return <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{children}</BrowserRouter>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <DesktopBackupNotifier />
+        <AppRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route
@@ -88,21 +111,26 @@ const App = () => (
               <Route path="projects/finishing" element={<Projects type="finishing" />} />
               <Route path="projects/client/:clientId" element={<ClientProjects />} />
               <Route path="projects/new" element={<ManageProject />} />
-              <Route path="projects/:id" element={<ManageProject />} />
-              <Route path="projects/:id/edit" element={<ManageProject />} />
-              <Route path="projects/:id/items" element={<ProjectItems />} />
-              <Route path="projects/:id/purchases" element={<ProjectPurchases />} />
-              <Route path="projects/:id/progress" element={<ProjectProgress />} />
-              <Route path="projects/:id/report" element={<ProjectReport />} />
-              <Route path="projects/:id/equipment" element={<ProjectEquipmentRentals />} />
-              <Route path="projects/:id/expenses" element={<ProjectExpenses />} />
-              <Route path="projects/:id/phases" element={<ProjectPhases />} />
-              <Route path="projects/:id/contracts" element={<ProjectContracts />} />
-              <Route path="projects/:id/phases/:phaseId/items" element={<ProjectItems />} />
-              <Route path="projects/:id/phases/:phaseId/purchases" element={<ProjectPurchases />} />
-              <Route path="projects/:id/phases/:phaseId/expenses" element={<ProjectExpenses />} />
-              <Route path="projects/:id/phases/:phaseId/equipment" element={<ProjectEquipmentRentals />} />
-              <Route path="projects/:id/payments" element={<ProjectPayments />} />
+              <Route path="projects/:id" element={<ProjectRouteGuard section="phases"><ProjectPhases /></ProjectRouteGuard>} />
+              <Route path="projects/:id/overview" element={<ProjectRouteGuard section="overview"><ProjectOverviewHub /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases" element={<ProjectRouteGuard section="phases"><ProjectPhases /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId" element={<ProjectRouteGuard section="phases"><PhaseWorkspace /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/items" element={<ProjectRouteGuard section="items"><ProjectItems /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/purchases" element={<ProjectRouteGuard section="purchases"><ProjectPurchases /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/expenses" element={<ProjectRouteGuard section="expenses"><ProjectExpenses /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/equipment" element={<ProjectRouteGuard section="equipment"><ProjectEquipmentRentals /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/progress" element={<ProjectRouteGuard section="progress"><ProjectProgress /></ProjectRouteGuard>} />
+              <Route path="projects/:id/phases/:phaseId/labor" element={<ProjectRouteGuard section="progress"><ProjectProgress /></ProjectRouteGuard>} />
+              <Route path="projects/:id/items" element={<ProjectRouteGuard section="items"><ProjectItems /></ProjectRouteGuard>} />
+              <Route path="projects/:id/purchases" element={<ProjectRouteGuard section="purchases"><ProjectPurchases /></ProjectRouteGuard>} />
+              <Route path="projects/:id/expenses" element={<ProjectRouteGuard section="expenses"><ProjectExpenses /></ProjectRouteGuard>} />
+              <Route path="projects/:id/payments" element={<ProjectRouteGuard section="payments"><ProjectPayments /></ProjectRouteGuard>} />
+              <Route path="projects/:id/progress" element={<ProjectRouteGuard section="progress"><ProjectProgress /></ProjectRouteGuard>} />
+              <Route path="projects/:id/equipment" element={<ProjectRouteGuard section="equipment"><ProjectEquipmentRentals /></ProjectRouteGuard>} />
+              <Route path="projects/:id/contracts" element={<ProjectRouteGuard section="contracts"><ProjectContracts /></ProjectRouteGuard>} />
+              <Route path="projects/:id/report" element={<ProjectRouteGuard section="report"><ProjectReport /></ProjectRouteGuard>} />
+              <Route path="projects/:id/settings" element={<ProjectRouteGuard section="settings"><ManageProject /></ProjectRouteGuard>} />
+              <Route path="projects/:id/edit" element={<LegacyEditRedirect />} />
               <Route path="client-payments" element={<ClientPayments />} />
               <Route path="rentals" element={<ProjectsWithRentals />} />
               <Route path="project-expenses" element={<AllProjectExpenses />} />
@@ -133,6 +161,7 @@ const App = () => (
               <Route path="users" element={<UserManagement />} />
               <Route path="calendar" element={<CalendarPage />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="database-backup" element={<DatabaseBackup />} />
               <Route path="print-design" element={<PrintDesign />} />
               <Route path="contract-templates" element={<ContractClauseTemplates />} />
               <Route path="treasuries" element={<Treasuries />} />
@@ -145,7 +174,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
+        </AppRouter>
       </TooltipProvider>
     </AuthProvider>
     </ThemeProvider>

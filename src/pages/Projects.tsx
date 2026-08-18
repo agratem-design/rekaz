@@ -50,10 +50,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link, useNavigate } from "react-router-dom";
-import { formatCurrencyLYD } from "@/lib/currency";
 import { useAuth } from "@/contexts/AuthContext";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -61,6 +58,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { formatCurrencyLYD } from "@/lib/currency";
+import { Link, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
 
 const statusLabels: Record<string, string> = {
   active: "نشط",
@@ -90,17 +96,65 @@ interface ProjectsProps {
 const Projects = ({ type }: ProjectsProps = {}) => {
   const { isEngineer, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [projectTypeFilter, setProjectTypeFilter] = useState<string>(type || "all");
+
+  // URL-synchronized filters
+  const searchQuery = searchParams.get("search") || "";
+  const statusFilter = searchParams.get("status") || "all";
+  const projectTypeFilter = searchParams.get("type") || type || "all";
+
+  const setSearchQuery = (newSearch: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newSearch) {
+        next.set("search", newSearch);
+      } else {
+        next.delete("search");
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  const setStatusFilter = (newStatus: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newStatus && newStatus !== "all") {
+        next.set("status", newStatus);
+      } else {
+        next.delete("status");
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  const setProjectTypeFilter = (newType: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newType && newType !== "all") {
+        next.set("type", newType);
+      } else {
+        next.delete("type");
+      }
+      return next;
+    }, { replace: true });
+  };
+
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     return (localStorage.getItem("projects-view-mode") as "grid" | "list") || "grid";
   });
 
   useEffect(() => {
-    setProjectTypeFilter(type || "all");
-  }, [type]);
+    if (type) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("type", type);
+        return next;
+      }, { replace: true });
+    }
+  }, [type, setSearchParams]);
 
   const handleViewModeChange = (mode: "grid" | "list") => {
     setViewMode(mode);
@@ -220,6 +274,10 @@ const Projects = ({ type }: ProjectsProps = {}) => {
   const renderQuickNavMenu = (projectId: string) => (
     <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
       <DropdownMenuGroup>
+        <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}`)} className="gap-2 cursor-pointer font-bold">
+          <FolderKanban className="h-4 w-4 text-primary" />
+          <span>لوحة المشروع (نظرة عامة)</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/phases`)} className="gap-2 cursor-pointer">
           <Layers className="h-4 w-4 text-muted-foreground" />
           <span>مراحل المشروع</span>
@@ -232,7 +290,7 @@ const Projects = ({ type }: ProjectsProps = {}) => {
       {isAdmin && (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/edit`)} className="gap-2 text-primary cursor-pointer">
+          <DropdownMenuItem onClick={() => navigate(`/projects/${projectId}/settings`)} className="gap-2 text-primary cursor-pointer">
             <Pencil className="h-4 w-4" />
             <span>إعدادات المشروع</span>
           </DropdownMenuItem>
@@ -241,26 +299,27 @@ const Projects = ({ type }: ProjectsProps = {}) => {
     </DropdownMenuContent>
   );
 
+  const effectiveSector = type || (projectTypeFilter !== "all" ? (projectTypeFilter as "contracting" | "finishing") : undefined);
+  const isFilterActive = searchQuery !== "" || statusFilter !== "all" || (!type && projectTypeFilter !== "all");
+
   return (
     <div className="space-y-6" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {type === "contracting" ? "مشاريع المقاولات" : type === "finishing" ? "مشاريع التشطيبات" : "كل المشاريع"}
-          </h1>
-          <p className="text-sm text-muted-foreground">شاشة التحكم وإدارة كافة المشاريع والعمليات المرتبطة بها</p>
-        </div>
-        {isAdmin && (
-          <Button 
-            onClick={() => navigate(type ? `/projects/new?type=${type}` : "/projects/new")} 
-            className="gap-2 bg-primary hover:bg-primary/90 cursor-pointer shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>مشروع جديد</span>
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={type === "contracting" ? "مشاريع المقاولات" : type === "finishing" ? "مشاريع التشطيبات" : "كل المشاريع"}
+        description="شاشة التحكم وإدارة كافة المشاريع والعمليات المرتبطة بها"
+        actions={
+          isAdmin ? (
+            <Button 
+              onClick={() => navigate(effectiveSector ? `/projects/new?type=${effectiveSector}` : "/projects/new")} 
+              className="gap-2 bg-primary hover:bg-primary/90 cursor-pointer shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{effectiveSector === "contracting" ? "مشروع مقاولات جديد" : effectiveSector === "finishing" ? "مشروع تشطيبات جديد" : "مشروع جديد"}</span>
+            </Button>
+          ) : null
+        }
+      />
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -353,11 +412,40 @@ const Projects = ({ type }: ProjectsProps = {}) => {
 
       {/* Main Content Area */}
       {filteredProjects?.length === 0 ? (
-        <Card className="p-16 text-center border-dashed">
-          <FolderKanban className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
-          <h3 className="text-lg font-semibold">لا توجد مشاريع</h3>
-          <p className="text-muted-foreground text-sm mt-1">لم يتم العثور على مشاريع تطابق خيارات البحث الحالية.</p>
-        </Card>
+        <EmptyState
+          icon={FolderKanban}
+          title={isFilterActive ? "لا توجد نتائج مطابقة" : effectiveSector === "contracting" ? "لا توجد مشاريع مقاولات حتى الآن" : effectiveSector === "finishing" ? "لا توجد مشاريع تشطيبات حتى الآن" : "لا توجد مشاريع حتى الآن"}
+          description={
+            searchQuery
+              ? `لم نتمكن من العثور على أي مشروع يطابق "${searchQuery}".`
+              : isFilterActive
+              ? "لا توجد مشاريع تطابق الفلاتر المحددة."
+              : effectiveSector === "contracting"
+              ? "ابدأ بإنشاء أول مشروع مقاولات لمتابعة المراحل، المقايسات والتكاليف."
+              : effectiveSector === "finishing"
+              ? "ابدأ بإنشاء أول مشروع تشطيبات بنسبة إشراف لمتابعة الأعمال والمدفوعات."
+              : "ابدأ بإنشاء أول مشروع جديد (مقاولات أو تشطيبات) لمتابعة المراحل، المقايسات والتكاليف."
+          }
+          action={
+            isAdmin && !isFilterActive ? (
+              <Button
+                onClick={() => navigate(effectiveSector ? `/projects/new?type=${effectiveSector}` : "/projects/new")}
+                className="gap-2 bg-primary hover:bg-primary/90 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{effectiveSector === "contracting" ? "إضافة أول مشروع مقاولات" : effectiveSector === "finishing" ? "إضافة أول مشروع تشطيبات" : "إضافة أول مشروع"}</span>
+              </Button>
+            ) : isFilterActive ? (
+              <Button
+                variant="outline"
+                onClick={() => { setSearchQuery(""); setStatusFilter("all"); if (!type) setProjectTypeFilter("all"); }}
+                className="cursor-pointer"
+              >
+                مسح الفلاتر
+              </Button>
+            ) : null
+          }
+        />
       ) : viewMode === "grid" ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProjects?.map((project) => {
@@ -380,7 +468,7 @@ const Projects = ({ type }: ProjectsProps = {}) => {
             return (
               <Card
                 key={project.id}
-                onClick={() => navigate(`/projects/${project.id}/phases`)}
+                onClick={() => navigate(`/projects/${project.id}`)}
                 className="overflow-hidden transition-all hover:shadow-md cursor-pointer group flex flex-col border hover:border-primary/30 relative"
               >
                 {/* Project Image Header */}
@@ -688,7 +776,7 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                   return (
                     <TableRow
                       key={project.id}
-                      onClick={() => navigate(`/projects/${project.id}/phases`)}
+                      onClick={() => navigate(`/projects/${project.id}`)}
                       className="cursor-pointer hover:bg-muted/30 transition-colors group"
                     >
                       <TableCell className="font-medium">
@@ -776,7 +864,7 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                             <TableCell className="text-xs font-semibold">
                               <span className={isOverBudget ? "text-destructive font-bold flex items-center gap-1" : "text-foreground"}>
                                 {formatCurrencyLYD(project.spent || 0)}
-                                {isOverBudget && <AlertTriangle className="h-3.5 w-3.5 shrink-0 animate-bounce" title="تجاوز الميزانية!" />}
+                                {isOverBudget && <span title="تجاوز الميزانية!"><AlertTriangle className="h-3.5 w-3.5 shrink-0 animate-bounce" /></span>}
                               </span>
                               <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">المصروفات</span>
                             </TableCell>

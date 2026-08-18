@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { openPrintWindow } from "@/lib/printStyles";
+import { calculateProjectFinancials } from "@/lib/financialCore";
 
 type Client = {
   id: string;
@@ -40,9 +41,11 @@ type Project = {
   id: string;
   name: string;
   project_type: string;
-  client_id: string;
-  reference_number: string | null;
-  finishing_percentage: number | null;
+  client_id: string | null;
+  reference_number?: string | null;
+  code?: string | null;
+  finishing_percentage?: number | null;
+  budget?: number | null;
 };
 
 type Phase = {
@@ -65,9 +68,10 @@ type ProjectItem = {
 
 type Purchase = {
   id: string;
-  phase_id: string;
+  project_id?: string | null;
+  phase_id?: string | null;
   total_amount: number;
-  rental_id: string | null;
+  rental_id?: string | null;
   created_at: string;
 };
 
@@ -132,27 +136,45 @@ export default function Debts() {
   const { data: projectItems } = useQuery<ProjectItem[]>({
     queryKey: ["all-items-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("project_items").select("id, phase_id, total_price, created_at");
+      const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price, created_at");
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
   const { data: purchases } = useQuery<Purchase[]>({
     queryKey: ["all-purchases-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("purchases").select("id, phase_id, total_amount, rental_id, created_at");
+      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id, created_at");
       if (error) throw error;
-      return data;
+      return data as any;
+    },
+  });
+
+  const { data: expenses } = useQuery({
+    queryKey: ["all-expenses-debts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: techProgressRecords } = useQuery({
+    queryKey: ["all-tech-progress-debts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const { data: clientPayments } = useQuery<ClientPayment[]>({
     queryKey: ["all-payments-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("client_payments").select("id, client_id, amount, date, created_at").order("date", { ascending: false });
+      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount, date, created_at").order("date", { ascending: false });
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
@@ -165,58 +187,47 @@ export default function Debts() {
     },
   });
 
-  // Calculate debts per client
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Calculate debts per client using Central Financial Domain
   const clientsDebtsList = useMemo(() => {
     if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments) return [];
 
     return clients.map((client) => {
       const clientProjList = projects.filter((p) => p.client_id === client.id);
-      const projectIds = clientProjList.map((p) => p.id);
       const clientContracts = (contracts || []).filter(c => c.client_id === client.id && c.status !== "cancelled");
 
-      const clientPhases = phases.filter((ph) => projectIds.includes(ph.project_id));
+      let totalBilled = 0;
 
-      let totalItemsBilled = 0;
-      let totalPurchBilled = 0;
-      let totalRentBilled = 0;
-      let totalPercentageFeeBilled = 0;
-
-      clientPhases.forEach((phase) => {
-        const phaseItems = projectItems.filter((item) => item.phase_id === phase.id);
-        const phasePurchases = purchases.filter((p) => p.phase_id === phase.id && p.rental_id === null);
-        const phaseRentals = purchases.filter((p) => p.phase_id === phase.id && p.rental_id !== null);
-
-        const phaseItemsSum = phaseItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
-        const phasePurchSum = phasePurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
-        const phaseRentSum = phaseRentals.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
-
-        const projectOfPhase = clientProjList.find((p) => p.id === phase.project_id);
-        const projectPct = projectOfPhase?.project_type === "finishing" ? Number(projectOfPhase.finishing_percentage || 0) : 0;
-        const phasePercentage = phase.has_percentage && phase.percentage_value > 0 ? Number(phase.percentage_value) : projectPct;
-        const phasePercentageFee = phasePercentage > 0 ? (phasePurchSum + phaseRentSum) * phasePercentage / 100 : 0;
-
-        totalItemsBilled += phaseItemsSum;
-        totalPurchBilled += phasePurchSum;
-        totalRentBilled += phaseRentSum;
-        totalPercentageFeeBilled += phasePercentageFee;
-      });
-
-      // Calculate baseline value adjustments (contracts and approved budgets)
-      let baselineAdjustment = 0;
       clientProjList.forEach((proj) => {
-        const projItems = projectItems.filter(item => item.project_id === proj.id);
-        const itemsSum = projItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
-        const projContracts = clientContracts.filter(c => c.project_id === proj.id || (!c.project_id && c.client_id === proj.client_id && proj.project_type === "contracting"));
-        const contractsSum = projContracts.reduce((sum, c) => sum + Number(c.amount || 0), 0);
-        const budgetVal = Number(proj.budget || 0);
+        const projPurchases = purchases.filter((p) => p.project_id === proj.id);
+        const projItems = projectItems.filter((item: any) => item.project_id === proj.id);
+        const projContracts = clientContracts.filter(
+          (c) => c.project_id === proj.id || (!c.project_id && proj.project_type === "contracting")
+        );
+        const projExpenses = (expenses || []).filter((e: any) => e.project_id === proj.id);
+        const projTech = (techProgressRecords || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
+        const projPayments = clientPayments.filter((p: any) => p.project_id === proj.id);
 
-        const projectBase = Math.max(itemsSum, contractsSum, budgetVal);
-        if (projectBase > itemsSum) {
-          baselineAdjustment += (projectBase - itemsSum);
-        }
+        const projResult = calculateProjectFinancials({
+          project: proj,
+          contracts: projContracts,
+          projectItems: projItems,
+          purchases: projPurchases,
+          techProgressRecords: projTech,
+          expenses: projExpenses,
+          clientPayments: projPayments,
+        });
+
+        totalBilled += projResult.clientObligation;
       });
-
-      const totalBilled = totalItemsBilled + baselineAdjustment + totalPurchBilled + totalRentBilled + totalPercentageFeeBilled;
 
       const clientPaymentsList = clientPayments.filter((cp) => cp.client_id === client.id);
       const totalPaid = clientPaymentsList.reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
@@ -231,6 +242,7 @@ export default function Debts() {
 
       // Latest phase/invoice entry date
       let lastInvoiceDate: string | null = null;
+      const clientPhases = (phases || []).filter(ph => clientProjList.some(p => p.id === ph.project_id));
       const phaseDates = clientPhases.map((ph) => ph.created_at).filter(Boolean);
       if (phaseDates.length > 0) {
         phaseDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
@@ -351,7 +363,7 @@ export default function Debts() {
       </div>
     `;
 
-    openPrintWindow("تقرير ديون وذمم العملاء", printHTML);
+    openPrintWindow("تقرير ديون وذمم العملاء", printHTML, companySettings);
   };
 
   return (

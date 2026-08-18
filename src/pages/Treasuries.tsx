@@ -36,14 +36,15 @@ import {
 import { 
   Plus, Pencil, Trash2, Wallet, Save, X, Landmark, FolderOpen, 
   ArrowLeftRight, Banknote, Calendar, ShieldAlert, CreditCard,
-  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Search, Printer, FileText, CheckCircle2
+  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Search, Printer, FileText, CheckCircle2,
+  Power, PowerOff
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { openPrintWindow, openReceiptPrintWindow } from "@/lib/printStyles";
-import { getElementLabels } from "@/lib/elementLabels";
+import { getElementLabels } from "@/lib/printLabels";
 
 interface Treasury {
   id: string;
@@ -57,10 +58,12 @@ interface Treasury {
   bank_name: string | null;
   account_number: string | null;
   parent_id: string | null;
+  project_category: string | null;
 }
 
 const Treasuries = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Treasury | null>(null);
@@ -211,9 +214,68 @@ const Treasuries = () => {
   const childTreasuries = treasuries?.filter(t => t.parent_id) || [];
   const getChildren = (parentId: string) => treasuries?.filter(t => t.parent_id === parentId) || [];
 
+  // Business Domain Grouping
+  const domainGroups = useMemo(() => {
+    if (!treasuries) return { contracting: null, finishing: null, general: [] };
+
+    // 1. Contracting Domain Root & Accounts
+    const contractingRoot = treasuries.find(
+      (t) => !t.parent_id && (t.project_category === "contracting" || t.id === companySettings?.contracting_treasury_id)
+    );
+    const contractingAccounts = treasuries.filter(
+      (t) =>
+        t.id === contractingRoot?.id ||
+        t.parent_id === contractingRoot?.id ||
+        (t.project_category === "contracting" && (!t.parent_id || t.parent_id === contractingRoot?.id))
+    );
+
+    // 2. Finishing Domain Root & Accounts
+    const finishingRoot = treasuries.find(
+      (t) => !t.parent_id && (t.project_category === "finishing" || t.id === companySettings?.finishing_treasury_id)
+    );
+    const finishingAccounts = treasuries.filter(
+      (t) =>
+        t.id === finishingRoot?.id ||
+        t.parent_id === finishingRoot?.id ||
+        (t.project_category === "finishing" && (!t.parent_id || t.parent_id === finishingRoot?.id))
+    );
+
+    // 3. General Corporate Accounts (Not assigned to contracting or finishing)
+    const generalAccounts = treasuries.filter(
+      (t) =>
+        !contractingAccounts.some((ca) => ca.id === t.id) &&
+        !finishingAccounts.some((fa) => fa.id === t.id)
+    );
+
+    return {
+      contracting: contractingRoot
+        ? {
+            root: contractingRoot,
+            accounts: contractingAccounts,
+            totalBalance: contractingAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0),
+          }
+        : null,
+      finishing: finishingRoot
+        ? {
+            root: finishingRoot,
+            accounts: finishingAccounts,
+            totalBalance: finishingAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0),
+          }
+        : null,
+      general: generalAccounts,
+    };
+  }, [treasuries, companySettings]);
+
+  const activeTreasuries = treasuries?.filter(t => t.is_active) || [];
+  // Operational treasuries: all leaves, or standalone parent treasuries with no children
+  const operationalTreasuries = activeTreasuries.filter(t => {
+    const hasKids = activeTreasuries.some(c => c.parent_id === t.id);
+    return !hasKids;
+  });
+
   // Aggregated Stats
-  const totalCashBalance = childTreasuries.filter(t => t.treasury_type === "cash" && t.is_active).reduce((sum, t) => sum + t.balance, 0);
-  const totalBankBalance = childTreasuries.filter(t => t.treasury_type === "bank" && t.is_active).reduce((sum, t) => sum + t.balance, 0);
+  const totalCashBalance = operationalTreasuries.filter(t => t.treasury_type === "cash").reduce((sum, t) => sum + Number(t.balance || 0), 0);
+  const totalBankBalance = operationalTreasuries.filter(t => t.treasury_type === "bank").reduce((sum, t) => sum + Number(t.balance || 0), 0);
   
   const totalClientPaymentsSum = clientPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const totalPurchasePaymentsSum = purchasePayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -266,7 +328,14 @@ const Treasuries = () => {
   }, [filteredTransactions]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData & { parent_id?: string | null }) => {
+    mutationFn: async (data: typeof formData & { parent_id?: string | null; project_category?: string | null }) => {
+      let category = data.project_category;
+      if (data.parent_id) {
+        const parent = treasuries?.find((t) => t.id === data.parent_id);
+        if (parent) {
+          category = parent.project_category;
+        }
+      }
       const payload: any = {
         name: data.name,
         description: data.description || null,
@@ -276,6 +345,7 @@ const Treasuries = () => {
         bank_name: data.treasury_type === "bank" ? (data.bank_name || null) : null,
         account_number: data.treasury_type === "bank" ? (data.account_number || null) : null,
         parent_id: data.parent_id || null,
+        project_category: category || null,
       };
       if (editing) {
         const { error } = await supabase.from("treasuries").update(payload).eq("id", editing.id);
@@ -295,8 +365,48 @@ const Treasuries = () => {
     },
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, is_active, balance }: { id: string; is_active: boolean; balance: number }) => {
+      const isMain =
+        id === companySettings?.contracting_treasury_id || id === companySettings?.finishing_treasury_id;
+      if (isMain && !is_active) {
+        throw new Error("لا يمكن تعطيل الخزينة الرئيسية المعتمدة. يجب تعيين خزينة رئيسية بديلة أولاً من إعدادات الشركة.");
+      }
+      if (!is_active && balance !== 0) {
+        throw new Error("لا يمكن تعطيل الخزينة لوجود رصيد حالي. حوّل الرصيد أولاً إلى خزينة أخرى ضمن نفس القطاع.");
+      }
+      const { error } = await supabase.from("treasuries").update({ is_active }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["treasuries"] });
+      toast({
+        title: variables.is_active ? "تم تفعيل الخزينة" : "تم تعطيل الخزينة",
+        description: variables.is_active
+          ? "الخزينة متاحة الآن في قوائم العمليات والمعاملات."
+          : "تم حجب الخزينة من قوائم المعاملات الجديدة مع الحفاظ التام على سجلها التاريخي.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "تعذر تغيير حالة الخزينة",
+        description: error.message || "حدث خطأ أثناء تغيير حالة الخزينة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      const target = treasuries?.find((t) => t.id === id);
+      const isMain =
+        id === companySettings?.contracting_treasury_id || id === companySettings?.finishing_treasury_id;
+      if (isMain) {
+        throw new Error("لا يمكن حذف الخزينة الرئيسية المعتمدة للقطاع.");
+      }
+      if (target && target.balance !== 0) {
+        throw new Error("لا يمكن حذف الخزينة لوجود رصيد حالي. يرجى تحويل الرصيد أولاً.");
+      }
       const { error } = await supabase.from("treasuries").delete().eq("id", id);
       if (error) throw error;
     },
@@ -305,8 +415,15 @@ const Treasuries = () => {
       toast({ title: "تم الحذف بنجاح" });
       setDeleteId(null);
     },
-    onError: () => {
-      toast({ title: "خطأ", description: "لا يمكن الحذف - قد تكون مرتبطة بعمليات", variant: "destructive" });
+    onError: (error: any) => {
+      toast({
+        title: "تعذر حذف الخزينة",
+        description:
+          error.message?.includes("CANNOT_DELETE_TREASURY_WITH_HISTORY") || error.message?.includes("historical transaction")
+            ? "الخزينة تحتوي على سجل حركات تاريخية سابقة، ولا يمكن حذفها نهائياً. يرجى تعطيلها بدلاً من الحذف."
+            : error.message || "لا يمكن الحذف - الخزينة مرتبطة بعمليات سابقة",
+        variant: "destructive",
+      });
     },
   });
 
@@ -317,42 +434,14 @@ const Treasuries = () => {
       if (!fromTreasury || !toTreasury) throw new Error("خزينة غير موجودة");
       if (fromTreasury.balance < form.amount) throw new Error("الرصيد غير كافٍ");
 
-      const newFromBalance = fromTreasury.balance - form.amount;
-      const newToBalance = toTreasury.balance + form.amount;
-      const description = `نقل إلى ${toTreasury.name}`;
-      const descriptionTo = `نقل من ${fromTreasury.name}`;
-
-      // Withdrawal from source
-      const { error: e1 } = await supabase.from("treasury_transactions").insert([{
-        treasury_id: form.fromTreasuryId,
-        type: "withdrawal",
-        amount: form.amount,
-        balance_after: newFromBalance,
-        source: "transfer",
-        source_details: form.reason || null,
-        description,
-        date: form.date,
-        notes: form.reason || null,
-        reference_type: "transfer",
-        reference_id: form.toTreasuryId,
-      }]);
-      if (e1) throw e1;
-
-      // Deposit to destination
-      const { error: e2 } = await supabase.from("treasury_transactions").insert([{
-        treasury_id: form.toTreasuryId,
-        type: "deposit",
-        amount: form.amount,
-        balance_after: newToBalance,
-        source: "transfer",
-        source_details: form.reason || null,
-        description: descriptionTo,
-        date: form.date,
-        notes: form.reason || null,
-        reference_type: "transfer",
-        reference_id: form.fromTreasuryId,
-      }]);
-      if (e2) throw e2;
+      const { error } = await supabase.rpc("transfer_between_treasuries" as any, {
+        p_from_treasury_id: form.fromTreasuryId,
+        p_to_treasury_id: form.toTreasuryId,
+        p_amount: form.amount,
+        p_date: form.date,
+        p_notes: form.reason || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
@@ -549,7 +638,7 @@ const Treasuries = () => {
       {/* Upper Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 pb-5">
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          <div className="p-3 rounded-2xl bg-primary/10 text-primary">
             <Wallet className="h-6 w-6" />
           </div>
           <div>
@@ -558,11 +647,11 @@ const Treasuries = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setTransferDialogOpen(true)} disabled={childTreasuries.length < 2} className="rounded-xl h-10 border-amber-500/20 hover:bg-amber-500/5 hover:text-amber-600">
+          <Button variant="outline" onClick={() => setTransferDialogOpen(true)} disabled={operationalTreasuries.length < 2} className="h-10 cursor-pointer">
             <ArrowLeftRight className="h-4 w-4 ml-2" />
             نقل بين الخزائن
           </Button>
-          <Button onClick={handleAddParent} className="rounded-xl h-10 bg-amber-600 hover:bg-amber-700 text-white font-medium shadow-md shadow-amber-600/10">
+          <Button onClick={handleAddParent} className="h-10 cursor-pointer">
             <Plus className="h-4 w-4 ml-2" />
             إضافة خزينة رئيسية
           </Button>
@@ -698,131 +787,416 @@ const Treasuries = () => {
         </button>
       </div>
 
-      {/* Tab Content 1: Accounts Grid */}
+      {/* Tab Content 1: Business Domain Grouped Accounts */}
       {activeTab === "accounts" && (
-        <div className="space-y-6">
-          {parentTreasuries.length === 0 ? (
-            <Card className="p-12 text-center border-dashed rounded-2xl">
-              <Wallet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">لا توجد خزائن رئيسية</h3>
-              <p className="text-sm text-muted-foreground mb-4">ابدأ بإضافة أول خزينة رئيسية لتنظيم فروعك وحساباتك المصرفية</p>
-              <Button onClick={handleAddParent} className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl">
-                <Plus className="h-4 w-4 ml-2" />
-                إضافة خزينة
-              </Button>
-            </Card>
-          ) : (
-            <div className="grid gap-6">
-              {parentTreasuries.map((parent) => {
-                const children = getChildren(parent.id);
-                const totalBalance = children.reduce((sum, c) => sum + c.balance, 0);
+        <div className="space-y-8">
+          {/* 1. CONTRACTING DOMAIN */}
+          {domainGroups.contracting && (
+            <Card className="border border-border/60 shadow-sm rounded-2xl overflow-hidden bg-card/60 backdrop-blur-sm">
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 bg-muted/20 border-b border-border/40 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Wallet className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+                      <span>خزينة قطاع المقاولات</span>
+                      <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 text-xs">
+                        قطاع المقاولات
+                      </Badge>
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      الحسابات النقدية والمصرفية المخصصة لمشاريع المقاولات
+                    </p>
+                  </div>
+                </div>
 
-                return (
-                  <Card key={parent.id} className={`border border-border/50 shadow-sm rounded-2xl overflow-hidden transition-all hover:border-amber-500/10 ${!parent.is_active ? "opacity-60" : ""}`}>
-                    <CardHeader className="flex flex-row items-center justify-between pb-4 bg-muted/20 border-b border-border/30">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
-                          <FolderOpen className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base font-bold flex items-center gap-2">
-                            {parent.name}
-                            {!parent.is_active && <Badge variant="secondary" className="text-[10px] px-1.5 h-4">معطلة</Badge>}
-                          </CardTitle>
-                          {parent.description && (
-                            <p className="text-xs text-muted-foreground mt-0.5">{parent.description}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-left">
-                          <span className="text-xs text-muted-foreground block">الرصيد الإجمالي</span>
-                          <span className="text-base font-extrabold text-amber-700 dark:text-amber-400">{formatCurrencyLYD(totalBalance)}</span>
-                        </div>
-                        <div className="flex items-center gap-1 border-r border-border/40 pr-3">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(parent)} className="h-8 w-8 hover:bg-amber-500/5 hover:text-amber-600">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(parent.id)} className="h-8 w-8 hover:bg-red-500/5 hover:text-red-600">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="p-5">
-                      {children.length === 0 ? (
-                        <div className="p-8 text-center border-2 border-dashed border-muted rounded-xl">
-                          <p className="text-xs text-muted-foreground mb-3">لا توجد فروع أو حسابات تحت هذه الخزينة</p>
-                          <Button variant="outline" size="sm" onClick={() => handleAddChild(parent.id)} className="rounded-lg h-8 border-amber-500/20 hover:bg-amber-500/5">
-                            <Plus className="h-3 w-3 ml-1.5" />
-                            إضافة فرع / حساب بنكي
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          {children.map((child) => (
+                <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                  <div className="text-right sm:text-left">
+                    <span className="text-xs text-muted-foreground block">إجمالي رصيد المقاولات</span>
+                    <span className="text-lg font-extrabold text-amber-700 dark:text-amber-400" dir="ltr">
+                      {formatCurrencyLYD(domainGroups.contracting.totalBalance)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border/40 pr-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddChild(domainGroups.contracting!.root.id)}
+                      className="rounded-xl h-8 border-amber-500/20 hover:bg-amber-500/5 text-xs font-semibold"
+                    >
+                      <Plus className="h-3.5 w-3.5 ml-1 text-amber-600" />
+                      إضافة فرع / حساب مصرفي
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-5">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {domainGroups.contracting.accounts.map((acc) => {
+                    const isRoot = !acc.parent_id;
+                    return (
+                      <div
+                        key={acc.id}
+                        className={`group relative flex flex-col justify-between p-4 rounded-xl border border-border/50 hover:border-amber-500/30 hover:shadow-md bg-card transition-all cursor-pointer ${
+                          !acc.is_active ? "opacity-60" : ""
+                        }`}
+                        onClick={() =>
+                          navigate(`/treasuries/${acc.id}`, {
+                            state: { returnTo: `${location.pathname}${location.search}` },
+                          })
+                        }
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
                             <div
-                              key={child.id}
-                              className={`group relative flex flex-col justify-between p-4 rounded-xl border border-border/40 hover:border-amber-500/30 hover:shadow-md bg-card transition-all cursor-pointer ${!child.is_active ? "opacity-60" : ""}`}
-                              onClick={() => navigate(`/treasuries/${child.id}`)}
+                              className={`p-2 rounded-lg ${
+                                acc.treasury_type === "bank"
+                                  ? "bg-blue-500/10 text-blue-600"
+                                  : "bg-amber-500/10 text-amber-600"
+                              }`}
                             >
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <div className={`p-2 rounded-lg ${child.treasury_type === "bank" ? "bg-blue-500/10 text-blue-600" : "bg-amber-500/10 text-amber-600"}`}>
-                                    {child.treasury_type === "bank" ? (
-                                      <Landmark className="h-4 w-4" />
-                                    ) : (
-                                      <Wallet className="h-4 w-4" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <h4 className="font-semibold text-sm group-hover:text-amber-600 transition-colors">{child.name}</h4>
-                                    {child.treasury_type === "bank" && child.bank_name && (
-                                      <span className="text-[10px] text-muted-foreground block">{child.bank_name}</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-amber-500/5 hover:text-amber-600" onClick={(e) => { e.stopPropagation(); handleEdit(child); }}>
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-red-500/5 hover:text-red-600" onClick={(e) => { e.stopPropagation(); setDeleteId(child.id); }}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </div>
-                              
-                              {child.treasury_type === "bank" && child.account_number && (
-                                <p className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded mb-3 self-start">
-                                  {child.account_number}
-                                </p>
+                              {acc.treasury_type === "bank" ? (
+                                <Landmark className="h-4 w-4" />
+                              ) : (
+                                <Wallet className="h-4 w-4" />
                               )}
-
-                              <div className="flex items-end justify-between mt-1">
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">الرصيد الحالي</span>
-                                  <span className="text-base font-extrabold text-amber-700 dark:text-amber-400">{formatCurrencyLYD(child.balance)}</span>
-                                </div>
-                                <Badge variant="outline" className={`text-[10px] ${child.treasury_type === "bank" ? "border-blue-500/20 text-blue-600 bg-blue-500/5" : "border-amber-500/20 text-amber-600 bg-amber-500/5"}`}>
-                                  {child.treasury_type === "bank" ? "حساب مصرفي" : "نقدي (كاش)"}
-                                </Badge>
-                              </div>
                             </div>
-                          ))}
+                            <div>
+                              <h4 className="font-semibold text-sm group-hover:text-amber-600 transition-colors flex items-center gap-1.5">
+                                <span>{acc.name}</span>
+                              </h4>
+                              {acc.treasury_type === "bank" && acc.bank_name && (
+                                <span className="text-[11px] text-muted-foreground block">{acc.bank_name}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 hover:bg-amber-500/5 hover:text-amber-600"
+                              title="تعديل"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(acc);
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {!isRoot && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-7 w-7 ${
+                                    acc.is_active
+                                      ? "hover:bg-amber-500/10 text-muted-foreground hover:text-amber-600"
+                                      : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
+                                  }`}
+                                  title={acc.is_active ? "تعطيل الخزينة" : "تفعيل الخزينة"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleActiveMutation.mutate({
+                                      id: acc.id,
+                                      is_active: !acc.is_active,
+                                      balance: Number(acc.balance || 0),
+                                    });
+                                  }}
+                                >
+                                  {acc.is_active ? (
+                                    <PowerOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                  ) : (
+                                    <Power className="h-3.5 w-3.5 text-emerald-600" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 hover:bg-red-500/5 hover:text-red-600"
+                                  title="حذف نهائي (فقط إذا لم تكن هناك حركات سابقة)"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteId(acc.id);
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      
-                      {children.length > 0 && (
-                        <Button variant="outline" size="sm" onClick={() => handleAddChild(parent.id)} className="mt-4 rounded-lg h-8 border-amber-500/10 hover:bg-amber-500/5 text-xs">
-                          <Plus className="h-3.5 w-3.5 ml-1.5 text-amber-600" />
-                          إضافة فرع / حساب بنكي
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+
+                        {acc.treasury_type === "bank" && acc.account_number && (
+                          <p className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded mb-3 self-start font-mono" dir="ltr">
+                            {acc.account_number}
+                          </p>
+                        )}
+
+                        <div className="flex items-end justify-between mt-1 pt-2 border-t border-border/30">
+                          <div>
+                            <span className="text-[10px] text-muted-foreground block">الرصيد المالي</span>
+                            <span className="text-base font-extrabold text-amber-700 dark:text-amber-400" dir="ltr">
+                              {formatCurrencyLYD(acc.balance || 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                isRoot
+                                  ? "border-amber-500/30 text-amber-700 bg-amber-500/10 font-bold"
+                                  : "border-border text-muted-foreground"
+                              }`}
+                            >
+                              {isRoot ? "خزينة رئيسية" : "فرع تابع"}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                acc.treasury_type === "bank"
+                                  ? "border-blue-500/20 text-blue-600 bg-blue-500/5"
+                                  : "border-amber-500/20 text-amber-600 bg-amber-500/5"
+                              }`}
+                            >
+                              {acc.treasury_type === "bank" ? "مصرفي" : "نقدي"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 2. FINISHING DOMAIN */}
+          {domainGroups.finishing && (
+            <Card className="border border-border/60 shadow-sm rounded-2xl overflow-hidden bg-card/60 backdrop-blur-sm">
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 bg-muted/20 border-b border-border/40 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    <Wallet className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+                      <span>خزينة قطاع التشطيبات</span>
+                      <Badge variant="outline" className="border-purple-500/30 text-purple-700 dark:text-purple-400 bg-purple-500/10 text-xs">
+                        قطاع التشطيبات
+                      </Badge>
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      الحسابات النقدية والمصرفية المخصصة لمشاريع التشطيبات
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                  <div className="text-right sm:text-left">
+                    <span className="text-xs text-muted-foreground block">إجمالي رصيد التشطيبات</span>
+                    <span className="text-lg font-extrabold text-purple-700 dark:text-purple-400" dir="ltr">
+                      {formatCurrencyLYD(domainGroups.finishing.totalBalance)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border/40 pr-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddChild(domainGroups.finishing!.root.id)}
+                      className="rounded-xl h-8 border-purple-500/20 hover:bg-purple-500/5 text-xs font-semibold text-purple-700 dark:text-purple-400"
+                    >
+                      <Plus className="h-3.5 w-3.5 ml-1 text-purple-600" />
+                      إضافة فرع / حساب مصرفي
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-5">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {domainGroups.finishing.accounts.map((acc) => {
+                    const isRoot = !acc.parent_id;
+                    return (
+                      <div
+                        key={acc.id}
+                        className={`group relative flex flex-col justify-between p-4 rounded-xl border border-border/50 hover:border-purple-500/30 hover:shadow-md bg-card transition-all cursor-pointer ${
+                          !acc.is_active ? "opacity-60" : ""
+                        }`}
+                        onClick={() =>
+                          navigate(`/treasuries/${acc.id}`, {
+                            state: { returnTo: `${location.pathname}${location.search}` },
+                          })
+                        }
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`p-2 rounded-lg ${
+                                acc.treasury_type === "bank"
+                                  ? "bg-blue-500/10 text-blue-600"
+                                  : "bg-purple-500/10 text-purple-600"
+                              }`}
+                            >
+                              {acc.treasury_type === "bank" ? (
+                                <Landmark className="h-4 w-4" />
+                              ) : (
+                                <Wallet className="h-4 w-4" />
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-sm group-hover:text-purple-600 transition-colors flex items-center gap-1.5">
+                                <span>{acc.name}</span>
+                              </h4>
+                              {acc.treasury_type === "bank" && acc.bank_name && (
+                                <span className="text-[11px] text-muted-foreground block">{acc.bank_name}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 hover:bg-purple-500/5 hover:text-purple-600"
+                              title="تعديل"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(acc);
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {!isRoot && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-7 w-7 ${
+                                    acc.is_active
+                                      ? "hover:bg-purple-500/10 text-muted-foreground hover:text-purple-600"
+                                      : "hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-600"
+                                  }`}
+                                  title={acc.is_active ? "تعطيل الخزينة" : "تفعيل الخزينة"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleActiveMutation.mutate({
+                                      id: acc.id,
+                                      is_active: !acc.is_active,
+                                      balance: Number(acc.balance || 0),
+                                    });
+                                  }}
+                                >
+                                  {acc.is_active ? (
+                                    <PowerOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                  ) : (
+                                    <Power className="h-3.5 w-3.5 text-emerald-600" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 hover:bg-red-500/5 hover:text-red-600"
+                                  title="حذف نهائي (فقط إذا لم تكن هناك حركات سابقة)"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteId(acc.id);
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {acc.treasury_type === "bank" && acc.account_number && (
+                          <p className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded mb-3 self-start font-mono" dir="ltr">
+                            {acc.account_number}
+                          </p>
+                        )}
+
+                        <div className="flex items-end justify-between mt-1 pt-2 border-t border-border/30">
+                          <div>
+                            <span className="text-[10px] text-muted-foreground block">الرصيد المالي</span>
+                            <span className="text-base font-extrabold text-purple-700 dark:text-purple-400" dir="ltr">
+                              {formatCurrencyLYD(acc.balance || 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                isRoot
+                                  ? "border-purple-500/30 text-purple-700 bg-purple-500/10 font-bold"
+                                  : "border-border text-muted-foreground"
+                              }`}
+                            >
+                              {isRoot ? "خزينة رئيسية" : "فرع تابع"}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                acc.treasury_type === "bank"
+                                  ? "border-blue-500/20 text-blue-600 bg-blue-500/5"
+                                  : "border-purple-500/20 text-purple-600 bg-purple-500/5"
+                              }`}
+                            >
+                              {acc.treasury_type === "bank" ? "مصرفي" : "نقدي"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 3. GENERAL / CORPORATE DOMAIN (If any) */}
+          {domainGroups.general.length > 0 && (
+            <Card className="border border-border/40 shadow-sm rounded-2xl overflow-hidden bg-muted/10">
+              <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/20 border-b border-border/30">
+                <div>
+                  <CardTitle className="text-base font-bold text-muted-foreground flex items-center gap-2">
+                    <Landmark className="h-4 w-4" />
+                    <span>الخزائن والحسابات العامة للشركة (مصاريف عامة)</span>
+                  </CardTitle>
+                </div>
+                <div className="text-left">
+                  <span className="text-xs text-muted-foreground block">إجمالي الرصيد العام</span>
+                  <span className="text-sm font-bold text-foreground">
+                    {formatCurrencyLYD(domainGroups.general.reduce((s, a) => s + Number(a.balance || 0), 0))}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {domainGroups.general.map((acc) => (
+                    <div
+                      key={acc.id}
+                      className="p-3 rounded-xl border border-border/40 bg-card hover:border-amber-500/20 transition-all cursor-pointer"
+                      onClick={() =>
+                        navigate(`/treasuries/${acc.id}`, {
+                          state: { returnTo: `${location.pathname}${location.search}` },
+                        })
+                      }
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-sm">{acc.name}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {acc.treasury_type === "bank" ? "مصرفي" : "نقدي"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm font-extrabold text-foreground">{formatCurrencyLYD(acc.balance || 0)}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
@@ -1200,7 +1574,7 @@ const Treasuries = () => {
                   <SelectValue placeholder="اختر الخزينة المصدر" />
                 </SelectTrigger>
                 <SelectContent>
-                  {childTreasuries.map((t) => (
+                  {operationalTreasuries.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name} (الرصيد: {formatCurrencyLYD(t.balance)})
                     </SelectItem>
@@ -1219,11 +1593,11 @@ const Treasuries = () => {
                   <SelectValue placeholder="اختر الخزينة الوجهة" />
                 </SelectTrigger>
                 <SelectContent>
-                  {childTreasuries
+                  {operationalTreasuries
                     .filter((t) => t.id !== transferForm.fromTreasuryId)
                     .map((t) => (
                       <SelectItem key={t.id} value={t.id}>
-                        {t.name} (الرصid: {formatCurrencyLYD(t.balance)})
+                        {t.name} (الرصيد: {formatCurrencyLYD(t.balance)})
                       </SelectItem>
                     ))}
                 </SelectContent>

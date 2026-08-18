@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,8 @@ const fundSourceOptions = [
 
 const ProjectEquipmentRentals = () => {
   const { id: projectId, phaseId } = useParams<{ id: string; phaseId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePhaseId = searchParams.get("phase") || phaseId || null;
   const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [forcedPhaseSelectorOpen, setForcedPhaseSelectorOpen] = useState(false);
@@ -152,6 +154,20 @@ const ProjectEquipmentRentals = () => {
     },
     enabled: !!projectId,
   });
+
+  // Validate Phase Ownership: if activePhaseId does not belong to projectId, reset phase query param
+  useEffect(() => {
+    if (activePhaseId && projectPhases && projectPhases.length > 0) {
+      const isValid = projectPhases.some((p) => p.id === activePhaseId);
+      if (!isValid) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("phase");
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [activePhaseId, projectPhases, setSearchParams]);
 
   useEffect(() => {
     setForcedPhaseSelectorOpen(false);
@@ -752,14 +768,13 @@ const ProjectEquipmentRentals = () => {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">إيجار المعدات</h1>
-          <p className="text-muted-foreground">{project?.name}</p>
-        </div>
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">إيجار المعدات</h1>
+            <p className="text-xs text-muted-foreground">معدات المشروع وإيجاراتها وسجلات التشغيل</p>
+          </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2 cursor-pointer" onClick={handlePrintInvoice} disabled={rentals.length === 0}>
             <Printer className="h-4 w-4" />
@@ -1229,7 +1244,8 @@ const ProjectEquipmentRentals = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 };
 

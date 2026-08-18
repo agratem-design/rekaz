@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,6 +25,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,6 +42,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus,
+  MoreHorizontal,
+  ArrowLeft,
   Pencil,
   Trash2,
   Package,
@@ -59,6 +67,7 @@ import {
   User,
   Building2,
   Download,
+  RefreshCw,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
@@ -85,6 +94,7 @@ interface Phase {
   phase_number: number | null;
   has_percentage: boolean;
   percentage_value: number;
+  created_at?: string;
 }
 
 interface PhaseSummary {
@@ -94,10 +104,8 @@ interface PhaseSummary {
   purchasesTotal: number;
   expensesCount: number;
   expensesTotal: number;
-  techniciansCost: number;
   rentalsCount: number;
   rentalsTotal: number;
-  clientPaid: number;
 }
 
 const imageUrlToBase64 = async (url: string): Promise<string> => {
@@ -142,7 +150,12 @@ const ProjectPhases = () => {
   });
 
   // Fetch project
-  const { data: project, isLoading: projectLoading } = useQuery({
+  const {
+    data: project,
+    isLoading: projectLoading,
+    error: projectError,
+    refetch: refetchProject,
+  } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -154,6 +167,10 @@ const ProjectPhases = () => {
       return data;
     },
     enabled: !!projectId,
+    retry: (failureCount, error: any) => {
+      if (error?.status === 400 || error?.code === "42703") return false;
+      return failureCount < 2;
+    },
   });
 
   // Fetch client payments for the project
@@ -168,10 +185,19 @@ const ProjectPhases = () => {
       return data;
     },
     enabled: !!projectId,
+    retry: (failureCount, error: any) => {
+      if (error?.status === 400 || error?.code === "42703") return false;
+      return failureCount < 2;
+    },
   });
 
   // Fetch phases
-  const { data: phases, isLoading: phasesLoading } = useQuery({
+  const {
+    data: phases,
+    isLoading: phasesLoading,
+    error: phasesError,
+    refetch: refetchPhases,
+  } = useQuery({
     queryKey: ["project-phases", projectId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -183,6 +209,10 @@ const ProjectPhases = () => {
       return data as Phase[];
     },
     enabled: !!projectId,
+    retry: (failureCount, error: any) => {
+      if (error?.status === 400 || error?.code === "42703") return false;
+      return failureCount < 2;
+    },
   });
 
   // Fetch treasuries (all for grouping)
@@ -253,23 +283,30 @@ const ProjectPhases = () => {
 
   // Fetch phase summaries - كل البيانات بطلب واحد لكل نوع (بدلاً من N+1 queries)
   const phaseIds = phases?.map(p => p.id) || [];
-  const { data: phaseSummaries } = useQuery({
+  const {
+    data: phaseSummaries,
+    isLoading: summariesLoading,
+    error: summariesError,
+    refetch: refetchSummaries,
+  } = useQuery({
     queryKey: ["phase-summaries", projectId, phaseIds.join(",")],
     queryFn: async () => {
       if (!phases || phases.length === 0) return {};
       
       // جلب كل البيانات دفعة واحدة لكل المراحل بالتوازي
       const [
-        { data: allItems },
-        { data: allPurchases },
-        { data: allExpenses },
-        { data: allAllocations },
+        { data: allItems, error: itemsErr },
+        { data: allPurchases, error: purchErr },
+        { data: allExpenses, error: expErr },
       ] = await Promise.all([
-        supabase.from("project_items").select("phase_id, total_price, project_item_technicians(total_cost)").in("phase_id", phaseIds),
+        supabase.from("project_items").select("phase_id, total_price").in("phase_id", phaseIds),
         supabase.from("purchases").select("phase_id, total_amount, rental_id").in("phase_id", phaseIds),
         supabase.from("expenses").select("phase_id, amount").in("phase_id", phaseIds),
-        supabase.from("client_payment_allocations").select("phase_id, amount").in("phase_id", phaseIds),
       ]);
+
+      if (itemsErr) throw itemsErr;
+      if (purchErr) throw purchErr;
+      if (expErr) throw expErr;
 
       const summaries: Record<string, PhaseSummary> = {};
       
@@ -277,40 +314,32 @@ const ProjectPhases = () => {
         const items = allItems?.filter(i => i.phase_id === phase.id) || [];
         const purchases = allPurchases?.filter(p => p.phase_id === phase.id) || [];
         const expenses = allExpenses?.filter(e => e.phase_id === phase.id) || [];
-        const allocations = allAllocations?.filter(a => a.phase_id === phase.id) || [];
         
         // المشتريات العادية (غير إيجارات)
         const normalPurchases = purchases.filter(p => !p.rental_id);
         // إيجارات المعدات فقط
         const rentalPurchases = purchases.filter(p => !!p.rental_id);
         const rentalsTotal = rentalPurchases.reduce((sum, rp) => sum + Number(rp.total_amount || 0), 0);
-        
-        const techniciansCost = items.reduce((sum, i: any) => {
-          const itemTechCost = i.project_item_technicians?.reduce((s: number, t: any) => s + Number(t.total_cost || 0), 0) || 0;
-          return sum + itemTechCost;
-        }, 0);
 
-        // المدفوع من الزبون = مجموع التخصيصات للمرحلة
-        const clientPaid = allocations.reduce((sum, a) => sum + Number(a.amount || 0), 0);
-        
         summaries[phase.id] = {
           itemsCount: items.length,
           itemsTotal: items.reduce((sum, i) => sum + Number(i.total_price || 0), 0),
           purchasesCount: normalPurchases.length,
-          // إجمالي المشتريات = عادية + إيجارات (كلها تكلفة على الشركة)
           purchasesTotal: normalPurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0),
           expensesCount: expenses.length,
           expensesTotal: expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0),
-          techniciansCost,
           rentalsCount: rentalPurchases.length,
           rentalsTotal,
-          clientPaid,
         };
       }
       
       return summaries;
     },
     enabled: !!phases && phases.length > 0,
+    retry: (failureCount, error: any) => {
+      if (error?.status === 400 || error?.code === "42703") return false;
+      return failureCount < 2;
+    },
   });
 
   // Fetch company settings for printing
@@ -519,37 +548,24 @@ const ProjectPhases = () => {
     const isClient = mode === 'client';
     
     // Fetch detailed data for the phase
-    const [{ data: items }, { data: purchases }, { data: expenses }, { data: rentalPurchases }, { data: allocations }] = await Promise.all([
-      supabase.from("project_items").select("id, name, description, quantity, unit_price, total_price, measurement_type, length, width, height, measurement_factor, formula, component_values, measurement_config_id, measurement_configs(name, unit_symbol), engineers(name), project_item_technicians(total_cost)").eq("phase_id", phase.id),
+    const [{ data: items }, { data: purchases }, { data: expenses }, { data: rentalPurchases }] = await Promise.all([
+      supabase.from("project_items").select("id, name, description, quantity, unit_price, total_price, measurement_type, length, width, height, measurement_factor, formula, component_values, measurement_config_id, measurement_configs(name, unit_symbol), engineers(name)").eq("phase_id", phase.id),
       supabase.from("purchases").select("*, suppliers(name)").eq("phase_id", phase.id).is("rental_id", null),
       supabase.from("expenses").select("*").eq("phase_id", phase.id),
       supabase.from("purchases").select("*, equipment_rentals(equipment(name), start_date, end_date, daily_rate)").eq("phase_id", phase.id).not("rental_id", "is", null),
-      supabase.from("client_payment_allocations")
-        .select(`
-          amount,
-          reference_type,
-          reference_id,
-          client_payments (
-            date,
-            payment_method,
-            notes,
-            treasuries (
-              name
-            )
-          )
-        `)
-        .eq("phase_id", phase.id),
     ]);
+
+    const itemIds = items?.map((i) => i.id) || [];
+    const { data: progressRecords } = itemIds.length > 0
+      ? await supabase.from("technician_progress_records").select("earned_amount").in("project_item_id", itemIds)
+      : await supabase.from("technician_progress_records").select("earned_amount").eq("phase_id", phase.id);
 
     const totalItems = items?.reduce((sum, i) => sum + Number(i.total_price || 0), 0) || 0;
     const totalPurch = purchases?.reduce((sum, p) => sum + Number(p.total_amount || 0), 0) || 0;
     const totalRent = rentalPurchases?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
     const totalExp = expenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-    const totalTech = items?.reduce((sum, i: any) => {
-      const itemTechCost = i.project_item_technicians?.reduce((s: number, t: any) => s + Number(t.total_cost || 0), 0) || 0;
-      return sum + itemTechCost;
-    }, 0) || 0;
-    const clientPaidActual = allocations?.reduce((sum, a) => sum + Number(a.amount || 0), 0) || 0;
+    const totalTech = progressRecords?.reduce((sum, r) => sum + Number(r.earned_amount || 0), 0) || 0;
+    const clientPaidActual = 0;
 
     const projectPct = project?.project_type === "finishing" ? Number((project as any).finishing_percentage || 0) : 0;
     const phasePercentage = phase.has_percentage && phase.percentage_value > 0 ? Number(phase.percentage_value) : projectPct;
@@ -590,8 +606,9 @@ const ProjectPhases = () => {
       const totalDirhamsDisplay = totalDecimalPart > 0 ? String(totalDecimalPart).padStart(2, '0') : '---';
       const totalDinarsDisplay = totalIntegerPart.toLocaleString();
 
-      const signeeName = companySettings?.signee_name || (project as any)?.engineers?.name || 'علي بن عروس شميله';
-      const signeeTitle = companySettings?.signee_title || 'المهندس المشرف';
+      const signeeName = (companySettings as any)?.signee_name || (project as any)?.engineers?.name || 'علي بن عروس شميله';
+      const signeeTitle = (companySettings as any)?.signee_title || 'المهندس المشرف';
+      const projectRefCode = (project as any)?.reference_number || project?.code || '';
 
       let clientInvoiceHTML = `
         <style>
@@ -627,7 +644,7 @@ const ProjectPhases = () => {
           <div class="print-report-header" style="display: none;">
             <div class="print-report-title">فاتورة الأعمال المنجزة</div>
             <div class="print-report-subtitle">رقم الفاتورة: ${systemInvoiceNo} &nbsp;|&nbsp; التاريخ: ${dateStr}</div>
-            <div class="print-report-meta">${project?.reference_number ? `رقم المشروع: ${project.reference_number}` : ''}</div>
+            <div class="print-report-meta">${projectRefCode ? `رقم المشروع: ${projectRefCode}` : ''}</div>
           </div>
 
           <!-- Centered Invoice Title -->
@@ -650,11 +667,11 @@ const ProjectPhases = () => {
                   <span style="font-size: 11.5pt; font-weight: bold; color: #000; margin-right: 5px;">الأخ / ${project?.clients?.name || ""}</span>
                 </td>
               </tr>
-              ${project?.reference_number ? `
+              ${projectRefCode ? `
                 <tr style="border: none;">
                   <td style="border: none; padding: 4px; font-size: 11pt; width: 50%;">
                     <strong style="color: #666;">رقم المشروع:</strong> 
-                    <span style="font-size: 11pt; font-weight: bold; color: #000; margin-right: 5px;">${project.reference_number}</span>
+                    <span style="font-size: 11pt; font-weight: bold; color: #000; margin-right: 5px;">${projectRefCode}</span>
                   </td>
                   <td style="border: none; padding: 4px; font-size: 11pt; width: 50%;"></td>
                 </tr>
@@ -1291,7 +1308,8 @@ const ProjectPhases = () => {
       `;
     }
 
-    // 5. مدفوعات الزبون
+    // 5. مدفوعات الزبون (Project-level only in canonical architecture)
+    const allocations: any[] = [];
     if (allocations && allocations.length > 0) {
       // Prepare data rows
       const paymentRows = allocations.map((a: any, idx: number) => {
@@ -1471,7 +1489,8 @@ const ProjectPhases = () => {
         ? (totalPurch + totalRent) * phasePercentage / 100 
         : 0;
       const totalCosts = totalPurch + totalExp + totalTech + totalRent;
-      const netProfit = clientPaidActual - totalCosts;
+      const grossProfit = totalItems - totalCosts;
+      const netCashFlow = clientPaidActual - totalCosts;
 
       sectionsHTML += `
         <div class="print-section">
@@ -1495,12 +1514,16 @@ const ProjectPhases = () => {
             </tbody>
             <tfoot>
               <tr>
-                <td>إجمالي التكاليف</td>
+                <td>إجمالي التكاليف المعتمدة</td>
                 <td>${formatCurrencyLYD(totalCosts)}</td>
               </tr>
               <tr>
-                <td>صافي الربح</td>
-                <td style="color: ${netProfit >= 0 ? '#1a5f1a' : '#b91c1c'}; font-weight: bold;">${formatCurrencyLYD(netProfit)}</td>
+                <td>مجمل الربح التقديري</td>
+                <td style="color: ${grossProfit >= 0 ? '#1a5f1a' : '#b91c1c'}; font-weight: bold;">${formatCurrencyLYD(grossProfit)}</td>
+              </tr>
+              <tr>
+                <td>صافي التدفق النقدي</td>
+                <td style="color: ${netCashFlow >= 0 ? '#0284c7' : '#b91c1c'}; font-weight: bold;">${formatCurrencyLYD(netCashFlow)}</td>
               </tr>
             </tfoot>
           </table>
@@ -1664,18 +1687,6 @@ const ProjectPhases = () => {
     saveMutation.mutate(formData);
   };
 
-  const togglePhase = (phaseId: string) => {
-    setExpandedPhases(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(phaseId)) {
-        newSet.delete(phaseId);
-      } else {
-        newSet.add(phaseId);
-      }
-      return newSet;
-    });
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
@@ -1691,517 +1702,304 @@ const ProjectPhases = () => {
 
   if (projectLoading || phasesLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
+      <ProjectWorkspaceLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </ProjectWorkspaceLayout>
+    );
+  }
+
+  if (projectError || phasesError) {
+    return (
+      <ProjectWorkspaceLayout>
+        <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-8 text-center space-y-4" dir="rtl">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
+          <h2 className="text-xl font-bold text-foreground">تعذر تحميل بيانات مراحل المشروع</h2>
+          <p className="text-muted-foreground text-sm">
+            حدث خطأ أثناء جلب مراحل المشروع من الخادم.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              onClick={() => {
+                refetchProject();
+                refetchPhases();
+                refetchSummaries();
+              }}
+              variant="outline"
+              className="gap-2 cursor-pointer"
+            >
+              <RefreshCw className="h-4 w-4" />
+              إعادة المحاولة
+            </Button>
+            <Button onClick={() => navigate("/projects")} variant="ghost">
+              العودة للمشاريع
+            </Button>
+          </div>
+        </div>
+      </ProjectWorkspaceLayout>
     );
   }
 
   if (!project) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">المشروع غير موجود</p>
-        <Link to="/projects">
-          <Button variant="link">العودة للمشاريع</Button>
-        </Link>
-      </div>
+      <ProjectWorkspaceLayout>
+        <div className="text-center py-12" dir="rtl">
+          <p className="text-muted-foreground">المشروع غير موجود أو تم حذفه</p>
+          <Link to="/projects">
+            <Button variant="link">العودة للمشاريع</Button>
+          </Link>
+        </div>
+      </ProjectWorkspaceLayout>
     );
   }
 
-  const allSummaries = phaseSummaries ? Object.values(phaseSummaries) : [];
-  const totalClientPaid = projectPayments?.reduce((s, p) => s + Number(p.amount || 0), 0) || 0;
-  const totalAllocated = allSummaries.reduce((s, x) => s + (x.clientPaid || 0), 0);
-  const unallocatedAmount = Math.max(0, totalClientPaid - totalAllocated);
-
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Layers className="h-6 w-6 text-primary" />
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        {/* Clean Phase Directory Header (Strict RTL) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/40">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+              <Layers className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-black text-foreground">مراحل المشروع</h1>
+                <Badge variant="outline" className="text-xs font-bold px-2 py-0.5">
+                  {phases?.length || 0} مراحل
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                دليل ومراحل تنفيذ المشروع والعمليات التشغيلية لكل مرحلة
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">فواتير مراحل المشروع</h1>
-            <p className="text-sm text-muted-foreground">
-              {project.name} - {project.clients?.name || "بدون عميل"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={handleOpenNewPhase}>
-            <Plus className="h-4 w-4 ml-2" />
-            إضافة فاتورة مرحلة
-          </Button>
-        </div>
-      </div>
-
-      {unallocatedAmount > 0 && phases && phases.length > 1 && (
-        <Alert className="border-yellow-500/50 bg-yellow-500/10">
-          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-          <AlertDescription className="text-yellow-700 dark:text-yellow-300 font-medium">
-            توجد مدفوعات غير مخصصة للمراحل بقيمة {formatCurrencyLYD(unallocatedAmount)}. يمكنك تخصيصها للمراحل من صفحة {" "}
-            <Link to={`/projects/${projectId}/payments`} className="underline font-bold">تسديدات الزبون</Link>.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* ملخص مالي شامل لكل المراحل */}
-      {phaseSummaries && Object.keys(phaseSummaries).length > 0 && (
-        (() => {
-          const totalItems = allSummaries.reduce((s, x) => s + (x.itemsTotal || 0), 0);
-          const totalPurchases = allSummaries.reduce((s, x) => s + (x.purchasesTotal || 0), 0);
-          const totalExpenses = allSummaries.reduce((s, x) => s + (x.expensesTotal || 0), 0);
-          const totalLabor = allSummaries.reduce((s, x) => s + (x.techniciansCost || 0), 0);
-          const totalRentals = allSummaries.reduce((s, x) => s + (x.rentalsTotal || 0), 0);
-          // إجمالي تكاليف الشركة
-          const totalCosts = totalPurchases + totalExpenses + totalLabor + totalRentals;
-          // إجمالي إيرادات الشركة المتوقعة = بنود المقاولات (عقد مع العميل)
-          // صافي الربح المتوقع = إيرادات - تكاليف
-          const expectedProfit = totalItems - totalCosts;
-          // الربح الفعلي المحقق = ما دفعه الزبون فعلاً - التكاليف
-          const realizedProfit = totalClientPaid - totalCosts;
-          
-          const budget = Number(project.budget) || 0;
-          const isOverBudget = budget > 0 && totalCosts > budget;
-          const usagePercent = budget > 0 ? Math.min((totalCosts / budget) * 100, 100) : 0;
-          
-          return (
-            <Card className="border border-border">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  <h3 className="font-bold text-base">الملخص المالي الشامل للمشروع</h3>
-                  {budget > 0 && (
-                    <Badge variant={isOverBudget ? "destructive" : "secondary"} className="mr-auto">
-                      {isOverBudget ? `تجاوز الميزانية بـ ${formatCurrencyLYD(totalCosts - budget)}` : `${usagePercent.toFixed(0)}% من الميزانية`}
-                    </Badge>
-                  )}
-                </div>
-                
-                {/* شريط التقدم */}
-                {budget > 0 && (
-                  <div className="w-full h-2 bg-muted rounded-full mb-4 overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-destructive' : usagePercent > 80 ? 'bg-yellow-500' : 'bg-primary'}`}
-                      style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4 text-sm">
-                  <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/10 shadow-sm transition-all hover:bg-primary/10">
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">بنود المقاولات</p>
-                    <p className="text-lg font-bold text-primary">{formatCurrencyLYD(totalItems)}</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border shadow-sm transition-all hover:bg-muted/60">
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">المشتريات</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrencyLYD(totalPurchases)}</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border shadow-sm transition-all hover:bg-muted/60">
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">المصروفات</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrencyLYD(totalExpenses)}</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border shadow-sm transition-all hover:bg-muted/60">
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">العمالة</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrencyLYD(totalLabor)}</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border shadow-sm transition-all hover:bg-muted/60">
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">الإيجارات</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrencyLYD(totalRentals)}</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/10 shadow-sm transition-all hover:bg-emerald-500/10">
-                    <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-1 font-semibold">تسديد الزبون</p>
-                    <p className="text-lg font-bold text-emerald-600">{formatCurrencyLYD(totalClientPaid)}</p>
-                    {unallocatedAmount > 0 && (
-                      <p className="text-[10px] text-yellow-600 dark:text-yellow-400 mt-1 font-medium bg-yellow-500/10 px-1.5 py-0.5 rounded inline-block">
-                        غير مخصص: {formatCurrencyLYD(unallocatedAmount)}
-                      </p>
-                    )}
-                  </div>
-                  <div className={`p-3.5 rounded-xl border shadow-sm transition-all ${expectedProfit >= 0 ? 'bg-emerald-500/5 border-emerald-500/10 hover:bg-emerald-500/10' : 'bg-destructive/5 border-destructive/10 hover:bg-destructive/10'}`}>
-                    <p className="text-xs text-muted-foreground mb-1 font-semibold">صافي الربح</p>
-                    <p className={`text-lg font-bold ${expectedProfit >= 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatCurrencyLYD(expectedProfit)}</p>
-                    {totalClientPaid > 0 && (
-                      <p className={`text-xs mt-1 font-medium ${realizedProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                        محقق: {formatCurrencyLYD(realizedProfit)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {isOverBudget && (
-                  <Alert className="mt-3 border-destructive/50 bg-destructive/10">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    <AlertDescription className="text-destructive font-medium">
-                      التكاليف الكلية تجاوزت الميزانية المحددة بمبلغ {formatCurrencyLYD(totalCosts - budget)}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })()
-      )}
-
-      {/* Phases */}
-      <div className="space-y-4">
-        {phases?.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Layers className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">لا توجد فواتير مراحل</h3>
-            <p className="text-muted-foreground mb-4">
-              ابدأ بإضافة فاتورة مرحلة جديدة للمشروع
-            </p>
-            <Button onClick={handleOpenNewPhase}>
-              <Plus className="h-4 w-4 ml-2" />
-              إضافة فاتورة مرحلة
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Button onClick={handleOpenNewPhase} className="gap-2 font-bold shadow-xs cursor-pointer">
+              <Plus className="h-4 w-4 ml-1" />
+              <span>إضافة مرحلة جديدة</span>
             </Button>
-          </Card>
-        ) : (
-          phases?.map((phase, idx) => {
-            const summary = phaseSummaries?.[phase.id];
-            const isExpanded = expandedPhases.has(phase.id);
-            const phaseNo = phase.phase_number || (idx + 1);
-            
-            return (
-              <Collapsible
-                key={phase.id}
-                open={isExpanded}
-                onOpenChange={() => togglePhase(phase.id)}
-              >
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between p-4">
-                    {/* Clickable trigger area */}
-                    <CollapsibleTrigger asChild>
-                      <div className="flex items-center gap-3 flex-1 cursor-pointer">
-                        {isExpanded ? (
-                          <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </div>
+
+        {/* Phase Cards Directory (Primary Business Content) */}
+        <div className="space-y-4">
+          {phases?.length === 0 ? (
+            <Card className="p-12 text-center border-dashed">
+              <Layers className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+              <h3 className="text-lg font-bold mb-2">لا توجد مراحل مسجلة لهذا المشروع</h3>
+              <p className="text-muted-foreground text-xs mb-4">
+                ابدأ بتنظيم المشروع عن طريق إضافة المرحلة التنفيذية الأولى
+              </p>
+              <Button onClick={handleOpenNewPhase} className="gap-2 font-bold cursor-pointer">
+                <Plus className="h-4 w-4 ml-1" />
+                <span>إضافة المرحلة الأولى</span>
+              </Button>
+            </Card>
+          ) : (
+            phases?.map((phase, idx) => {
+              const summary = phaseSummaries?.[phase.id];
+              const phaseNo = phase.phase_number || (idx + 1);
+
+              return (
+                <Card
+                  key={phase.id}
+                  className="border border-border/80 hover:border-primary/50 transition-all shadow-xs rounded-2xl overflow-hidden group"
+                >
+                  <div className="p-5 space-y-4">
+                    {/* Top Row: Identity & Status (Strict RTL) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-wrap">
+                        <Badge variant="default" className="text-xs font-black px-2.5 py-1 bg-primary text-primary-foreground">
+                          مرحلة #{phaseNo}
+                        </Badge>
+                        {phase.reference_number && (
+                          <Badge variant="secondary" className="text-xs font-bold px-2.5 py-0.5">
+                            {phase.reference_number}
+                          </Badge>
                         )}
-                        <div className="text-right flex-1">
-                          <div className="flex items-center gap-3 w-full">
-                            <Badge variant="outline" className="text-sm font-bold px-3 py-1">فاتورة #{phaseNo}</Badge>
-                            {phase.reference_number && (
-                              <Badge variant="secondary" className="text-sm font-bold px-3 py-1">{phase.reference_number}</Badge>
-                            )}
-                            <h3 className="font-semibold">{phase.name}</h3>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {phase.description && (
-                              <p className="text-sm text-muted-foreground">
-                                {phase.description}
-                              </p>
-                            )}
-                            {phase.treasury_id && treasuries && (
-                              <Badge variant="outline" className="text-xs border-[#d6ac40]/40 bg-[#d6ac40]/5 text-[#b8860b] dark:text-[#d6ac40] flex items-center gap-1 py-0.5 px-2">
-                                <Wallet className="h-3.5 w-3.5 text-[#d6ac40]" />
-                                <span className="font-semibold">الخزينة المرتبطة:</span>
-                                <span>{treasuries.find(t => t.id === phase.treasury_id)?.name}</span>
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
+                        <h3
+                          className="text-lg font-bold text-foreground hover:text-primary cursor-pointer transition-colors"
+                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}`)}
+                        >
+                          {phase.name}
+                        </h3>
+                        {getStatusBadge(phase.status)}
+                        {phase.treasury_id && treasuries && (
+                          <Badge variant="outline" className="text-xs border-[#d6ac40]/40 bg-[#d6ac40]/5 text-[#b8860b] dark:text-[#d6ac40] flex items-center gap-1 py-0.5 px-2">
+                            <Wallet className="h-3.5 w-3.5 text-[#d6ac40]" />
+                            <span>{treasuries.find(t => t.id === phase.treasury_id)?.name}</span>
+                          </Badge>
+                        )}
                       </div>
-                    </CollapsibleTrigger>
-                    <div className="flex items-center gap-3">
-                      {getStatusBadge(phase.status)}
-                      <div className="flex gap-1">
-                        <div className="relative">
+
+                      {/* Secondary Actions in ⋯ Dropdown */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+                              title="خيارات إضافية للمرحلة"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              onClick={() => handleEdit(phase)}
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                              <span>تعديل بيانات المرحلة</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setClientPrintOptions({ showPurchases: false, showRentals: false, showExpenses: false });
+                                setClientPrintDialog(phase);
+                              }}
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                            >
+                              <User className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>تقرير الزبون (خيارات)</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handlePrintPhase(phase, 'company', 'print')}
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                            >
+                              <Printer className="h-3.5 w-3.5 text-amber-600" />
+                              <span>طباعة تقرير الشركة</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handlePrintPhase(phase, 'company', 'pdf')}
+                              className="gap-2 cursor-pointer text-xs font-medium"
+                            >
+                              <Download className="h-3.5 w-3.5 text-purple-600" />
+                              <span>تحميل PDF للشركة</span>
+                            </DropdownMenuItem>
+                            <div className="h-px bg-border my-1" />
+                            <DropdownMenuItem
+                              onClick={() => setDeletePhaseId(phase.id)}
+                              className="gap-2 cursor-pointer text-xs font-medium text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              <span>حذف المرحلة</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+
+                    {/* Description / Dates (if present) */}
+                    {(phase.description || phase.start_date || phase.end_date) && (
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {phase.description && <p>{phase.description}</p>}
+                        {(phase.start_date || phase.end_date) && (
+                          <div className="flex items-center gap-1.5 text-muted-foreground/80">
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>
+                              الفترة: {phase.start_date ? format(parseISO(phase.start_date), "yyyy/MM/dd") : "—"} إلى{" "}
+                              {phase.end_date ? format(parseISO(phase.end_date), "yyyy/MM/dd") : "—"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Operational Counts Row (Strict RTL) */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 text-xs text-muted-foreground">
+                      {project?.project_type !== "finishing" && (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/15 text-primary font-semibold">
+                          <Package className="h-3.5 w-3.5" />
+                          <span>{summary?.itemsCount || 0} بند مقاولات</span>
+                          {summary?.itemsTotal ? (
+                            <span className="text-[11px] text-muted-foreground font-normal">
+                              (قيمة البنود: {formatCurrencyLYD(summary.itemsTotal)})
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/60 font-medium">
+                        <ShoppingCart className="h-3.5 w-3.5 text-amber-600" />
+                        <span>{summary?.purchasesCount || 0} فواتير مشتريات</span>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/60 font-medium">
+                        <Coins className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>{summary?.expensesCount || 0} مصروفات</span>
+                      </div>
+                      {Boolean(summary?.rentalsCount) && (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/60 font-medium">
+                          <Wrench className="h-3.5 w-3.5 text-slate-600" />
+                          <span>{summary?.rentalsCount} تأجير معدات</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Primary Action Button & Sub-links (Strict RTL) */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-2 font-bold shadow-xs cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground"
+                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}`)}
+                        >
+                          <Layers className="h-4 w-4 ml-1" />
+                          <span>دخول مساحة عمل المرحلة</span>
+                          <ArrowLeft className="h-3.5 w-3.5 mr-0.5" />
+                        </Button>
+
+                        {project?.project_type !== "finishing" && (
                           <Button
                             variant="ghost"
-                            size="icon"
-                            onClick={(e) => { e.stopPropagation(); setPrintMenuPhase(printMenuPhase?.id === phase.id ? null : phase); }}
-                            title="طباعة تقرير المرحلة"
+                            size="sm"
+                            className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                            onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/items`)}
                           >
-                            <Printer className="h-4 w-4" />
+                            <Package className="h-3.5 w-3.5 ml-1.5 text-blue-600" />
+                            <span>البنود</span>
                           </Button>
-                           {printMenuPhase?.id === phase.id && (
-                            <div className="absolute top-full left-0 z-50 mt-1 bg-popover border border-border rounded-lg shadow-lg min-w-[180px] p-1 space-y-1">
-                              <button
-                                className="w-full text-right px-3 py-2 text-sm rounded hover:bg-accent transition-colors flex items-center gap-2"
-                                onClick={() => {
-                                  setPrintMenuPhase(null);
-                                  setClientPrintOptions({ showPurchases: false, showRentals: false, showExpenses: false });
-                                  setClientPrintDialog(phase);
-                                }}
-                              >
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                تقرير الزبون (خيارات...)
-                              </button>
-                              <div className="h-px bg-border my-1" />
-                              <button
-                                className="w-full text-right px-3 py-2 text-sm rounded hover:bg-accent transition-colors flex items-center gap-2"
-                                onClick={() => {
-                                  setPrintMenuPhase(null);
-                                  handlePrintPhase(phase, 'company', 'print');
-                                }}
-                              >
-                                <Printer className="h-4 w-4 text-muted-foreground" />
-                                طباعة للشركة
-                              </button>
-                              <button
-                                className="w-full text-right px-3 py-2 text-sm rounded hover:bg-accent transition-colors flex items-center gap-2"
-                                onClick={() => {
-                                  setPrintMenuPhase(null);
-                                  handlePrintPhase(phase, 'company', 'pdf');
-                                }}
-                              >
-                                <Download className="h-4 w-4 text-muted-foreground" />
-                                تحميل PDF للشركة
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        )}
                         <Button
                           variant="ghost"
-                          size="icon"
-                          onClick={(e) => { e.stopPropagation(); handleEdit(phase); }}
+                          size="sm"
+                          className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/purchases`)}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <ShoppingCart className="h-3.5 w-3.5 ml-1.5 text-amber-600" />
+                          <span>المشتريات</span>
                         </Button>
                         <Button
                           variant="ghost"
-                          size="icon"
-                          onClick={(e) => { e.stopPropagation(); setDeletePhaseId(phase.id); }}
+                          size="sm"
+                          className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/expenses`)}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <Coins className="h-3.5 w-3.5 ml-1.5 text-emerald-600" />
+                          <span>المصروفات</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/equipment`)}
+                        >
+                          <Wrench className="h-3.5 w-3.5 ml-1.5 text-slate-600" />
+                          <span>المعدات</span>
                         </Button>
                       </div>
                     </div>
-                  </CardHeader>
-                  
-                  <CollapsibleContent>
-                    <CardContent className="pt-0 pb-4">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5" dir="rtl">
-                        {/* Left/Main Column: Operational Details (2/3 width) */}
-                        <div className="lg:col-span-2 space-y-3">
-                          <h4 className="text-xs font-bold text-primary/80 mb-1.5 mr-1 border-r-2 border-primary/50 pr-2">البنود والتكاليف التشغيلية</h4>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {/* بنود المقاولات */}
-                            <Card className="bg-primary/5 border-primary/10 shadow-sm transition-all hover:bg-primary/10">
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="p-1.5 bg-primary/10 rounded-md">
-                                    <Package className="h-4 w-4 text-primary" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-0.5">بنود المقاولات</p>
-                                    <p className="text-sm font-bold text-primary">
-                                      {formatCurrencyLYD(summary?.itemsTotal || 0)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground font-semibold">عدد البنود: {summary?.itemsCount || 0}</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            {/* فواتير الخدمات والمشتريات */}
-                            <Card className="bg-muted/40 border-border shadow-sm transition-all hover:bg-muted/60">
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="p-1.5 bg-muted rounded-md">
-                                    <ShoppingCart className="h-4 w-4 text-foreground" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-0.5">المشتريات والخدمات</p>
-                                    <p className="text-sm font-bold">
-                                      {formatCurrencyLYD(summary?.purchasesTotal || 0)}
-                                    </p>
-                                    {phase.has_percentage && phase.percentage_value > 0 ? (
-                                      <p className="text-[10px] text-primary font-semibold block">
-                                        الربح (+{phase.percentage_value}%): {formatCurrencyLYD((summary?.purchasesTotal || 0) * phase.percentage_value / 100)}
-                                      </p>
-                                    ) : (
-                                      <p className="text-[10px] text-muted-foreground font-semibold block">الفواتير: {summary?.purchasesCount || 0}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            {/* تكاليف العمالة */}
-                            <Card className="bg-muted/40 border-border shadow-sm transition-all hover:bg-muted/60">
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="p-1.5 bg-muted rounded-md">
-                                    <Layers className="h-4 w-4 text-foreground" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-0.5">تكاليف العمالة</p>
-                                    <p className="text-sm font-bold">
-                                      {formatCurrencyLYD(summary?.techniciansCost || 0)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground font-semibold">يوميات وإنجاز</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            {/* إيجارات المعدات */}
-                            <Card className="bg-muted/40 border-border shadow-sm transition-all hover:bg-muted/60">
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="p-1.5 bg-muted rounded-md">
-                                    <Wrench className="h-4 w-4 text-foreground" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-0.5">إيجارات المعدات</p>
-                                    <p className="text-sm font-bold">
-                                      {formatCurrencyLYD(summary?.rentalsTotal || 0)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground font-semibold">المعدات: {summary?.rentalsCount || 0}</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            {/* المصروفات */}
-                            <Card className="bg-muted/40 border-border shadow-sm transition-all hover:bg-muted/60">
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="p-1.5 bg-muted rounded-md">
-                                    <Coins className="h-4 w-4 text-foreground" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-0.5">المصروفات النثرية</p>
-                                    <p className="text-sm font-bold">
-                                      {formatCurrencyLYD(summary?.expensesTotal || 0)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground font-semibold">المصروفات: {summary?.expensesCount || 0}</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </div>
-                        </div>
-
-                        {/* Right Column: Profitability & Client details (1/3 width) */}
-                        <div className="space-y-3">
-                          <h4 className="text-xs font-bold text-emerald-600 mb-1.5 mr-1 border-r-2 border-emerald-500 pr-2">ملخص الزبون والربحية</h4>
-                          <div className="grid grid-cols-1 gap-3">
-                            {/* المدفوع من الزبون والمتبقي */}
-                            {(() => {
-                              const clientPaid = phases?.length === 1 ? totalClientPaid : (summary?.clientPaid || 0);
-                              const itemsTotal = summary?.itemsTotal || 0;
-                              const projectPct = project?.project_type === "finishing" ? Number((project as any).finishing_percentage || 0) : 0;
-                              const pct = phase.has_percentage && phase.percentage_value > 0 ? Number(phase.percentage_value) : projectPct;
-                              const purchTotal = summary?.purchasesTotal || 0;
-                              const totalDue = itemsTotal + purchTotal * (1 + pct / 100);
-                              const remaining = totalDue - clientPaid;
-                              return (
-                                <Card className="border bg-emerald-500/[0.02] border-emerald-500/10 shadow-sm">
-                                  <CardContent className="p-3">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600">
-                                        <CreditCard className="h-4 w-4" />
-                                      </div>
-                                      <div className="flex-1">
-                                        <p className="text-xs text-muted-foreground mb-0.5">تسديدات الزبون للمرحلة</p>
-                                        <p className="text-sm font-bold text-emerald-600">{formatCurrencyLYD(clientPaid)}</p>
-                                        <div className="flex justify-between text-[10px] text-muted-foreground font-semibold mt-1 pt-1 border-t border-border/40">
-                                          <span>المستحق: {formatCurrencyLYD(totalDue)}</span>
-                                          <span className={remaining > 0 ? 'text-destructive font-bold' : 'text-emerald-600 font-bold'}>
-                                            المتبقي: {formatCurrencyLYD(Math.abs(remaining))}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              );
-                            })()}
-
-                            {/* صافي الربح المتوقع */}
-                            {(() => {
-                              const totalCosts = (summary?.purchasesTotal || 0) + (summary?.expensesTotal || 0) + (summary?.techniciansCost || 0) + (summary?.rentalsTotal || 0);
-                              const projectPct = project?.project_type === "finishing" ? Number((project as any).finishing_percentage || 0) : 0;
-                              const pct = phase.has_percentage && phase.percentage_value > 0 ? Number(phase.percentage_value) : projectPct;
-                              const itemsRevenue = summary?.itemsTotal || 0;
-                              const purchasesCommission = pct > 0 ? (summary?.purchasesTotal || 0) * pct / 100 : 0;
-                              const totalRevenue = itemsRevenue + purchasesCommission;
-                              const netProfit = totalRevenue - totalCosts;
-                              const clientPaidForProfit = phases?.length === 1 ? totalClientPaid : (summary?.clientPaid || 0);
-                              const realizedProfit = clientPaidForProfit - totalCosts;
-                              const showRealized = clientPaidForProfit > 0;
-                              return (
-                                <Card className={`border shadow-sm ${netProfit >= 0 ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-destructive/5 border-destructive/10'}`}>
-                                  <CardContent className="p-3">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className={`p-1.5 rounded-md ${netProfit >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'}`}>
-                                        <TrendingUp className="h-4 w-4" />
-                                      </div>
-                                      <div className="flex-1">
-                                        <p className="text-xs text-muted-foreground mb-0.5 font-semibold">صافي ربح المرحلة</p>
-                                        <p className={`text-sm font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-destructive'}`}>
-                                          {formatCurrencyLYD(netProfit)}
-                                        </p>
-                                        {showRealized && (
-                                          <p className={`text-[10px] font-bold mt-1 pt-1 border-t border-border/40 ${realizedProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                                            الربح الفعلي المحقق: {formatCurrencyLYD(realizedProfit)}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Action Buttons */}
-                      <div className="flex flex-wrap gap-2">
-                        {project?.project_type !== "finishing" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/items`)}
-                          >
-                            <Package className="h-4 w-4 ml-2" />
-                            فاتورة بنود المقاولات
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/purchases`)}
-                        >
-                          <ShoppingCart className="h-4 w-4 ml-2" />
-                          فواتير الخدمات والمشتريات
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/equipment`)}
-                        >
-                          <Wrench className="h-4 w-4 ml-2" />
-                          إيجارات المعدات
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/projects/${projectId}/phases/${phase.id}/expenses`)}
-                        >
-                          <Coins className="h-4 w-4 ml-2" />
-                          المصروفات
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
+                  </div>
                 </Card>
-              </Collapsible>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); else setDialogOpen(true); }}>
+        {/* Add/Edit Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); else setDialogOpen(true); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2505,7 +2303,8 @@ const ProjectPhases = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 };
 

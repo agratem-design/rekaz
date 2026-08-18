@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { useEffect, useState, useMemo } from "react";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ProjectFinancialSummaryCards } from "@/components/projects/ProjectFinancialSummaryCards";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -20,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
 import {
   ArrowRight,
   Printer,
@@ -47,7 +51,8 @@ import {
   Trash2,
   Loader2,
   Wallet,
-  Landmark
+  Landmark,
+  CheckCircle2
 } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 
@@ -57,7 +62,10 @@ const projectSchema = z.object({
   client_id: z.string().optional().or(z.literal("")),
   supervising_engineer_id: z.string().optional().or(z.literal("")),
   status: z.enum(["active", "pending", "completed", "cancelled"]),
-  project_type: z.enum(["contracting", "finishing"]).default("contracting"),
+  project_type: z.enum(["contracting", "finishing"], {
+    required_error: "يرجى اختيار نوع المشروع",
+    invalid_type_error: "يرجى اختيار نوع المشروع",
+  }),
   budget: z.preprocess(
     (val) => {
       if (val === "" || val === undefined || val === null) return 0;
@@ -178,10 +186,16 @@ const ManageProject = () => {
 
   const getReturnPath = () => {
     if (returnTo) return returnTo;
+    if (isEdit && id) return `/projects/${id}`;
     if (clientIdFromUrl) return `/projects/client/${clientIdFromUrl}`;
     const currentType = watch("project_type");
     return `/projects/${currentType || "contracting"}`;
   };
+
+  const isSectorLocked = !isEdit && (projectTypeFromUrl === "contracting" || projectTypeFromUrl === "finishing");
+  const initialType: "contracting" | "finishing" = (projectTypeFromUrl === "contracting" || projectTypeFromUrl === "finishing")
+    ? projectTypeFromUrl
+    : "contracting";
 
   const {
     register,
@@ -193,11 +207,12 @@ const ManageProject = () => {
     resolver: zodResolver(projectSchema),
     defaultValues: {
       status: "active",
-      project_type: projectTypeFromUrl || "contracting",
+      project_type: initialType,
       budget: 0,
       budget_type: "open",
       client_id: clientIdFromUrl || "",
       start_date: today,
+      default_treasury_id: "",
     },
   });
 
@@ -225,12 +240,12 @@ const ManageProject = () => {
     },
   });
 
-  const { data: treasuries } = useQuery({
+  const { data: treasuries, isLoading: isTreasuriesLoading } = useQuery({
     queryKey: ["parent-treasuries"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("treasuries")
-        .select("id, name, treasury_type, is_active")
+        .select("id, name, treasury_type, project_category, is_active, parent_id")
         .is("parent_id", null)
         .eq("is_active", true)
         .order("name");
@@ -238,7 +253,8 @@ const ManageProject = () => {
       return data;
     },
   });
-  const { data: companySettings } = useQuery({
+
+  const { data: companySettings, isLoading: isCompanySettingsLoading } = useQuery({
     queryKey: ["company-settings"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -251,17 +267,42 @@ const ManageProject = () => {
     },
   });
 
+  const isSettingsLoading = isCompanySettingsLoading || isTreasuriesLoading;
   const projectType = watch("project_type");
-  
+
+  const resolvedTreasuryId = useMemo(() => {
+    if (!projectType) return "";
+    if (projectType === "contracting") {
+      if (companySettings?.contracting_treasury_id) return companySettings.contracting_treasury_id;
+      return treasuries?.find((t) => (t.project_category === "contracting" || !t.project_category) && t.is_active)?.id || "";
+    }
+    if (projectType === "finishing") {
+      if (companySettings?.finishing_treasury_id) return companySettings.finishing_treasury_id;
+      return treasuries?.find((t) => t.project_category === "finishing" && t.is_active)?.id || "";
+    }
+    return "";
+  }, [projectType, companySettings, treasuries]);
+
+  const resolvedTreasury = useMemo(() => {
+    const currentTreasuryId = watch("default_treasury_id") || resolvedTreasuryId;
+    return treasuries?.find((t) => t.id === currentTreasuryId);
+  }, [treasuries, watch("default_treasury_id"), resolvedTreasuryId]);
+
+  // 1. Sync project_type from URL when creating new project
   useEffect(() => {
-    if (companySettings) {
-      if (projectType === "contracting") {
-        setValue("default_treasury_id", companySettings.contracting_treasury_id || "", { shouldDirty: true });
-      } else if (projectType === "finishing") {
-        setValue("default_treasury_id", companySettings.finishing_treasury_id || "", { shouldDirty: true });
+    if (!isEdit) {
+      if (projectTypeFromUrl === "contracting" || projectTypeFromUrl === "finishing") {
+        setValue("project_type", projectTypeFromUrl, { shouldValidate: true, shouldDirty: false });
       }
     }
-  }, [projectType, companySettings, setValue]);
+  }, [projectTypeFromUrl, isEdit, setValue]);
+
+  // 2. Automatically resolve and assign the sector default Treasury
+  useEffect(() => {
+    if (!isEdit && resolvedTreasuryId) {
+      setValue("default_treasury_id", resolvedTreasuryId, { shouldValidate: true, shouldDirty: false });
+    }
+  }, [resolvedTreasuryId, isEdit, setValue]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ["project", id],
@@ -409,6 +450,25 @@ const ManageProject = () => {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const {
+    showConfirmDialog: showUnsavedPrompt,
+    setShowConfirmDialog,
+    requestAction,
+    confirmDiscard: confirmUnsavedNavigation,
+    cancelDiscard: cancelUnsavedNavigation,
+  } = useUnsavedChangesGuard({
+    isDirty,
+    isSubmitting: isPending,
+  });
+
+  const handleSafeClose = (action: () => void) => {
+    if (isDirty) {
+      requestAction(action);
+    } else {
+      action();
+    }
+  };
+
   if (isEdit && isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -422,10 +482,8 @@ const ManageProject = () => {
 
   const selectedClientName = clients?.find((c) => c.id === watch("client_id"))?.name;
 
-  return (
+  const formContent = (
     <div className="space-y-6 max-w-4xl mx-auto" dir="rtl">
-      {isEdit && <ProjectNavBar />}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -437,11 +495,8 @@ const ManageProject = () => {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              {isEdit ? "تعديل المشروع" : "مشروع جديد"}
+              {isEdit ? "إعدادات وبيانات المشروع" : "مشروع جديد"}
             </h1>
-            {isEdit && project && (
-              <p className="text-muted-foreground text-sm mt-0.5">{project.name}</p>
-            )}
             {!isEdit && selectedClientName && (
               <p className="text-muted-foreground text-sm mt-0.5">
                 للعميل: <span className="text-primary">{selectedClientName}</span>
@@ -451,34 +506,9 @@ const ManageProject = () => {
         </div>
       </div>
 
-      {/* Summary Cards - Only show when editing */}
-      {isEdit && projectSummary && (
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-          <SummaryCard
-            icon={ShoppingCart}
-            label="المشتريات"
-            value={projectSummary.purchases}
-            accent="text-primary"
-          />
-          <SummaryCard
-            icon={Receipt}
-            label="المصروفات"
-            value={projectSummary.expenses}
-            accent="text-primary"
-          />
-          <SummaryCard
-            icon={Wrench}
-            label="الإيجارات"
-            value={projectSummary.rentals}
-            accent="text-primary"
-          />
-          <SummaryCard
-            icon={Banknote}
-            label="العهد"
-            value={projectSummary.custody}
-            accent="text-primary"
-          />
-        </div>
+      {/* Financial Summary Cards - 6 Independent Sections */}
+      {isEdit && id && (
+        <ProjectFinancialSummaryCards projectId={id} />
       )}
 
       {/* Form */}
@@ -502,30 +532,75 @@ const ManageProject = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Project Type Field */}
             <div className="space-y-2">
-              <Label htmlFor="project_type">نوع المشروع / الفواتير *</Label>
-              <Select
-                value={watch("project_type") || "contracting"}
-                onValueChange={(value) => {
-                  setValue("project_type", value as "contracting" | "finishing", { shouldDirty: true });
-                  if (value === "contracting") {
-                    setValue("finishing_percentage", 0);
-                  }
-                }}
-              >
-                <SelectTrigger dir="rtl">
-                  <SelectValue placeholder="اختر نوع الفواتير" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="contracting">مشاريع مقاولات (حسب البنود الفردية)</SelectItem>
-                  <SelectItem value="finishing">مشاريع تشطيبات (نسبة مئوية مضافة)</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="project_type" className="font-semibold text-foreground">
+                نوع المشروع / الفواتير *
+              </Label>
+              {isSectorLocked ? (
+                <div className="space-y-1.5">
+                  <div className="h-10 flex items-center justify-between px-3 rounded-lg border border-border bg-muted/50 text-foreground text-sm font-semibold">
+                    <span className="flex items-center gap-2">
+                      {watch("project_type") === "finishing" ? (
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                      ) : (
+                        <Wrench className="h-4 w-4 text-blue-600" />
+                      )}
+                      {watch("project_type") === "finishing"
+                        ? "مشاريع تشطيبات (نسبة مئوية مضافة)"
+                        : "مشاريع مقاولات (حسب البنود الفردية)"}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      محدد تلقائياً
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {watch("project_type") === "finishing"
+                      ? "تم تحديد النوع تلقائياً من سياق مشاريع التشطيبات"
+                      : "تم تحديد النوع تلقائياً من سياق مشاريع المقاولات"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Select
+                    value={watch("project_type") || ""}
+                    onValueChange={(value: "contracting" | "finishing") => {
+                      setValue("project_type", value, { shouldValidate: true, shouldDirty: true });
+                      if (value === "contracting") {
+                        setValue("finishing_percentage", 0);
+                      }
+                    }}
+                  >
+                    <SelectTrigger dir="rtl" className={errors.project_type ? "border-destructive" : ""}>
+                      <SelectValue placeholder="اختر نوع المشروع / الفواتير" />
+                    </SelectTrigger>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="contracting">
+                        <span className="flex items-center gap-2">
+                          <Wrench className="h-4 w-4 text-blue-600" />
+                          مشاريع مقاولات (حسب البنود الفردية)
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="finishing">
+                        <span className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-purple-600" />
+                          مشاريع تشطيبات (نسبة مئوية مضافة)
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.project_type && (
+                    <p className="text-sm text-destructive">{errors.project_type.message}</p>
+                  )}
+                </div>
+              )}
             </div>
             
             {watch("project_type") === "finishing" && (
               <div className="space-y-2">
-                <Label htmlFor="finishing_percentage">نسبة الإشراف / التشطيب (%) *</Label>
+                <Label htmlFor="finishing_percentage" className="font-semibold text-foreground">
+                  نسبة الإشراف / التشطيب (%) *
+                </Label>
                 <Input
                   id="finishing_percentage"
                   type="number"
@@ -539,33 +614,51 @@ const ManageProject = () => {
               </div>
             )}
 
-            {/* Default Treasury Selection */}
+            {/* Default Treasury Section */}
             <div className="space-y-2">
-              <Label htmlFor="default_treasury_id" className="flex items-center gap-1.5">
-                <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
+              <Label htmlFor="default_treasury_id" className="flex items-center gap-1.5 font-semibold text-foreground">
+                <Wallet className="h-4 w-4 text-primary" />
                 الخزينة الافتراضية للمشروع
               </Label>
-              <Select
-                value={watch("default_treasury_id") || "__none__"}
-                onValueChange={(value) => setValue("default_treasury_id", value === "__none__" ? "" : value, { shouldDirty: true })}
-                disabled={true}
-              >
-                <SelectTrigger dir="rtl">
-                  <SelectValue placeholder="اختر الخزينة" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="__none__">بدون خزينة افتراضية</SelectItem>
-                  {treasuries?.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      <span className="flex items-center gap-2">
-                        {t.treasury_type === "bank" ? <Landmark className="h-4 w-4" /> : <Wallet className="h-4 w-4" />}
-                        {t.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">المراحل الجديدة سترتبط تلقائياً بهذه الخزينة</p>
+              {isSettingsLoading ? (
+                <div className="h-10 flex items-center gap-2 px-3 rounded-lg border border-border bg-muted/40 text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span>جاري جلب الخزينة الافتراضية للقطاع...</span>
+                </div>
+              ) : resolvedTreasuryId && resolvedTreasury ? (
+                <div className="space-y-1.5">
+                  <div className="h-10 flex items-center justify-between px-3 rounded-lg border border-primary/30 bg-primary/5 text-foreground text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                      {resolvedTreasury.treasury_type === "bank" ? (
+                        <Landmark className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Wallet className="h-4 w-4 text-primary" />
+                      )}
+                      <span className="font-bold">{resolvedTreasury.name}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[11px] bg-primary/10 border-primary/20 text-primary">
+                      خزينة رئيسية افتراضية
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    المراحل والعمليات المالية الجديدة سترتبط تلقائياً بهذه الخزينة
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="h-10 flex items-center gap-2 px-3 rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-sm font-medium">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <span className="text-xs">
+                      {projectType === "contracting"
+                        ? "لم يتم العثور على خزينة افتراضية صالحة لقطاع المقاولات"
+                        : "لم يتم العثور على خزينة افتراضية صالحة لقطاع التشطيبات"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-destructive">
+                    يرجى تعيين الخزينة الرئيسية في شاشة الإعدادات العامة للمنظومة
+                  </p>
+                </div>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -868,16 +961,29 @@ const ManageProject = () => {
           <Button
             type="button"
             variant="outline"
-            className="gap-2"
-            onClick={() => navigate(getReturnPath())}
+            className="gap-2 cursor-pointer"
+            onClick={() => handleSafeClose(() => navigate(getReturnPath()))}
           >
             <X className="h-4 w-4" />
             إلغاء
           </Button>
         </div>
       </form>
+
+      <UnsavedChangesDialog
+        open={showUnsavedPrompt}
+        onOpenChange={setShowConfirmDialog}
+        onConfirmDiscard={confirmUnsavedNavigation}
+        onStay={cancelUnsavedNavigation}
+      />
     </div>
   );
+
+  if (isEdit) {
+    return <ProjectWorkspaceLayout>{formContent}</ProjectWorkspaceLayout>;
+  }
+
+  return formContent;
 };
 
 /* ---------- Sub-components ---------- */

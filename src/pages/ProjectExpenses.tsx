@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,11 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
+import { ProjectOperationDrawerShell } from "@/components/purchases/ProjectOperationDrawerShell";
 import {
   Select,
   SelectContent,
@@ -46,7 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowRight, Pencil, Trash2, Coins, Printer, Layers, Wallet, Landmark } from "lucide-react";
+import { Plus, ArrowRight, Pencil, Trash2, Coins, Printer, Layers, Wallet, Landmark, Receipt, FileText, AlertTriangle, ArrowRightLeft, X } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -69,6 +73,8 @@ const paymentMethods = [
 
 const ProjectExpenses = () => {
   const { id: projectId, phaseId } = useParams<{ id: string; phaseId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePhaseId = searchParams.get("phase") || phaseId || null;
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -119,23 +125,40 @@ const ProjectExpenses = () => {
     enabled: !!projectId,
   });
 
+  // Validate Phase Ownership: if activePhaseId does not belong to projectId, reset phase query param
+  useEffect(() => {
+    if (activePhaseId && projectPhases && projectPhases.length > 0) {
+      const isValid = projectPhases.some((p) => p.id === activePhaseId);
+      if (!isValid) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("phase");
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [activePhaseId, projectPhases, setSearchParams]);
+
   useEffect(() => {
     setForcedPhaseSelectorOpen(false);
   }, []);
 
   // Fetch project expenses (مصروفات only)
   const { data: expenses, isLoading: expensesLoading } = useQuery({
-    queryKey: ["project-expenses", projectId, phaseId],
+    queryKey: ["project-expenses", projectId, activePhaseId],
     queryFn: async () => {
       let query = supabase
         .from("expenses")
-        .select("*")
-        .eq("project_id", projectId)
+        .select(`
+          *,
+          treasuries:treasury_id(id, name, treasury_type)
+        `)
+        .eq("project_id", projectId!)
         .eq("subtype", "مصروفات")
         .order("date", { ascending: false });
       
-      if (phaseId) {
-        query = query.eq("phase_id", phaseId);
+      if (activePhaseId) {
+        query = query.eq("phase_id", activePhaseId);
       }
       
       const { data, error } = await query;
@@ -175,6 +198,13 @@ const ProjectExpenses = () => {
   });
   const treasuryParents = allTreasuriesRaw.filter(t => !(t as any).parent_id);
   const allTreasuries = allTreasuriesRaw.filter(t => (t as any).parent_id);
+
+  const groupedTreasuries = useMemo(() => {
+    return treasuryParents.map(parent => ({
+      parent,
+      children: allTreasuriesRaw.filter(t => (t as any).parent_id === parent.id)
+    }));
+  }, [treasuryParents, allTreasuriesRaw]);
 
   const [selectedParentTreasuryId, setSelectedParentTreasuryId] = useState<string>("");
 
@@ -226,7 +256,7 @@ const ProjectExpenses = () => {
         .from("expenses")
         .insert({
           project_id: projectId,
-          phase_id: phaseId || null,
+          phase_id: activePhaseId || null,
           description: data.description,
           amount: parseFloat(data.amount),
           type: data.type,
@@ -235,26 +265,9 @@ const ProjectExpenses = () => {
           date: data.date,
           notes: data.notes || null,
           treasury_id: data.treasury_id || null,
-        })
-        .select("id")
-        .single();
+        });
       
       if (error) throw error;
-
-      if (data.treasury_id && insertedExp) {
-        await supabase.from("treasury_transactions").insert({
-          treasury_id: data.treasury_id,
-          type: "withdrawal",
-          amount: parseFloat(data.amount),
-          balance_after: 0,
-          description: `مصروف: ${data.description}`,
-          date: data.date,
-          source: "expense",
-          reference_type: "expense",
-          reference_id: insertedExp.id,
-          notes: data.notes || null,
-        });
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-expenses", projectId] });
@@ -371,6 +384,56 @@ const ProjectExpenses = () => {
     }
   };
 
+  const isFormDirty = useMemo(() => {
+    if (!isDialogOpen) return false;
+    if (editingExpense) {
+      return (
+        formData.description !== (editingExpense.description || "") ||
+        formData.amount !== String(editingExpense.amount || "") ||
+        formData.notes !== (editingExpense.notes || "")
+      );
+    }
+    return (
+      formData.description.trim() !== "" ||
+      formData.amount.trim() !== "" ||
+      formData.notes.trim() !== ""
+    );
+  }, [isDialogOpen, editingExpense, formData]);
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  const {
+    showConfirmDialog: showUnsavedDialog,
+    setShowConfirmDialog,
+    requestAction,
+    confirmDiscard: handleConfirmDiscard,
+    cancelDiscard: handleCancelDiscard,
+  } = useUnsavedChangesGuard({
+    isDirty: isFormDirty,
+    isSubmitting,
+    onDiscard: () => {
+      resetForm();
+      setIsDialogOpen(false);
+    },
+  });
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (isSubmitting) return; // Block closing while mutation is in-flight
+      if (isFormDirty) {
+        requestAction(() => {
+          resetForm();
+          setIsDialogOpen(false);
+        });
+      } else {
+        resetForm();
+        setIsDialogOpen(false);
+      }
+    } else {
+      setIsDialogOpen(true);
+    }
+  };
+
   const handlePrint = () => {
     if (!expenses || expenses.length === 0) {
       toast({ title: "لا توجد مصروفات للطباعة", variant: "destructive" });
@@ -379,7 +442,7 @@ const ProjectExpenses = () => {
 
     const totalAmount = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
     const pl = getElementLabels(companySettings?.print_labels, "expenses");
-    const borderStyle = `border: ${companySettings?.print_border_width ?? 1}px solid ${companySettings?.print_table_border_color || "#ddd"};`;
+    const borderStyle = `border: 1px solid ${companySettings?.print_table_border_color || "#ddd"};`;
 
     const content = `
       <div style="text-align: right; margin-bottom: 20px;">
@@ -434,193 +497,108 @@ const ProjectExpenses = () => {
     );
   }
 
-  return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
+  const currentPhase = projectPhases?.find((p) => p.id === activePhaseId);
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Coins className="h-6 w-6 text-primary" />
+  return (
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        {/* Phase Context Banner (if inside a Phase) */}
+        {activePhaseId && currentPhase && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <span className="text-xs text-muted-foreground">أنت تتصفح حالياً مصروفات مرحلة:</span>
+                <span className="font-bold text-foreground mr-1.5">{currentPhase.name}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer"
+                onClick={() => navigate(`/projects/${projectId}/phases/${activePhaseId}`)}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                <span>مساحة عمل المرحلة</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                onClick={() => navigate(`/projects/${projectId}/expenses`)}
+              >
+                <span>عرض جميع مصروفات المشروع</span>
+              </Button>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">مصروفات المشروع</h1>
-            <p className="text-sm text-muted-foreground">
-              {project?.name}
-            </p>
+        )}
+
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Coins className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">
+                {activePhaseId && currentPhase
+                  ? `مصروفات ${currentPhase.name}`
+                  : "مصروفات المشروع"}
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {activePhaseId
+                  ? "المصروفات النثرية والمباشرة المخصصة لهذه المرحلة"
+                  : "جميع المصروفات المباشرة للمشروع ككل"}
+              </p>
+            </div>
           </div>
-        </div>
         
         <div className="flex gap-2">
           <Button variant="outline" onClick={handlePrint} disabled={!expenses?.length}>
             <Printer className="h-4 w-4 ml-2" />
             طباعة
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            {(() => {
-              const isWarningBudget = project?.budget_type === 'warning' || project?.budget_type === 'fixed';
-              const budget = Number(project?.budget) || 0;
-              const totalExpenses = expenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-              const isBudgetExceeded = isWarningBudget && budget > 0 && totalExpenses >= budget;
-              
-              return (
-                <DialogTrigger asChild>
-                  <Button disabled={isBudgetExceeded}>
-                    <Plus className="h-4 w-4 ml-2" />
-                    {isBudgetExceeded ? 'تم تجاوز الميزانية' : 'إضافة مصروف'}
-                  </Button>
-                </DialogTrigger>
-              );
-            })()}
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingExpense ? "تعديل المصروف" : "إضافة مصروف جديد"}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="description">الوصف *</Label>
-                  <Input
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="amount">المبلغ *</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      value={formData.amount}
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date">التاريخ *</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>النوع</Label>
-                    <Select
-                      value={formData.type}
-                      onValueChange={(value: any) => setFormData({ ...formData, type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>طريقة الدفع</Label>
-                    <Select
-                      value={formData.payment_method}
-                      onValueChange={(value: any) => setFormData({ ...formData, payment_method: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentMethods.map((method) => (
-                          <SelectItem key={method.value} value={method.value}>
-                            {method.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                {/* Treasury Selector */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold flex items-center gap-1.5">
-                    <Wallet className="h-4 w-4 text-primary" />
-                    الخزينة المخصوم منها (الفرع) *
-                  </Label>
-                  <Select
-                    value={formData.treasury_id}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, treasury_id: value }))}
-                  >
-                    <SelectTrigger className="w-full" dir="rtl">
-                      <SelectValue placeholder="اختر فرع الخزينة المخصوم منه" />
-                    </SelectTrigger>
-                    <SelectContent dir="rtl">
-                      {treasuryParents.map((parent) => {
-                        const children = allTreasuries.filter(c => (c as any).parent_id === parent.id);
-                        if (children.length === 0) return null;
-                        return (
-                          <SelectGroup key={parent.id}>
-                            <SelectLabel className="font-bold text-primary border-b border-border/40 pb-1 mb-1 mt-2 text-xs flex items-center gap-1">
-                              <Wallet className="h-3.5 w-3.5 text-primary inline" /> {parent.name}
-                            </SelectLabel>
-                            {children.map((child) => (
-                              <SelectItem key={child.id} value={child.id} className="pr-6">
-                                <span className="flex items-center gap-2">
-                                  {(child as any).treasury_type === "bank" ? (
-                                    <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
-                                  ) : (
-                                    <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
-                                  )}
-                                  {child.name} (الرصيد: {formatCurrencyLYD(child.balance || 0)})
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="notes">ملاحظات</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={2}
-                  />
-                </div>
-                
-                <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1" disabled={createMutation.isPending || updateMutation.isPending}>
-                    {editingExpense ? "تحديث" : "إضافة"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => {
-                    setIsDialogOpen(false);
-                    resetForm();
-                  }}>
-                    إلغاء
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {(() => {
+            const isWarningBudget = project?.budget_type === 'warning' || project?.budget_type === 'fixed';
+            const budget = Number(project?.budget) || 0;
+            const totalExpenses = expenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+            const isBudgetExceeded = isWarningBudget && budget > 0 && totalExpenses >= budget;
+            
+            return (
+              <Button
+                disabled={isBudgetExceeded}
+                onClick={() => {
+                  setEditingExpense(null);
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 ml-2" />
+                {isBudgetExceeded ? 'تم تجاوز الميزانية' : 'إضافة مصروف'}
+              </Button>
+            );
+          })()}
+
+          {/* Contextual Operation Drawer Shell for Direct Expenses */}
+          <ProjectOperationDrawerShell
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            projectId={projectId!}
+            projectName={project?.name}
+            projectType={project?.project_type || "contracting"}
+            defaultTreasuryId={project?.default_treasury_id}
+            activePhaseId={activePhaseId}
+            initialOperationType="expense"
+            editingRecord={
+              editingExpense
+                ? {
+                    type: "expense",
+                    data: editingExpense,
+                  }
+                : null
+            }
+          />
         </div>
       </div>
 
@@ -812,8 +790,9 @@ const ProjectExpenses = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-};
+        </div>
+      </ProjectWorkspaceLayout>
+    );
+  };
 
 export default ProjectExpenses;

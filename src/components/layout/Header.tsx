@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Search, Bell, Building2, LogOut, Settings, User, Shield, UserCog, CheckCheck, Sun, Moon } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, Bell, Building2, LogOut, Settings, User, Shield, UserCog, CheckCheck, Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,18 @@ import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 
 import { getAuditSummary } from "@/lib/auditHelpers";
+import { GlobalCommandPalette } from "@/components/navigation/GlobalCommandPalette";
 
-export const Header = () => {
+export interface HeaderProps {
+  onMobileMenuToggle?: () => void;
+}
+
+export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
   const { user, role, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -93,9 +99,22 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+      {/* Mobile Menu Toggle Button */}
+      {onMobileMenuToggle && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMobileMenuToggle}
+          className="md:hidden shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
+          aria-label="فتح القائمة الجانبية"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      )}
+
       {/* Company Logo & Name */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {settings?.company_logo ? (
           <img
             src={settings.company_logo}
@@ -115,17 +134,28 @@ export const Header = () => {
         </span>
       </div>
 
-      {/* Search */}
+      {/* Real Command Palette Search Trigger (Fake search count = 0) */}
       <div className="flex-1 flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="بحث..."
-            className="w-full pr-10 bg-secondary border-border h-9"
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="relative flex-1 max-w-sm flex items-center justify-between px-3 h-9 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/80 hover:border-primary/40 transition-all text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+          aria-label="فتح البحث الشامل (Ctrl+K)"
+          title="البحث الشامل في المنظومة (Ctrl+K)"
+        >
+          <div className="flex items-center gap-2 truncate">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="truncate">ابحث عن مشروع، عميل، مورد، صفحة...</span>
+          </div>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono bg-muted/80 px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0">
+            <span>Ctrl</span>
+            <span>+</span>
+            <span>K</span>
+          </kbd>
+        </button>
       </div>
+
+      <GlobalCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
       <div className="flex items-center gap-1">
         {/* Dark/Light Mode Toggle */}

@@ -40,7 +40,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("projects");
 
   // Safety fetch handler to prevent individual table errors from rejecting the whole Promise.all
-  const fetchSafety = async (promise: Promise<any>) => {
+  const fetchSafety = async (promise: PromiseLike<any>) => {
     try {
       const res = await promise;
       if (res.error) {
@@ -61,9 +61,11 @@ const Dashboard = () => {
       const [
         projectsRes,
         clientsRes,
+        clientPaymentsRes,
         incomeRes,
         expensesRes,
         purchasesRes,
+        purchasePaymentsRes,
         treasuryRes,
         overdueRes,
         rentalsRes,
@@ -75,9 +77,11 @@ const Dashboard = () => {
       ] = await Promise.all([
         fetchSafety(supabase.from("projects").select("id, status, progress, budget, spent, name, image_url")),
         fetchSafety(supabase.from("clients").select("id", { count: "exact", head: true })),
+        fetchSafety(supabase.from("client_payments").select("amount")),
         fetchSafety(supabase.from("income").select("amount")),
         fetchSafety(supabase.from("expenses").select("amount")),
         fetchSafety(supabase.from("purchases").select("total_amount, paid_amount, status, date")),
+        fetchSafety(supabase.from("purchase_payments").select("amount")),
         fetchSafety(supabase.from("treasuries").select("id, name, balance, is_active")),
         fetchSafety(supabase.from("purchases").select("id", { count: "exact", head: true }).eq("status", "due")),
         fetchSafety(supabase.from("equipment_rentals").select("id", { count: "exact", head: true }).eq("status", "active")),
@@ -89,12 +93,15 @@ const Dashboard = () => {
       ]);
 
       const projects = projectsRes.data || [];
-      const totalIncome = (incomeRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
-      const totalExpenses = (expensesRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
-      const totalPurchases = (purchasesRes.data || []).reduce((s, r) => s + Number(r.total_amount), 0);
-      const totalPurchasesPaid = (purchasesRes.data || []).reduce((s, r) => s + Number(r.paid_amount || 0), 0);
+      const totalClientPayments = (clientPaymentsRes.data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalOtherIncome = (incomeRes.data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalIncome = totalClientPayments + totalOtherIncome;
+
+      const totalExpenses = (expensesRes.data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalPurchases = (purchasesRes.data || []).reduce((s, r) => s + Number(r.total_amount || 0), 0);
+      const totalPurchasesPaid = (purchasePaymentsRes.data || []).reduce((s, r) => s + Number(r.amount || 0), 0);
       const treasuries = treasuryRes.data || [];
-      const totalTreasury = treasuries.reduce((s, r) => s + Number(r.balance), 0);
+      const totalTreasury = treasuries.reduce((s, r) => s + Number(r.balance || 0), 0);
       const activeProjects = projects.filter((p) => p.status === "active").length;
       const completedProjects = projects.filter((p) => p.status === "completed").length;
       const avgProgress =
@@ -102,7 +109,7 @@ const Dashboard = () => {
           ? Math.round(projects.reduce((s, p) => s + (p.progress || 0), 0) / projects.length)
           : 0;
 
-      // Net profit = Income - Expenses - Paid Purchases
+      // Net cash flow = Cash In - Expenses - Cash Out to Purchases
       const netProfit = totalIncome - totalExpenses - totalPurchasesPaid;
 
       // Operations counters

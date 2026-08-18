@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
-import { Plus, ArrowRight, Hammer, Paintbrush, FolderOpen } from "lucide-react";
+import { Plus, Hammer, Paintbrush, FolderOpen } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DeterministicBreadcrumb } from "@/components/navigation/DeterministicBreadcrumb";
 
 const ClientProjects = () => {
   const navigate = useNavigate();
@@ -159,13 +160,13 @@ const ClientProjects = () => {
   return (
     <div className="space-y-6" dir="rtl">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link to="/projects" className="hover:text-primary">
-          المشاريع
-        </Link>
-        <ArrowRight className="h-4 w-4 rotate-180" />
-        <span className="text-foreground">{client?.name || "العميل"}</span>
-      </div>
+      <DeterministicBreadcrumb
+        items={[
+          { label: "المشاريع", href: "/projects" },
+          { label: `مشاريع ${client?.name || "العميل"}`, isCurrent: true },
+        ]}
+        fallbackBackHref="/projects"
+      />
 
       {/* Page Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">

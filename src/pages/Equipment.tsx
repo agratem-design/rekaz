@@ -49,6 +49,8 @@ import {
 } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
 
 interface Equipment {
   id: string;
@@ -88,6 +90,20 @@ const conditionOptions = [
   { value: "out_of_service", label: "خارج الخدمة", icon: Wrench, color: "text-muted-foreground" },
 ];
 
+const initialFormData: EquipmentFormData = {
+  name: "",
+  description: "",
+  category: "",
+  serial_number: "",
+  purchase_date: "",
+  purchase_price: 0,
+  current_condition: "good",
+  daily_rental_rate: 0,
+  notes: "",
+  image_url: "",
+  total_quantity: 1,
+};
+
 const Equipment = () => {
   const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -95,19 +111,7 @@ const Equipment = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
-  const [formData, setFormData] = useState<EquipmentFormData>({
-    name: "",
-    description: "",
-    category: "",
-    serial_number: "",
-    purchase_date: "",
-    purchase_price: 0,
-    current_condition: "good",
-    daily_rental_rate: 0,
-    notes: "",
-    image_url: "",
-    total_quantity: 1,
-  });
+  const [formData, setFormData] = useState<EquipmentFormData>(initialFormData);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -409,27 +413,27 @@ const Equipment = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">معدات الشركة</h1>
-          <p className="text-muted-foreground">إدارة المعدات والآلات القابلة للإيجار</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              إضافة معدة
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                {editingEquipment ? "تعديل المعدة" : "إضافة معدة جديدة"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+      <PageHeader
+        title="معدات الشركة"
+        description="إدارة الآلات والمعدات وحسابات التأجير والمخزون المتاح"
+        actions={
+          <Button className="gap-2 cursor-pointer" onClick={() => { setEditingEquipment(null); setFormData(initialFormData); setIsDialogOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            <span>إضافة معدة</span>
+          </Button>
+        }
+      />
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEquipment ? "تعديل المعدة" : "إضافة معدة جديدة"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name">اسم المعدة *</Label>
@@ -643,7 +647,6 @@ const Equipment = () => {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -736,11 +739,38 @@ const Equipment = () => {
 
       {/* Equipment Display */}
       {filteredEquipment.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-          <p className="text-muted-foreground">لا توجد معدات</p>
-          <p className="text-sm text-muted-foreground">اضغط على "إضافة معدة" لبدء إضافة معدات الشركة</p>
-        </Card>
+        <EmptyState
+          icon={Package}
+          title={searchTerm ? "لا توجد نتائج مطابقة" : "لا توجد معدات حتى الآن"}
+          description={
+            searchTerm
+              ? `لم نتمكن من العثور على أي معدة تطابق "${searchTerm}".`
+              : "ابدأ بإضافة معدات وآلات الشركة لتتبع توفرها وحسابات التأجير بالمشاريع."
+          }
+          action={
+            !searchTerm ? (
+              <Button
+                className="gap-2 cursor-pointer"
+                onClick={() => {
+                  setEditingEquipment(null);
+                  setFormData(initialFormData);
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                <span>إضافة معدة</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setSearchTerm("")}
+                className="cursor-pointer"
+              >
+                مسح البحث
+              </Button>
+            )
+          }
+        />
       ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredEquipment.map((eq) => {

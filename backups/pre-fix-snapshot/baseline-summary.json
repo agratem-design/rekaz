@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-08-15T20:16:19.751Z",
+  "treasuries": [
+    {
+      "id": "c504cce9-8bfd-4cda-8296-80febdec2432",
+      "name": "الخزينة الرئيسية (نقدية)",
+      "type": "cash",
+      "reportedBalance": 0,
+      "reconstructedBalance": 0,
+      "difference": 0,
+      "txCount": 0,
+      "deposits": 0,
+      "withdrawals": 0
+    },
+    {
+      "id": "ff7416dd-5295-4e55-bd52-2196eef9ec37",
+      "name": "حساب مصرف الوحدة (جاري)",
+      "type": "bank",
+      "reportedBalance": 0,
+      "reconstructedBalance": 0,
+      "difference": 0,
+      "txCount": 0,
+      "deposits": 0,
+      "withdrawals": 0
+    }
+  ],
+  "clients": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "شركة الأفق للاستثمار العقاري",
+      "totalObligation": 30000,
+      "totalPaid": 0,
+      "expectedRemaining": 30000,
+      "paymentsCount": 0
+    }
+  ],
+  "suppliers": [
+    {
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "مؤسسة الرواد لمواد البناء",
+      "totalPurchases": 0,
+      "totalPaid": 0,
+      "expectedRemaining": 0,
+      "purchasesCount": 0,
+      "paymentsCount": 0
+    }
+  ],
+  "technicians": [
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "أسامة عبدالسلام",
+      "specialty": "جبس بورد",
+      "totalEarned": 0,
+      "totalPaid": 0,
+      "expectedRemaining": 0
+    }
+  ],
+  "totalExpenses": 0,
+  "totalTransfers": 0
+}

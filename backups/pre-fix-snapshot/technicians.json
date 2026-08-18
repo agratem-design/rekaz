@@ -1,0 +1,16 @@
+[
+  {
+    "id": "33333333-3333-3333-3333-333333333333",
+    "name": "أسامة عبدالسلام",
+    "specialty": "جبس بورد",
+    "phone": "0934567890",
+    "email": null,
+    "hourly_rate": null,
+    "daily_rate": null,
+    "meter_rate": 25,
+    "piece_rate": null,
+    "notes": null,
+    "created_at": "2026-08-15T19:58:05.612838+00:00",
+    "updated_at": "2026-08-15T19:58:05.612838+00:00"
+  }
+]

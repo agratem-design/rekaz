@@ -18,6 +18,8 @@ interface PrintSettings {
   print_section_title_color?: string | null;
   print_table_row_even_color?: string | null;
   print_table_row_odd_color?: string | null;
+  print_totals_bg_color?: string | null;
+  print_totals_text_color?: string | null;
   print_table_text_color?: string | null;
   print_header_text_color?: string | null;
   print_table_font_size?: number | null;

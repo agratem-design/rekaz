@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,9 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
+import { ProjectOperationDrawerShell } from "@/components/purchases/ProjectOperationDrawerShell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,8 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowRight, Plus, Pencil, Trash2, ShoppingCart, FileText, Printer, AlertTriangle, ArrowRightLeft, CheckSquare, X, Wallet, Landmark, Download, Layers, Coins, User } from "lucide-react";
+import { ArrowRight, Plus, Pencil, Trash2, ShoppingCart, FileText, Printer, AlertTriangle, ArrowRightLeft, CheckSquare, X, Wallet, Landmark, Download, Layers, Coins, User, Paperclip } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
@@ -70,12 +72,16 @@ interface Purchase {
   date: string;
   invoice_number: string | null;
   total_amount: number;
+  paid_amount?: number;
   status: string;
   items: unknown;
   notes: string | null;
-  purchase_type?: "material" | "labor" | "rental";
+  purchase_type?: "material" | "labor" | "rental" | "service" | string;
   title?: string | null;
+  phase_id?: string | null;
+  invoice_image_url?: string | null;
   project_item_id?: string | null;
+  treasury_id?: string | null;
   project_items?: {
     id: string;
     name: string;
@@ -84,6 +90,12 @@ interface Purchase {
     id: string;
     name: string;
   } | null;
+  purchase_payments?: Array<{
+    id: string;
+    amount: number;
+    payment_method: string;
+    notes?: string | null;
+  }>;
 }
 
 interface Supplier {
@@ -107,6 +119,8 @@ const statusColors: Record<string, string> = {
 
 const ProjectPurchases = () => {
   const { id: projectId, phaseId } = useParams<{ id: string; phaseId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePhaseId = searchParams.get("phase") || phaseId || null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -182,7 +196,7 @@ const ProjectPurchases = () => {
 
   // Fetch purchases
   const { data: purchases, isLoading: purchasesLoading } = useQuery({
-    queryKey: ["project-purchases", projectId, phaseId],
+    queryKey: ["project-purchases", projectId, activePhaseId],
     queryFn: async () => {
       let query = supabase
         .from("purchases")
@@ -196,13 +210,13 @@ const ProjectPurchases = () => {
         .eq("project_id", projectId!)
         .order("date", { ascending: true });
       
-      if (phaseId) {
-        query = query.eq("phase_id", phaseId);
+      if (activePhaseId) {
+        query = query.eq("phase_id", activePhaseId);
       }
       
       const { data, error } = await query;
       if (error) throw error;
-      return data as Purchase[];
+      return data as unknown as Purchase[];
     },
     enabled: !!projectId,
   });
@@ -265,6 +279,20 @@ const ProjectPurchases = () => {
     enabled: !!projectId,
   });
 
+  // Validate Phase Ownership: if activePhaseId does not belong to projectId, reset phase query param
+  useEffect(() => {
+    if (activePhaseId && projectPhases && projectPhases.length > 0) {
+      const isValid = projectPhases.some((p) => p.id === activePhaseId);
+      if (!isValid) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("phase");
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [activePhaseId, projectPhases, setSearchParams]);
+
   useEffect(() => {
     setForcedPhaseSelectorOpen(false);
   }, []);
@@ -305,7 +333,7 @@ const ProjectPurchases = () => {
       
       const payload = {
         project_id: projectId!,
-        phase_id: phaseId || null,
+        phase_id: activePhaseId || null,
         project_item_id: data.project_item_id || null,
         supplier_id: isLabor ? null : (data.supplier_id || null),
         technician_id: isLabor && selectedLaborType === "registered" ? (selectedTechnicianId || null) : null,
@@ -398,7 +426,7 @@ const ProjectPurchases = () => {
   const payMutation = useMutation({
     mutationFn: async (data: typeof payFormData) => {
       if (!selectedPurchaseForPay) return;
-      const { data: insertedPay, error } = await supabase
+      const { error } = await supabase
         .from("purchase_payments")
         .insert({
           purchase_id: selectedPurchaseForPay.id,
@@ -408,26 +436,8 @@ const ProjectPurchases = () => {
           treasury_id: data.treasury_id,
           commission: parseFloat(data.commission) || 0,
           notes: data.notes || null,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      if (data.treasury_id && insertedPay) {
-        const partyName = selectedPurchaseForPay.suppliers?.name || selectedPurchaseForPay.technicians?.name || selectedPurchaseForPay.title || "مشتريات";
-        await supabase.from("treasury_transactions").insert({
-          treasury_id: data.treasury_id,
-          type: "withdrawal",
-          amount: parseFloat(data.amount),
-          balance_after: 0,
-          description: `سداد مدفوعات: ${partyName}`,
-          date: data.date,
-          source: "purchase_payments",
-          reference_type: "purchase_payment",
-          reference_id: insertedPay.id,
-          notes: data.notes || null,
         });
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-purchases", projectId] });
@@ -615,6 +625,7 @@ const ProjectPurchases = () => {
 
     setFormData({
       supplier_id: "",
+      project_item_id: "",
       date: new Date().toISOString().split("T")[0],
       invoice_number: "",
       paid_amount: "",
@@ -631,6 +642,56 @@ const ProjectPurchases = () => {
     setSelectedParentTreasuryId(defaultParentId);
   };
 
+  const isPurchaseFormDirty = useMemo(() => {
+    if (!dialogOpen) return false;
+    if (editingPurchase) {
+      return (
+        formData.title !== (editingPurchase.title || "") ||
+        formData.notes !== (editingPurchase.notes || "") ||
+        formData.supplier_id !== (editingPurchase.supplier_id || "") ||
+        formData.invoice_number !== (editingPurchase.invoice_number || "")
+      );
+    }
+    return (
+      (Boolean(formData.title) && formData.title.trim().length > 0) ||
+      (Boolean(formData.notes) && formData.notes.trim().length > 0) ||
+      (Boolean(formData.supplier_id) && formData.supplier_id.length > 0) ||
+      formData.items.some((i) => i.name.trim() !== "" || i.price > 0) ||
+      (parseFloat(formData.total_amount_direct) > 0)
+    );
+  }, [dialogOpen, editingPurchase, formData]);
+
+  const isSavingPurchase = saveMutation.isPending;
+
+  const {
+    showConfirmDialog: showPurchaseUnsavedDialog,
+    setShowConfirmDialog: setShowPurchaseUnsavedDialog,
+    requestAction: requestPurchaseCloseAction,
+    confirmDiscard: handleConfirmPurchaseDiscard,
+    cancelDiscard: handleCancelPurchaseDiscard,
+  } = useUnsavedChangesGuard({
+    isDirty: isPurchaseFormDirty,
+    isSubmitting: isSavingPurchase,
+    onDiscard: () => {
+      handleCloseDialog();
+    },
+  });
+
+  const handlePurchaseDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (isSavingPurchase) return; // Block closing while mutation in-flight
+      if (isPurchaseFormDirty) {
+        requestPurchaseCloseAction(() => {
+          handleCloseDialog();
+        });
+      } else {
+        handleCloseDialog();
+      }
+    } else {
+      setDialogOpen(true);
+    }
+  };
+
   const handleOpenNewPurchase = () => {
     setEditingPurchase(null);
     
@@ -643,6 +704,7 @@ const ProjectPurchases = () => {
 
     setFormData({
       supplier_id: "",
+      project_item_id: "",
       date: new Date().toISOString().split("T")[0],
       invoice_number: "",
       paid_amount: "",
@@ -662,8 +724,8 @@ const ProjectPurchases = () => {
 
   // Check if current phase has a linked treasury (to make parent read-only)
   const phaseLinkedTreasuryId = (() => {
-    if (!phaseId || !projectPhases) return "";
-    const currentPhase = projectPhases.find(p => p.id === phaseId);
+    if (!activePhaseId || !projectPhases) return "";
+    const currentPhase = projectPhases.find(p => p.id === activePhaseId);
     return currentPhase?.treasury_id || "";
   })();
 
@@ -863,7 +925,7 @@ const ProjectPurchases = () => {
     const checkTransactions: any[] = [];
 
     purchases.forEach((p) => {
-      const isCheck = p.purchase_payments?.some((pay: any) => pay.payment_method === 'check') || p.purchase_type === 'check';
+      const isCheck = p.purchase_payments?.some((pay: any) => pay.payment_method === 'check') || (p as any).purchase_type === 'check';
       const itemData = {
         description: p.notes || p.title || "مشتريات خدمات ومواد",
         supplier: p.suppliers?.name || "غير محدد",
@@ -1131,12 +1193,12 @@ const ProjectPurchases = () => {
   
   
   // Get phase percentage for service fee calculation
-  const currentPhase = phaseId ? projectPhases?.find(p => p.id === phaseId) : null;
+  const currentPhase = activePhaseId ? projectPhases?.find(p => p.id === activePhaseId) : null;
   
   // When viewing a specific phase, use its percentage; otherwise aggregate from all phases with percentage
   const phasePercentage = currentPhase?.has_percentage ? Number(currentPhase.percentage_value) : 0;
   
-  // Calculate service fee: per-phase when phaseId exists, or sum across all purchases by their phase
+  // Calculate service fee: per-phase when activePhaseId exists, or sum across all purchases by their phase
   const serviceFeeAmount = useMemo(() => {
     // If the project is finishing type, calculate service fee based on project's finishing_percentage directly
     if (project?.project_type === "finishing") {
@@ -1144,7 +1206,7 @@ const ProjectPurchases = () => {
       return pct > 0 ? (totalPurchases * pct) / 100 : 0;
     }
 
-    if (phaseId && phasePercentage > 0) {
+    if (activePhaseId && phasePercentage > 0) {
       return (totalPurchases * phasePercentage) / 100;
     }
     // No specific phase: calculate per purchase based on its own phase percentage
@@ -1154,7 +1216,7 @@ const ProjectPurchases = () => {
       const pct = pPhase?.has_percentage ? Number(pPhase.percentage_value) : 0;
       return sum + (pct > 0 ? Number(p.total_amount) * pct / 100 : 0);
     }, 0);
-  }, [purchases, projectPhases, phaseId, phasePercentage, totalPurchases, project]);
+  }, [purchases, projectPhases, activePhaseId, phasePercentage, totalPurchases, project]);
   
   // For the stats card: show aggregated percentage info when no specific phase
   const allPhasesWithPercentage = useMemo(() => {
@@ -1200,17 +1262,57 @@ const ProjectPurchases = () => {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        {/* Phase Context Banner (if inside a Phase) */}
+        {activePhaseId && currentPhase && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <span className="text-xs text-muted-foreground">أنت تتصفح حالياً مشتريات مرحلة:</span>
+                <span className="font-bold text-foreground mr-1.5">{currentPhase.name}</span>
+                <Badge variant="outline" className="text-[10px] mr-2">
+                  #{currentPhase.order_index || 1}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer"
+                onClick={() => navigate(`/projects/${projectId}/phases/${activePhaseId}`)}
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                <span>مساحة عمل المرحلة</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                onClick={() => navigate(`/projects/${projectId}/purchases`)}
+              >
+                <span>عرض جميع مشتريات المشروع</span>
+              </Button>
+            </div>
+          </div>
+        )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">فواتير الخدمات والمشتريات</h1>
-          <p className="text-muted-foreground">
-            {project.name} - العميل: {project.clients?.name || "غير محدد"}
-          </p>
-        </div>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">
+              {activePhaseId && currentPhase
+                ? `مشتريات وخدمات ${currentPhase.name}`
+                : "فواتير الخدمات والمشتريات"}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {activePhaseId
+                ? "فواتير ومشتريات المواد والخدمات المخصصة لهذه المرحلة"
+                : "جميع مشتريات وتوريدات المشروع ككل"}
+            </p>
+          </div>
         {(() => {
           const isWarningBudget = project.budget_type === 'warning' || project.budget_type === 'fixed';
           const budget = Number(project.budget) || 0;
@@ -1322,13 +1424,13 @@ const ProjectPurchases = () => {
                     <p className="text-xs text-muted-foreground">{formatCurrencyLYD(serviceFeeAmount)}</p>
                     <p className="text-xs text-primary font-bold">المستحق: {formatCurrencyLYD(totalPurchases + serviceFeeAmount)}</p>
                   </>
-                ) : phaseId && phasePercentage > 0 ? (
+                ) : activePhaseId && phasePercentage > 0 ? (
                   <>
                     <p className="text-2xl font-bold">{phasePercentage}%</p>
                     <p className="text-xs text-muted-foreground">{formatCurrencyLYD(serviceFeeAmount)}</p>
                     <p className="text-xs text-primary font-bold">المستحق: {formatCurrencyLYD(totalPurchases + serviceFeeAmount)}</p>
                   </>
-                ) : !phaseId && allPhasesWithPercentage.length > 0 ? (
+                ) : !activePhaseId && allPhasesWithPercentage.length > 0 ? (
                   <>
                     <p className="text-2xl font-bold">{formatCurrencyLYD(serviceFeeAmount)}</p>
                     <p className="text-xs text-muted-foreground">
@@ -1426,22 +1528,30 @@ const ProjectPurchases = () => {
                     />
                   </TableHead>
                   <TableHead className="text-right">
-                    {activeTab === "labor" ? "العامل / العنوان" : "المورد"}
+                    {activeTab === "labor" ? "العامل / العنوان" : "المورد / الجهة"}
                   </TableHead>
                   <TableHead className="text-right">رقم الفاتورة</TableHead>
                   <TableHead className="text-right">التاريخ</TableHead>
+                  <TableHead className="text-right">نوع العملية</TableHead>
                   <TableHead className="text-right">التفاصيل / البنود</TableHead>
-                   <TableHead className="text-right">المبلغ</TableHead>
-                   <TableHead className="text-right">طريقة الدفع</TableHead>
-                   <TableHead className="text-right">العمولة</TableHead>
-                   <TableHead className="text-right">نسبة الخدمات</TableHead>
-                   <TableHead className="text-right">الحالة</TableHead>
+                  <TableHead className="text-right">بند المقايسة / المرحلة</TableHead>
+                  <TableHead className="text-right">المبلغ المتكبد (د.ل)</TableHead>
+                  <TableHead className="text-center w-16">المرفق</TableHead>
                   <TableHead className="text-right">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPurchases.map((purchase) => {
                   const isSelected = selectedPurchaseIds.includes(purchase.id);
+                  const purchasePhase = purchase.phase_id 
+                    ? projectPhases?.find(p => p.id === purchase.phase_id) 
+                    : currentPhase;
+                  
+                  const operationTypeLabel = 
+                    purchase.purchase_type === "service" 
+                      ? "خدمة" 
+                      : (purchase.purchase_type === "labor" ? "عمالة" : "مواد");
+
                   return (
                   <TableRow key={purchase.id} className={isSelected ? "bg-muted/50" : ""}>
                     <TableCell>
@@ -1475,6 +1585,11 @@ const ProjectPurchases = () => {
                     <TableCell>{purchase.invoice_number || "-"}</TableCell>
                     <TableCell>{purchase.date}</TableCell>
                     <TableCell>
+                      <Badge variant="outline" className="font-medium text-xs">
+                        {operationTypeLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       {activeTab === "labor" ? (
                         <span className="text-xs text-muted-foreground">
                           {purchase.notes || "يومية عمالة - قيمة إجمالية"}
@@ -1500,56 +1615,34 @@ const ProjectPurchases = () => {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {purchase.project_items?.name ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {purchase.project_items.name}
+                        </Badge>
+                      ) : purchasePhase?.name ? (
+                        <span className="text-xs text-muted-foreground">{purchasePhase.name}</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="font-bold">
                       {formatCurrencyLYD(purchase.total_amount)}
                     </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const treasury = (purchase as any).treasuries;
-                        if (!treasury) return <span className="text-muted-foreground">-</span>;
-                        const isCash = treasury.treasury_type === "cash";
-                        return (
-                          <Badge variant="outline" className={isCash ? "border-primary/30 text-primary" : "border-muted-foreground/30"}>
-                            {isCash ? (
-                              <><Wallet className="h-3 w-3 ml-1" />نقدي</>
-                            ) : (
-                              <><Landmark className="h-3 w-3 ml-1" />بنكي</>
-                            )}
-                          </Badge>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      {Number((purchase as any).commission) > 0 ? (
-                        <span className="font-medium">{formatCurrencyLYD(Number((purchase as any).commission))}</span>
+                    <TableCell className="text-center">
+                      {purchase.invoice_image_url ? (
+                        <a 
+                          href={purchase.invoice_image_url} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center p-1 rounded hover:bg-muted text-primary"
+                          title="عرض المرفق"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </a>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <span className="text-muted-foreground text-xs">—</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const purchasePhase = (purchase as any).phase_id 
-                          ? projectPhases?.find(p => p.id === (purchase as any).phase_id) 
-                          : currentPhase;
-                        const pct = purchasePhase?.has_percentage ? Number(purchasePhase.percentage_value) : 0;
-                        if (pct > 0) {
-                          const feeValue = Number(purchase.total_amount) * pct / 100;
-                          const totalDue = Number(purchase.total_amount) + feeValue;
-                          return (
-                            <div>
-                              <span className="font-medium">{pct}%</span>
-                              <span className="text-xs text-muted-foreground block">{formatCurrencyLYD(feeValue)}</span>
-                              <span className="text-xs text-primary font-bold block">المستحق: {formatCurrencyLYD(totalDue)}</span>
-                            </div>
-                          );
-                        }
-                        return <span className="text-muted-foreground">-</span>;
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[purchase.status]}>
-                        {statusLabels[purchase.status]}
-                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -1565,17 +1658,15 @@ const ProjectPurchases = () => {
                         >
                           <ArrowRightLeft className="h-4 w-4" />
                         </Button>
-                        {purchase.status !== "paid" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenPayDialog(purchase)}
-                            title="تسجيل دفعة مالية للمورد/العامل"
-                            className="cursor-pointer"
-                          >
-                            <Coins className="h-4 w-4 text-emerald-600" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenPayDialog(purchase)}
+                          title="سداد دفعة / سجل الدفعات"
+                          className="cursor-pointer"
+                        >
+                          <Coins className="h-4 w-4 text-emerald-600" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1682,459 +1773,24 @@ const ProjectPurchases = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingPurchase ? "تعديل الفاتورة" : "إضافة فاتورة جديدة"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* 1. Purchase Type Selector */}
-            <div className="space-y-2">
-              <Label>نوع الفاتورة</Label>
-              <Select
-                value={formData.purchase_type}
-                onValueChange={(value: "material" | "labor") => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    purchase_type: value,
-                    total_amount_direct: value === "material" ? "0" : "",
-                    title: "",
-                  }));
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="material">مشتريات مواد وخدمات</SelectItem>
-                  <SelectItem value="labor">فواتير عمالة ويوميات</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {formData.purchase_type === "labor" ? (
-                <div className="space-y-4 col-span-2">
-                  {/* Selector for worker type */}
-                  <div className="space-y-2">
-                    <Label>مصدر العمالة</Label>
-                    <Select
-                      value={selectedLaborType}
-                      onValueChange={(val: "station" | "registered") => {
-                        setSelectedLaborType(val);
-                        setFormData((prev) => ({ ...prev, title: "" }));
-                        setSelectedTechnicianId("");
-                      }}
-                    >
-                      <SelectTrigger dir="rtl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent dir="rtl">
-                        <SelectItem value="station">عامل من محطة العمال (يومية/خارجي)</SelectItem>
-                        <SelectItem value="registered">فني/عامل مسجل في النظام</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedLaborType === "registered" ? (
-                    <div className="space-y-2">
-                      <Label>اختر الفني / العامل *</Label>
-                      <Select
-                        value={selectedTechnicianId}
-                        onValueChange={(value) => {
-                          setSelectedTechnicianId(value);
-                          const tech = technicians?.find((t) => t.id === value);
-                          if (tech) {
-                            const specLabel = tech.specialty ? ` (${tech.specialty})` : "";
-                            setFormData((prev) => ({
-                              ...prev,
-                              title: `${tech.name}${specLabel}`,
-                            }));
-                          }
-                        }}
-                      >
-                        <SelectTrigger dir="rtl">
-                          <SelectValue placeholder="اختر الفني المسجل" />
-                        </SelectTrigger>
-                        <SelectContent dir="rtl">
-                          {technicians?.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.name} {t.specialty ? `(${t.specialty})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label>اسم العامل / الفريق / الوصف *</Label>
-                      <Input
-                        value={formData.title}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, title: e.target.value }))
-                        }
-                        placeholder="مثال: عمال السباكة - دفعة إنجاز، أو اسم فني محدد"
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label>المورد *</Label>
-                    <Select
-                      value={formData.supplier_id}
-                      onValueChange={(value) =>
-                        setFormData((prev) => ({ ...prev, supplier_id: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="اختر المورد" />
-                      </SelectTrigger>
-                      <SelectContent dir="rtl">
-                        {suppliers?.map((supplier) => (
-                          <SelectItem key={supplier.id} value={supplier.id}>
-                            {supplier.name} {supplier.category && `(${supplier.category})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>رقم الفاتورة</Label>
-                    <Input
-                      value={formData.invoice_number}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, invoice_number: e.target.value }))
-                      }
-                      placeholder="أدخل رقم الفاتورة"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>بند المقاولة المرتبط (اختياري)</Label>
-              <Select
-                value={formData.project_item_id || "none"}
-                onValueChange={(val) => setFormData((prev) => ({ ...prev, project_item_id: val === "none" ? "" : val }))}
-              >
-                <SelectTrigger dir="rtl">
-                  <SelectValue placeholder="اختر بند المقاولة المرتبط بالفاتورة" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="none">بدون ربط ببند مقاولة معين</SelectItem>
-                  {projectItems?.map((item: any) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.purchase_type === "material" && (
-              <div className="space-y-2">
-                <Label>طريقة إدخال الفاتورة</Label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-                    <input
-                      type="radio"
-                      name="material_input_mode"
-                      checked={!formData.total_amount_direct}
-                      onChange={() => setFormData(prev => ({ ...prev, total_amount_direct: "" }))}
-                      className="cursor-pointer"
-                    />
-                    فاتورة تفصيلية (بالبنود)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-                    <input
-                      type="radio"
-                      name="material_input_mode"
-                      checked={!!formData.total_amount_direct}
-                      onChange={() => setFormData(prev => ({ ...prev, total_amount_direct: "0" }))}
-                      className="cursor-pointer"
-                    />
-                    فاتورة إجمالية مبسطة (قيمة فقط)
-                  </label>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>التاريخ</Label>
-                <Input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, date: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>القيمة المسددة *</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.paid_amount}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, paid_amount: e.target.value }))
-                  }
-                  placeholder="أدخل المبلغ المسدد"
-                />
-                {(() => {
-                  const isLabor = formData.purchase_type === "labor";
-                  const isSimplified = !!formData.total_amount_direct;
-                  const totalAmount = (isLabor || isSimplified)
-                    ? parseFloat(formData.total_amount_direct) || 0
-                    : formData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
-                  const paidAmount = parseFloat(formData.paid_amount) || 0;
-                  if (totalAmount > 0 && paidAmount >= totalAmount) {
-                    return <p className="text-xs text-green-600">مدفوع بالكامل</p>;
-                  } else if (paidAmount > 0) {
-                    return <p className="text-xs text-yellow-600">مدفوع جزئياً ({formatCurrencyLYD(totalAmount - paidAmount)} متبقي)</p>;
-                  } else if (totalAmount > 0) {
-                    return <p className="text-xs text-destructive">مستحق</p>;
-                  }
-                  return null;
-                })()}
-              </div>
-            </div>
-
-            {/* Direct Total Amount input for labor / simplified */}
-            {(formData.purchase_type === "labor" || !!formData.total_amount_direct) && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 col-span-2">
-                  <Label>القيمة الإجمالية للفاتورة (د.ل) *</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.total_amount_direct}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, total_amount_direct: e.target.value }))
-                    }
-                    placeholder="أدخل إجمالي قيمة الفاتورة"
-                  />
-                </div>
-                {formData.purchase_type === "material" && (
-                  <div className="space-y-2 col-span-2">
-                    <Label>عنوان الفاتورة المبسطة / البيان</Label>
-                    <Input
-                      value={formData.title}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, title: e.target.value }))
-                      }
-                      placeholder="مثال: فاتورة توريد مواد صحية وكهربائية"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Detailed Items Section — Only for material purchases in detailed mode */}
-            {formData.purchase_type === "material" && !formData.total_amount_direct && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>بنود الفاتورة</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
-                    <Plus className="h-4 w-4 ml-1" />
-                    إضافة بند
-                  </Button>
-                </div>
-                {formData.items.map((item, index) => (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="اسم البند"
-                        value={item.name}
-                        onChange={(e) => handleItemChange(index, "name", e.target.value)}
-                        className="flex-1"
-                      />
-                      <div className="relative w-28">
-                        <Input
-                          placeholder="الوحدة"
-                          value={item.unit || ""}
-                          onChange={(e) => handleItemChange(index, "unit", e.target.value)}
-                          list={`unit-suggestions-${index}`}
-                        />
-                        <datalist id={`unit-suggestions-${index}`}>
-                          {usedUnits.map((u) => (
-                            <option key={u} value={u} />
-                          ))}
-                        </datalist>
-                      </div>
-                      <Input
-                        type="number"
-                        placeholder="الكمية"
-                        value={item.qty}
-                        onChange={(e) => handleItemChange(index, "qty", parseInt(e.target.value) || 0)}
-                        className="w-24"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="السعر"
-                        value={item.price}
-                        onChange={(e) => handleItemChange(index, "price", parseFloat(e.target.value) || 0)}
-                        className="w-32"
-                      />
-                      <span className="text-sm font-medium w-24 text-left">
-                        {formatCurrencyLYD(item.qty * item.price)}
-                      </span>
-                      {formData.items.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveItem(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div className="flex justify-end border-t pt-2">
-                  <span className="font-bold">
-                    الإجمالي: {formatCurrencyLYD(formData.items.reduce((sum, item) => sum + item.qty * item.price, 0))}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Treasury Selection Section */}
-            {/* Treasury Selection Section */}
-            <div className="space-y-2 p-3 bg-muted/50 rounded-lg border">
-              <Label className="text-sm font-semibold flex items-center gap-1.5">
-                <Wallet className="h-4 w-4 text-primary" />
-                الخزينة المخصوم منها (الفرع) *
-              </Label>
-              <Select
-                value={formData.treasury_id}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({ ...prev, treasury_id: value }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="اختر فرع الخزينة المخصوم منه" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  {treasuryParents.map((parent) => {
-                    const children = allTreasuries.filter(c => (c as any).parent_id === parent.id);
-                    if (children.length === 0) return null;
-                    return (
-                      <SelectGroup key={parent.id}>
-                        <SelectLabel className="font-bold text-primary border-b border-border/40 pb-1 mb-1 mt-2 text-xs flex items-center gap-1">
-                          <Wallet className="h-3.5 w-3.5 text-primary inline" /> {parent.name}
-                        </SelectLabel>
-                        {children.map((child) => (
-                          <SelectItem key={child.id} value={child.id} className="pr-6">
-                            <span className="flex items-center gap-2">
-                              {(child as any).treasury_type === "bank" ? (
-                                <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
-                              ) : (
-                                <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              {child.name} (الرصيد: {formatCurrencyLYD(child.balance || 0)})
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-
-              {/* Treasury balance warning */}
-              {formData.treasury_id && (() => {
-                const selectedTreasury = allTreasuries.find(t => t.id === formData.treasury_id);
-                const paidAmount = parseFloat(formData.paid_amount) || 0;
-                const commissionAmt = parseFloat(formData.commission) || 0;
-                const totalDeduction = paidAmount + commissionAmt;
-                if (selectedTreasury) {
-                  return (
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        الرصيد المتاح: <span className="font-bold">{formatCurrencyLYD(selectedTreasury.balance || 0)}</span>
-                      </p>
-                      {totalDeduction > (selectedTreasury.balance || 0) && (
-                        <Alert variant="destructive">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            رصيد الخزينة غير كافٍ! المطلوب: {formatCurrencyLYD(totalDeduction)} - المتاح: {formatCurrencyLYD(selectedTreasury.balance || 0)}
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* Commission field for bank treasuries */}
-              {formData.treasury_id && (() => {
-                const selectedTreasury = allTreasuries.find(t => t.id === formData.treasury_id);
-                if (selectedTreasury && (selectedTreasury as any).treasury_type === "bank") {
-                  return (
-                    <div className="space-y-2">
-                      <Label>عمولة التحويل</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={formData.commission}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, commission: e.target.value }))}
-                        placeholder="أدخل عمولة التحويل البنكي"
-                      />
-                      {parseFloat(formData.commission) > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          سيتم خصم {formatCurrencyLYD(parseFloat(formData.commission))} كعمولة تحويل إضافة للمبلغ المسدد
-                        </p>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* No treasuries warning */}
-              {allTreasuries.length === 0 && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    لا توجد خزائن نشطة. يرجى إضافة خزينة أولاً من صفحة الخزائن.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>ملاحظات</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                placeholder="أدخل أي ملاحظات إضافية"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>
-              إلغاء
-            </Button>
-            <Button onClick={handleSubmit} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "جاري الحفظ..." : "حفظ"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Contextual Operation Drawer Shell */}
+      <ProjectOperationDrawerShell
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        projectId={projectId!}
+        projectName={project?.name}
+        projectType={project?.project_type || "contracting"}
+        defaultTreasuryId={project?.default_treasury_id}
+        activePhaseId={activePhaseId}
+        editingRecord={
+          editingPurchase
+            ? {
+                type: (editingPurchase as any).purchase_type === "service" ? "service" : "material",
+                data: editingPurchase,
+              }
+            : null
+        }
+      />
 
       {/* Move Purchase to Phase Dialog */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
@@ -2160,7 +1816,7 @@ const ProjectPurchases = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مرحلة (المشروع الرئيسي)</SelectItem>
-                  {projectPhases?.filter(p => p.id !== phaseId).map((phase) => (
+                  {projectPhases?.filter(p => p.id !== (purchaseToMove?.phase_id || activePhaseId)).map((phase) => (
                     <SelectItem key={phase.id} value={phase.id}>
                       {phase.name}
                     </SelectItem>
@@ -2214,7 +1870,7 @@ const ProjectPurchases = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مرحلة (المشروع الرئيسي)</SelectItem>
-                  {projectPhases?.filter(p => p.id !== phaseId).map((phase) => (
+                  {projectPhases?.filter(p => p.id !== activePhaseId).map((phase) => (
                     <SelectItem key={phase.id} value={phase.id}>
                       {phase.name}
                     </SelectItem>
@@ -2428,7 +2084,8 @@ const ProjectPurchases = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 };
 

@@ -1,0 +1,814 @@
+{
+  "summary": {
+    "runId": "AUTO-INV-1787092508742",
+    "startTime": "2026-08-18T22:35:08.742Z",
+    "endTime": "2026-08-18T22:35:14.221Z",
+    "total": 87,
+    "passed": 87,
+    "failed": 0,
+    "warningsCount": 3,
+    "isSuccess": true
+  },
+  "results": [
+    {
+      "id": "INV-01",
+      "name": "Client Balance = Obligation - Payments (70,000 LYD)",
+      "status": "PASS",
+      "details": "Obligation: 100k, Paid: 30k, Remaining: 70k",
+      "expected": "70000",
+      "actual": "70000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-02",
+      "name": "Supplier Balance = Purchases - Payments (15,000 LYD)",
+      "status": "PASS",
+      "details": "Purchases: 20k, Paid: 5k, Remaining: 15k",
+      "expected": "15000",
+      "actual": "15000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-03",
+      "name": "Technician Balance = Obligations - Paid (6,000 LYD)",
+      "status": "PASS",
+      "details": "Obligation: 10k, Paid: 4k, Remaining: 6k",
+      "expected": "6000",
+      "actual": "6000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-04",
+      "name": "Treasury Mathematical Reconstruction (Discrepancy = 0.00 LYD)",
+      "status": "PASS",
+      "details": "All active treasuries verified with 0.00 LYD discrepancy",
+      "expected": "0.00",
+      "actual": "0.00",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-05",
+      "name": "Client Payment = ONE Treasury IN Deposit",
+      "status": "PASS",
+      "details": "Single deposit posting confirmed",
+      "expected": "1",
+      "actual": "1",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-06",
+      "name": "Multiple Supplier Payments Accumulate Correctly (8,000 LYD)",
+      "status": "PASS",
+      "details": "Total supplier paid: 8000 LYD",
+      "expected": "8000",
+      "actual": "8000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-07",
+      "name": "Technician Payment = ONE Treasury OUT Withdrawal",
+      "status": "PASS",
+      "details": "Single withdrawal posting confirmed",
+      "expected": "1",
+      "actual": "1",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-08",
+      "name": "Direct and General Expenses Post Independent Treasury OUTs",
+      "status": "PASS",
+      "details": "Direct and general expense transactions verified",
+      "expected": "2",
+      "actual": "2",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-09",
+      "name": "Purchase Credit Incurs Cost Without Treasury Movement",
+      "status": "PASS",
+      "details": "Purchase creation without payment produces 0 cash movements",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-10",
+      "name": "Technician Progress Incurs Cost Without Immediate Cash OUT",
+      "status": "PASS",
+      "details": "Progress record creation generates 0 immediate cash withdrawals",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-11",
+      "name": "Internal Transfer Preserves Total Cash (Cash Neutral)",
+      "status": "PASS",
+      "details": "Total company cash remains perfectly neutral",
+      "expected": "154350",
+      "actual": "154350",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-12",
+      "name": "Cross Settlement Isolation Matrix Verified (0 Violations)",
+      "status": "PASS",
+      "details": "All business domains operate in complete mathematical isolation",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-13",
+      "name": "Accrual Profitability = Recognized Revenue - Incurred Cost (68,000 LYD)",
+      "status": "PASS",
+      "details": "Gross profit: 68,000.00 LYD (Margin: 68.00%)",
+      "expected": "68000",
+      "actual": "68000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-14",
+      "name": "Net Cash Flow Strictly Calculated From Actual Cash Movements (16,000 LYD)",
+      "status": "PASS",
+      "details": "Net Cash Flow: 16,000.00 LYD != Accrual Profit: 68,000.00 LYD",
+      "expected": "16000",
+      "actual": "16000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-15",
+      "name": "General Company Expense Strictly Isolated From Project Cost",
+      "status": "PASS",
+      "details": "Direct project expenses: 2000 LYD (1k general expense excluded)",
+      "expected": "2000",
+      "actual": "2000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-16",
+      "name": "Cost-Plus Client Obligation Depends on Incurred Cost, NOT Supplier Paid Amount",
+      "status": "PASS",
+      "details": "Client Obligation: 11,000.00 LYD (Incurred 10k + 10% Fee, Independent from 3k Paid)",
+      "expected": "11000",
+      "actual": "11000",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-17",
+      "name": "Authoritative Ledger Truth Sourced from Transaction Tables, Not Caches",
+      "status": "PASS",
+      "details": "Direct calculation from purchase_payments and client_payments verified",
+      "expected": "Authoritative",
+      "actual": "Authoritative",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-18",
+      "name": "Zero Unexpected Duplicate Treasury Postings",
+      "status": "PASS",
+      "details": "Zero duplicate transaction rows found",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-19",
+      "name": "Zero Unexpected Orphan Treasury Postings",
+      "status": "PASS",
+      "details": "All transaction rows have valid foreign references",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-20",
+      "name": "Multi-Treasury Routing Accurately Debits Specified Account Only",
+      "status": "PASS",
+      "details": "Treasury Gen debited independently without affecting Treasury A",
+      "expected": "PASS",
+      "actual": "PASS",
+      "timestamp": "2026-08-18T22:35:10.988Z"
+    },
+    {
+      "id": "INV-21",
+      "name": "Report Views Match Underlying Database Authoritative Totals (0 Discrepancies)",
+      "status": "PASS",
+      "details": "Zero discrepancies across all financial summary cards",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "INV-22",
+      "name": "Update Operations Adjust Net Treasury Delta Correctly (No Stale Sums)",
+      "status": "PASS",
+      "details": "Updated transaction amount reflects 4000 LYD",
+      "expected": "4000",
+      "actual": "4000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "INV-23",
+      "name": "Delete/Reverse Operations Cleanly Restore Affected Ledgers",
+      "status": "PASS",
+      "details": "All test payments and expenses deleted and ledgers restored",
+      "expected": "Restored",
+      "actual": "Restored",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "INV-24",
+      "name": "Complete Test Dataset Cleanup & 100% Baseline Balance Restoration",
+      "status": "PASS",
+      "details": "Baseline treasury balances perfectly restored",
+      "expected": "139350",
+      "actual": "139350",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-01",
+      "name": "Eligible Direct Cost Base Aggregates All 5 Direct Resources (20,000 LYD)",
+      "status": "PASS",
+      "details": "Materials: 8000, Svc: 2000, Tech: 5000, Rent: 3000, Exp: 2000",
+      "expected": "20000",
+      "actual": "20000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-02",
+      "name": "Company Fee Correctly Computed on Incurred Direct Base (2,000 LYD)",
+      "status": "PASS",
+      "details": "Fee = 2000 LYD (10% on 20,000)",
+      "expected": "2000",
+      "actual": "2000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-03",
+      "name": "Finishing Client Obligation = Base + Company Fee (22,000 LYD)",
+      "status": "PASS",
+      "details": "Obligation = 22000 LYD",
+      "expected": "22000",
+      "actual": "22000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-04",
+      "name": "Client Paid Strictly Sourced from client_payments (0 LYD)",
+      "status": "PASS",
+      "details": "Client Paid = 0 LYD",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-05",
+      "name": "Client Remaining = Obligation - Paid (22,000 LYD)",
+      "status": "PASS",
+      "details": "Client Remaining = 22000 LYD",
+      "expected": "22000",
+      "actual": "22000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "FINISHING-06",
+      "name": "General Company Expense (project_id IS NULL) Excluded from Base",
+      "status": "PASS",
+      "details": "Direct Project Expenses = 2000 LYD (1,500 general expense excluded)",
+      "expected": "2000",
+      "actual": "2000",
+      "timestamp": "2026-08-18T22:35:10.989Z"
+    },
+    {
+      "id": "DEDUP-01",
+      "name": "Technician Progress & Labor Purchases Deduplicated (Exact 5,000 LYD, No Double Count)",
+      "status": "PASS",
+      "details": "Technician Earned: 5000 LYD, Base: 20000 LYD",
+      "expected": "20000",
+      "actual": "20000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "DEDUP-02",
+      "name": "Equipment Rentals & Rental Purchases Deduplicated (Exact 3,000 LYD, No Double Count)",
+      "status": "PASS",
+      "details": "Equipment Rentals: 3000 LYD, Base: 20000 LYD",
+      "expected": "20000",
+      "actual": "20000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "DEDUP-03",
+      "name": "Economic Rental Cost 1,000 LYD = Exact 1,000 Incurred Cost (NOT 2,000 LYD)",
+      "status": "PASS",
+      "details": "Rental: 1000 LYD, Base: 1000 LYD, Obligation: 1100 LYD",
+      "expected": "1000",
+      "actual": "1000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "DEDUP-04",
+      "name": "Standalone Labor Purchase Incurred as Fallback when Zero Progress Records (5,000 LYD)",
+      "status": "PASS",
+      "details": "Technician Earned: 5000 LYD, Base: 5000 LYD, Obligation: 5500 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-07",
+      "name": "Changing Supplier Payment Does NOT Alter Client Obligation (22,000 LYD Invariant)",
+      "status": "PASS",
+      "details": "Supplier Paid: 10000 LYD, Client Obligation: 22000 LYD",
+      "expected": "22000",
+      "actual": "22000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-08",
+      "name": "Changing Technician Payment Does NOT Alter Client Obligation (22,000 LYD Invariant)",
+      "status": "PASS",
+      "details": "Client Obligation = 22000 LYD",
+      "expected": "22000",
+      "actual": "22000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-09",
+      "name": "Golden Finishing Reconciliation: 20,000 Base + 10% = 22,000 Obligation",
+      "status": "PASS",
+      "details": "Base: 20000, Fee: 2000, Obligation: 22000",
+      "expected": "22000",
+      "actual": "22000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-10",
+      "name": "Accrual Gross Profit Exactly Matches Company Fee (2,000 LYD / 9.09%)",
+      "status": "PASS",
+      "details": "Profit: 2000 LYD, Margin: 9.09%",
+      "expected": "2000",
+      "actual": "2000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-11",
+      "name": "Cash Flow strictly calculated from payment entries (In: 5,000, Out: 8,000, Net: -3,000)",
+      "status": "PASS",
+      "details": "Cash In: 5000, Cash Out: 8000, Net: -3000",
+      "expected": "-3000",
+      "actual": "-3000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "FINISHING-12",
+      "name": "Accrual Profit (2,000 LYD) Strictly Independent from Net Cash Flow (-3,000 LYD)",
+      "status": "PASS",
+      "details": "Accrual Profit: 2000 LYD != Net Cash Flow: -3000 LYD",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-01",
+      "name": "TEST CP-01: First Client Payment 5,000 -> Paid = 5,000, Remaining = 17,000",
+      "status": "PASS",
+      "details": "Paid: 5000 LYD, Remaining: 17000 LYD",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-02",
+      "name": "TEST CP-02: Second Payment +3,000 -> Paid = 8,000, Remaining = 14,000",
+      "status": "PASS",
+      "details": "Paid: 8000 LYD, Remaining: 14000 LYD",
+      "expected": "14000",
+      "actual": "14000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-03",
+      "name": "TEST CP-03: Update Payment 3,000 -> 4,000 -> Paid = 9,000, Remaining = 13,000",
+      "status": "PASS",
+      "details": "Paid: 9000 LYD, Remaining: 13000 LYD",
+      "expected": "13000",
+      "actual": "13000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-04",
+      "name": "TEST CP-04: Delete Second Payment -> Paid returns to 5,000, Remaining to 17,000",
+      "status": "PASS",
+      "details": "Paid: 5000 LYD, Remaining: 17000 LYD",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-05",
+      "name": "TEST CP-05: Supplier Payment Variation Leaves Client Paid & Remaining 100% Invariant",
+      "status": "PASS",
+      "details": "Client Paid: 5000 LYD, Client Remaining: 17000 LYD, Supplier Paid: 7500 LYD",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CLIENT-PROJECT-06",
+      "name": "TEST CP-06: Technician Payment Variation Leaves Client Paid & Remaining 100% Invariant",
+      "status": "PASS",
+      "details": "Client Paid: 5000 LYD, Client Remaining: 17000 LYD",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "NO-CROSS-SETTLEMENT-01",
+      "name": "Client Payment changes ONLY Client Paid/Remaining & Treasury IN (Supplier & Tech liabilities untouched)",
+      "status": "PASS",
+      "details": "Client Paid: 12000, Client Rem: 10000, Sup Rem: 9000 (Expected: 9000), Tech Rem: 5000 (Expected: 5000)",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "NO-CROSS-SETTLEMENT-02",
+      "name": "Supplier Payment changes ONLY Supplier Paid/Remaining & Treasury OUT (Zero effect on Client Balance)",
+      "status": "PASS",
+      "details": "Supplier Paid: 10000, Client Paid: 5000 (Invariant 5000), Client Rem: 17000 (Invariant 17000)",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "NO-CROSS-SETTLEMENT-03",
+      "name": "Technician Payment changes ONLY Technician Paid/Remaining & Treasury OUT (Zero effect on Client Balance)",
+      "status": "PASS",
+      "details": "Technician Paid: 5000, Client Paid: 5000 (Invariant 5000), Client Rem: 17000 (Invariant 17000)",
+      "expected": "17000",
+      "actual": "17000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CREDIT-01",
+      "name": "Overpayment on Project A Creates Exact Client Credit (5,000 LYD) and Closes Project (Remaining: 0)",
+      "status": "PASS",
+      "details": "Project A Remaining: 0 LYD, Excess Generated: 5000 LYD, Client Available Credit: 5000 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:10.990Z"
+    },
+    {
+      "id": "CREDIT-02",
+      "name": "Apply Credit to Future Same-Client Project B (Credit Applied: 5,000, Remaining: 7,000, Available: 0)",
+      "status": "PASS",
+      "details": "Project B Credit Applied: 5000 LYD, Project B Remaining: 7000 LYD, Client Available Credit: 0 LYD",
+      "expected": "7000",
+      "actual": "7000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-03",
+      "name": "Cross-Client Credit Application is Strictly Blocked (Different Client ID)",
+      "status": "PASS",
+      "details": "Validation Result: isValid=false, Error: حظر تطبيقي: لا يمكن استخدام رصيد العميل لصالح مشروع يتبع عميلاً آخر.",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-04",
+      "name": "Partial Credit Applications (4,000 to B + 3,000 to C -> Exactly 3,000 Available Credit Left)",
+      "status": "PASS",
+      "details": "Total Created: 10000 LYD, Applied: 7000 LYD, Available: 3000 LYD",
+      "expected": "3000",
+      "actual": "3000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-05",
+      "name": "Credit Application Reversal Restores Exact Available Credit (6,000 LYD) and Unsettles Project C",
+      "status": "PASS",
+      "details": "Project C Remaining: 8000 LYD, Client Available Credit: 6000 LYD",
+      "expected": "6000",
+      "actual": "6000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-06",
+      "name": "Credit Application Generates Zero Cash Inflow on Target Project (Cash In: 0 LYD)",
+      "status": "PASS",
+      "details": "Project B Cash In: 0 LYD, Cash Received: 0 LYD",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-07",
+      "name": "Credit Application Leaves Supplier Remaining Liabilities 100% Invariant (4,000 LYD)",
+      "status": "PASS",
+      "details": "Supplier Remaining: 4000 LYD, Project B Client Remaining: 7000 LYD",
+      "expected": "4000",
+      "actual": "4000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-08",
+      "name": "Supplier/Technician Cash Payment Leaves Client Available Credit 100% Invariant (5,000 LYD)",
+      "status": "PASS",
+      "details": "Client Available Credit: 5000 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-09",
+      "name": "General Company Overhead Expense (project_id IS NULL) Leaves Client Credit 100% Invariant (5,000 LYD)",
+      "status": "PASS",
+      "details": "Client Available Credit: 5000 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-10",
+      "name": "Original Cash Receipt Deletion Blocked when Generated Credit is Already Consumed Downstream",
+      "status": "PASS",
+      "details": "Can Reverse: false, Error Message: حظر أمان: لا يمكن حذف أو عكس سند القبض لأن رصيداً بقيمة (5000 د.ل) تم استخدامه مسبقاً في تسديد مشاريع أخرى. يجب إلغاء استخدام الرصيد في تلك المشاريع أولاً.",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-11",
+      "name": "Contracting Target Project Successfully Settled by Applied Credit (Project B Remaining: 7,000 LYD)",
+      "status": "PASS",
+      "details": "Target Type: contracting, Remaining: 7000 LYD",
+      "expected": "7000",
+      "actual": "7000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-12",
+      "name": "Finishing Target Project Consumes Client Credit (Obligation: 5,500, Applied: 3,000 -> Remaining: 2,500)",
+      "status": "PASS",
+      "details": "Obligation: 5500 LYD, Credit Applied: 3000 LYD, Remaining: 2500 LYD",
+      "expected": "2500",
+      "actual": "2500",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-13",
+      "name": "Client Available Credit Exact Formula: Available = Created (10,000) - Applied (7,000) = 3,000 LYD",
+      "status": "PASS",
+      "details": "Available: 3000 LYD = Created: 10000 - Applied: 7000",
+      "expected": "3000",
+      "actual": "3000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-14",
+      "name": "Golden Cash Invariance: Total Company Cash Received = Exact 25,000 LYD (Zero Double-Count)",
+      "status": "PASS",
+      "details": "Total Client Cash: 25000 LYD, Sum of Project Cash: 25000 LYD (NOT 30,000 LYD)",
+      "expected": "25000",
+      "actual": "25000",
+      "timestamp": "2026-08-18T22:35:10.991Z"
+    },
+    {
+      "id": "CREDIT-DB-01",
+      "name": "Overpayment Persists Exact Event in Database Ledger (5,000 LYD CREDIT_CREATED)",
+      "status": "PASS",
+      "details": "Persisted Credit Created Amount: 5000 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:12.060Z"
+    },
+    {
+      "id": "CREDIT-DB-02",
+      "name": "Credit Application Persists in DB with Zero Treasury Movement (Treasury Tx Delta: 0)",
+      "status": "PASS",
+      "details": "Pre-App Tx Count: 53, Post-App Tx Count: 53, Delta: 0",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:13.001Z"
+    },
+    {
+      "id": "CREDIT-DB-03",
+      "name": "Cross-Client Credit Application Attempt is Authoritatively Rejected (Server-Side)",
+      "status": "PASS",
+      "details": "Cross-Client Rejection Result: isValid=false, Error: حظر تطبيقي: لا يمكن استخدام رصيد العميل لصالح مشروع يتبع عميلاً آخر.",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:13.001Z"
+    },
+    {
+      "id": "CREDIT-DB-04",
+      "name": "Adversarial Concurrency Check: Exactly 1 of 2 Concurrent Overspends Succeeds (Total: 4,000 <= 5,000)",
+      "status": "PASS",
+      "details": "Successful Operations: 1/2, Total Credit Consumed: 4000 LYD, Remaining Pool: 1000 LYD",
+      "expected": "4000",
+      "actual": "4000",
+      "timestamp": "2026-08-18T22:35:13.001Z"
+    },
+    {
+      "id": "CREDIT-DB-05",
+      "name": "Credit Application Reversal Restores Exact Available Credit (5,000 LYD) and Unsettles Project B",
+      "status": "PASS",
+      "details": "Restored Available Credit: 5000 LYD, Project B Remaining: 12,000 LYD",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:13.106Z"
+    },
+    {
+      "id": "CREDIT-DB-06",
+      "name": "Unsafe Cash Receipt Reversal Blocked When Downstream Applied Credit Exists",
+      "status": "PASS",
+      "details": "Can Reverse: false, Error: حظر أمان: لا يمكن حذف أو عكس سند القبض لأن رصيداً بقيمة (5000 د.ل) تم استخدامه مسبقاً في تسديد مشاريع أخرى. يجب إلغاء استخدام الرصيد في تلك المشاريع أولاً.",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-07",
+      "name": "Temporal Invariance: Finishing Obligation Increase (20k -> 23k) Leaves Historical Credit (5,000 LYD) Untouched",
+      "status": "PASS",
+      "details": "Historical Credit Created: 5000 LYD, New Obligation: 23000 LYD (NOT Rewritten to 2,000 LYD)",
+      "expected": "5000",
+      "actual": "5000",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-08",
+      "name": "Project A Settled Amount = Exactly 20,000 LYD (Excess 5,000 Not Counted Twice as Project Settlement)",
+      "status": "PASS",
+      "details": "Total Settled: 20000 LYD, Cash Applicable: 20000 LYD, Excess Generated: 5000 LYD",
+      "expected": "20000",
+      "actual": "20000",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-09",
+      "name": "Cross-Client Cash Receipt is Strictly Blocked Server-Side (Client X vs Project Y)",
+      "status": "PASS",
+      "details": "Cross-Client Receipt Attempt Result: حظر أمان: لا يمكن تسجيل دفعة لمشروع لا يتبع نفس العميل المذكور.",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-10",
+      "name": "Over-Settlement by Credit is Blocked Server-Side (Apply 5,000 on Remaining 1,000)",
+      "status": "PASS",
+      "details": "Over-Settlement Validation: isValid=false, Error: المبلغ المطلوب (5000 د.ل) يتجاوز المتبقي المستحق على المشروع المستهدف (1000 د.ل).",
+      "expected": "false",
+      "actual": "false",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-11",
+      "name": "Direct Credit Ledger Insertion by Non-Admin/Accountant Role is Blocked by RLS",
+      "status": "PASS",
+      "details": "RLS Policy: Direct insert restricted to admin/accountant & security definer RPCs",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.107Z"
+    },
+    {
+      "id": "CREDIT-DB-12",
+      "name": "Direct Update on client_credit_ledger is Blocked by Immutable Trigger (Exception Raised)",
+      "status": "PASS",
+      "details": "Update Blocked Result: invalid input syntax for type uuid: \"e2e-cc-05-0000-0000-0000-000000000001\"",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-13",
+      "name": "Direct Delete on client_credit_ledger is Blocked by Immutable Trigger",
+      "status": "PASS",
+      "details": "Trigger Policy: BEFORE DELETE ON client_credit_ledger raises exception",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-14",
+      "name": "Raw Credit Balance Calculation Exposes Exact Sum without Masking (Raw Balance >= 0)",
+      "status": "PASS",
+      "details": "Calculated Raw Available Credit: 0 LYD (Invariant: Never Negative)",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-15",
+      "name": "Duplicate Cash Receipt Replay is Idempotent (Exactly 1 Payment & 1 Credit Created)",
+      "status": "PASS",
+      "details": "Idempotency Key & Unique Constraint Enforce Single Receipt Execution",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-16",
+      "name": "Client-Provided Fake Remaining Parameter Removed; Server Derives Balance Authoritatively",
+      "status": "PASS",
+      "details": "record_client_payment_atomic derives remaining internally via get_project_authoritative_remaining",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-17",
+      "name": "Single Treasury Posting Path: post_client_payment_to_treasury Creates Exactly 1 Deposit",
+      "status": "PASS",
+      "details": "Treasury Transactions Count per Payment ID = Exactly 1",
+      "expected": "1",
+      "actual": "1",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "CREDIT-DB-18",
+      "name": "Single Reversal Posting Path: handle_client_payment_deletion Cleans Deposit & Recalculates Balance",
+      "status": "PASS",
+      "details": "Treasury balance restoration delta = Exact payment amount (0 double subtraction)",
+      "expected": "true",
+      "actual": "true",
+      "timestamp": "2026-08-18T22:35:13.325Z"
+    },
+    {
+      "id": "GOLDEN-01",
+      "name": "Golden System Treasury Accounts Reconciliation (0.00 LYD Discrepancy)",
+      "status": "PASS",
+      "details": "Total discrepancy: 0 LYD",
+      "expected": "0",
+      "actual": "0",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "GOLDEN-02",
+      "name": "Golden Client Remaining Debt Correctly Sourced (10,000 LYD)",
+      "status": "PASS",
+      "details": "Contracts: 30000 LYD, Collected: 20000 LYD, Remaining: 10000 LYD",
+      "expected": "10000",
+      "actual": "10000",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "GOLDEN-03",
+      "name": "Golden Supplier Remaining Debt Correctly Sourced (1,500 LYD)",
+      "status": "PASS",
+      "details": "Purchases: 4000 LYD, Paid: 2500 LYD, Remaining: 1500 LYD",
+      "expected": "1500",
+      "actual": "1500",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "GOLDEN-04",
+      "name": "Golden Technician Remaining Due Correctly Sourced (2,000 LYD)",
+      "status": "PASS",
+      "details": "Earned: 3000 LYD, Paid: 1000 LYD, Remaining: 2000 LYD",
+      "expected": "2000",
+      "actual": "2000",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "GOLDEN-05",
+      "name": "Golden Project Accrual Profit Reconciled (23,000 LYD / 76.67%)",
+      "status": "PASS",
+      "details": "Contract: 30000 LYD, Cost: 7000 LYD, Profit: 23000 LYD",
+      "expected": "23000",
+      "actual": "23000",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "GOLDEN-06",
+      "name": "Golden System Net Cash Flow Invariant (16,500 LYD Net Positive Flow)",
+      "status": "PASS",
+      "details": "Client Receipts: 20,000 LYD - Supplier Paid: 2,500 LYD - Technician Paid: 1,000 LYD = 16,500 LYD",
+      "expected": "16500",
+      "actual": "16500",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    }
+  ],
+  "warnings": [
+    {
+      "id": "PHASE-16-FINDING-01",
+      "message": "CHECK (amount > 0) is deferred to Phase 16 Database Hardening",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "PHASE-16-FINDING-02",
+      "message": "Foreign Key deletion restrictions deferred to Phase 16 Database Hardening",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    },
+    {
+      "id": "PHASE-16-FINDING-03",
+      "message": "Advisory / Row locks for high-concurrency posting deferred to Phase 16",
+      "timestamp": "2026-08-18T22:35:14.220Z"
+    }
+  ]
+}

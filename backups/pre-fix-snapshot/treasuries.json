@@ -1,0 +1,32 @@
+[
+  {
+    "id": "c504cce9-8bfd-4cda-8296-80febdec2432",
+    "name": "الخزينة الرئيسية (نقدية)",
+    "description": "الخزينة النقدية الرئيسية",
+    "balance": 0,
+    "is_active": true,
+    "notes": null,
+    "created_at": "2026-08-15T19:58:05.612838+00:00",
+    "updated_at": "2026-08-15T19:58:05.612838+00:00",
+    "treasury_type": "cash",
+    "bank_name": null,
+    "account_number": null,
+    "parent_id": null,
+    "project_category": null
+  },
+  {
+    "id": "ff7416dd-5295-4e55-bd52-2196eef9ec37",
+    "name": "حساب مصرف الوحدة (جاري)",
+    "description": "الحساب البنكي الجاري",
+    "balance": 0,
+    "is_active": true,
+    "notes": null,
+    "created_at": "2026-08-15T19:58:05.612838+00:00",
+    "updated_at": "2026-08-15T19:58:05.612838+00:00",
+    "treasury_type": "bank",
+    "bank_name": null,
+    "account_number": null,
+    "parent_id": null,
+    "project_category": null
+  }
+]

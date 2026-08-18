@@ -63,36 +63,49 @@ const AccountantDashboard = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["accountant-dashboard"],
     queryFn: async () => {
-      const [incomeRes, expensesRes, purchasesRes, treasuryRes, transfersRes, recentPurchasesRes] =
+      const [incomeRes, clientPaymentsRes, expensesRes, purchasesRes, purchasePaymentsRes, treasuryRes, transfersRes, recentPurchasesRes] =
         await Promise.all([
           supabase.from("income").select("amount, date, type, subtype").order("date", { ascending: false }),
+          supabase.from("client_payments").select("amount, date").order("date", { ascending: false }),
           supabase.from("expenses").select("amount, date, type").order("date", { ascending: false }),
           supabase.from("purchases").select("total_amount, paid_amount, status, date, invoice_number, suppliers(name)").order("date", { ascending: false }),
+          supabase.from("purchase_payments").select("amount, date"),
           supabase.from("treasuries").select("id, name, balance, treasury_type").eq("is_active", true),
           supabase.from("transfers").select("amount, type, date, party_name, status").order("date", { ascending: false }).limit(5),
           supabase.from("purchases").select("id, total_amount, paid_amount, status, date, invoice_number, suppliers(name), notes").eq("status", "due").order("date", { ascending: true }).limit(10),
         ]);
 
       const income = incomeRes.data || [];
+      const clientPayments = clientPaymentsRes.data || [];
       const expenses = expensesRes.data || [];
       const purchases = purchasesRes.data || [];
+      const purchasePayments = purchasePaymentsRes.data || [];
 
-      const totalIncome = income.reduce((s, r) => s + Number(r.amount), 0);
-      const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount), 0);
-      const totalPurchases = purchases.reduce((s, r) => s + Number(r.total_amount), 0);
-      const totalPaid = purchases.reduce((s, r) => s + Number(r.paid_amount), 0);
+      const totalClientIncome = clientPayments.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalOtherIncome = income.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalIncome = totalClientIncome + totalOtherIncome;
+
+      const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalPurchases = purchases.reduce((s, r) => s + Number(r.total_amount || 0), 0);
+      const totalPaid = purchasePayments.reduce((s, r) => s + Number(r.amount || 0), 0);
       const totalRemaining = totalPurchases - totalPaid;
-      const totalTreasury = (treasuryRes.data || []).reduce((s, r) => s + Number(r.balance), 0);
-      const netProfit = totalIncome - totalExpenses - totalPurchases;
+      const totalTreasury = (treasuryRes.data || []).reduce((s, r) => s + Number(r.balance || 0), 0);
+      const netProfit = totalIncome - totalPurchases - totalExpenses;
 
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
-      const monthlyIncome = income
+      const monthlyIncome = clientPayments
         .filter((r) => {
           const d = new Date(r.date);
           return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
-        .reduce((s, r) => s + Number(r.amount), 0);
+        .reduce((s, r) => s + Number(r.amount || 0), 0) +
+        income
+        .filter((r) => {
+          const d = new Date(r.date);
+          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        })
+        .reduce((s, r) => s + Number(r.amount || 0), 0);
 
       return {
         totalIncome,

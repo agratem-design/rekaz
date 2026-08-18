@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { useState, useMemo } from "react";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +34,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select";
 import {
   ArrowRight,
@@ -51,14 +55,36 @@ import {
   Users,
   Building2,
   CheckCircle2,
+  Coins,
+  Sparkles,
 } from "lucide-react";
+import { TreasurySelector } from "@/components/treasury/TreasurySelector";
 import { openPrintWindow, getPrintValues, generatePrintStyles } from "@/lib/printStyles";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import PaymentAllocationDialog, { type UnpaidInvoice, type AllocationInput } from "@/components/payments/PaymentAllocationDialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
+
+interface UnpaidInvoice {
+  id: string;
+  type: string;
+  description: string;
+  total_amount: number;
+  paid_amount: number;
+  remaining: number;
+  service_fee: number;
+  service_fee_percentage: number;
+  phase_id: string | null;
+  phase_name: string | null;
+  phase_treasury_id: string | null;
+  source_treasury_id: string | null;
+  source_treasury_name: string | null;
+  date: string;
+  supplier_name?: string | null;
+}
 
 const getTypeIcon = (type: string) => {
   switch (type) {
@@ -367,62 +393,68 @@ const ProjectPayments = () => {
     enabled: !!activeProjectId && !!phases,
   });
 
-  // Save payment mutation
-  const saveMutation = useMutation({
-    mutationFn: async ({ formData, allocations }: { formData: { date: string; payment_method: string; notes: string; treasury_id?: string; actualAmount?: number }; allocations: AllocationInput[] }) => {
-      const selectedAllocations = allocations.filter(a => a.selected && a.amount > 0);
-      
-      const totalInvoiceAmount = selectedAllocations.reduce((sum, a) => sum + a.amount, 0);
-      const totalFee = selectedAllocations.reduce((sum, a) => {
-        return sum + (a.invoice.service_fee_percentage > 0 ? a.amount * a.invoice.service_fee_percentage / 100 : 0);
-      }, 0);
-      const totalAmount = totalInvoiceAmount + totalFee;
+  // Pure Project-Level Receipt Form State
+  const initialReceiptForm = {
+    amount: "",
+    date: new Date().toISOString().split("T")[0],
+    payment_method: "cash",
+    treasury_id: "",
+    receipt_number: "",
+    notes: "",
+  };
 
-      const finalAmount = formData.actualAmount || totalAmount;
+  const [receiptForm, setReceiptForm] = useState(initialReceiptForm);
+  const resetReceiptForm = () => setReceiptForm(initialReceiptForm);
 
-      if (selectedAllocations.length === 0 && finalAmount <= 0) {
-        throw new Error("يرجى اختيار فاتورة واحدة على الأقل أو إدخال قيمة سداد صالحة");
+  // Group treasuries by parent
+  const groupedTreasuries = useMemo(() => {
+    if (!allTreasuries) return [];
+    const parents = allTreasuries.filter(t => !t.parent_id);
+    return parents.map(p => ({
+      parent: p,
+      children: allTreasuries.filter(t => t.parent_id === p.id),
+    }));
+  }, [allTreasuries]);
+
+  // Project financials summary
+  const totalPaidSoFar = payments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  const projectTotalObligation = useMemo(() => {
+    if (!project) return 0;
+    if (project.project_type === "contracting") {
+      return Number((project as any).total_agreed_price || project.budget || 0);
+    }
+    const totalPurchasesCost = (unpaidInvoices || []).reduce((s, i) => s + Number(i.total_amount || 0), 0);
+    const serviceFeePct = Number(project.finishing_percentage || 0);
+    return totalPurchasesCost * (1 + serviceFeePct / 100);
+  }, [project, unpaidInvoices]);
+
+  const projectRemainingBefore = Math.max(0, projectTotalObligation - totalPaidSoFar);
+  const enteredAmountNum = parseFloat(receiptForm.amount) || 0;
+  const projectRemainingAfter = Math.max(0, projectRemainingBefore - enteredAmountNum);
+  const creditCreatedPreview = enteredAmountNum > projectRemainingBefore ? enteredAmountNum - projectRemainingBefore : 0;
+
+  // Pure Project-Level Client Receipt Mutation
+  const saveReceiptMutation = useMutation({
+    mutationFn: async (formData: typeof receiptForm) => {
+      const amountNum = parseFloat(formData.amount);
+      if (!amountNum || amountNum <= 0) {
+        throw new Error("يرجى إدخال قيمة دفعة صالحة أكبر من الصفر");
+      }
+      if (!formData.treasury_id) {
+        throw new Error("يرجى اختيار الخزينة المودع بها المبلغ");
       }
 
-      // Group by source treasury
-      const treasuryGroupsForSave: Record<string, { treasuryId: string; amount: number }> = {};
-      for (const alloc of selectedAllocations) {
-        const tid = alloc.invoice.source_treasury_id;
-        const allocFee = alloc.invoice.service_fee_percentage > 0 ? alloc.amount * alloc.invoice.service_fee_percentage / 100 : 0;
-        if (tid) {
-          if (!treasuryGroupsForSave[tid]) {
-            treasuryGroupsForSave[tid] = { treasuryId: tid, amount: 0 };
-          }
-          treasuryGroupsForSave[tid].amount += alloc.amount + allocFee;
-        }
-      }
-
-      const firstTreasuryId = Object.keys(treasuryGroupsForSave)[0] || allTreasuries?.[0]?.id || null;
-      const targetTreasuryId = formData.treasury_id || firstTreasuryId;
-
-      if (!targetTreasuryId) {
-        throw new Error("لم يتم العثور على خزينة صالحة لإيداع الأموال. يرجى تهيئة خزائن النظام أولاً.");
-      }
-
-      // Calculate surplus and deposit it into the selected target treasury
-      const surplus = finalAmount - totalAmount;
-      if (surplus > 0) {
-        if (!treasuryGroupsForSave[targetTreasuryId]) {
-          treasuryGroupsForSave[targetTreasuryId] = { treasuryId: targetTreasuryId, amount: 0 };
-        }
-        treasuryGroupsForSave[targetTreasuryId].amount += surplus;
-      }
-
-      // Insert payment
+      // Insert payment into client_payments (single authoritative record)
       const { data: payment, error: paymentError } = await supabase
         .from("client_payments")
         .insert({
           project_id: activeProjectId!,
           client_id: project?.client_id || null,
-          amount: finalAmount,
+          amount: amountNum,
           date: formData.date,
           payment_method: formData.payment_method,
-          treasury_id: targetTreasuryId,
+          treasury_id: formData.treasury_id,
+          receipt_number: formData.receipt_number || null,
           notes: formData.notes || null,
         })
         .select()
@@ -430,82 +462,85 @@ const ProjectPayments = () => {
 
       if (paymentError) throw paymentError;
 
-      // Insert allocations - include service fee in allocation amount
-      if (selectedAllocations.length > 0) {
-        const allocationRows = selectedAllocations.map(a => {
-          const allocFee = a.invoice.service_fee_percentage > 0 ? a.amount * a.invoice.service_fee_percentage / 100 : 0;
-          return {
-            payment_id: payment.id,
-            reference_type: a.invoice.type,
-            reference_id: a.invoice.id,
-            phase_id: a.invoice.phase_id,
-            amount: a.amount + allocFee,
-          };
-        });
-
-        const { error: allocError } = await supabase
-          .from("client_payment_allocations")
-          .insert(allocationRows);
-
-        if (allocError) throw allocError;
-
-        // Update purchases paid_amount
-        for (const alloc of selectedAllocations) {
-          if (alloc.invoice.type === "purchase" || alloc.invoice.type === "rental") {
-            const newPaid = alloc.invoice.paid_amount + alloc.amount;
-            const newStatus = newPaid >= alloc.invoice.total_amount ? "paid" : newPaid > 0 ? "partial" : "due";
-            await supabase
-              .from("purchases")
-              .update({ paid_amount: newPaid, status: newStatus })
-              .eq("id", alloc.invoice.id);
-          }
-        }
-      }
-
-      // Add treasury transactions
-      for (const group of Object.values(treasuryGroupsForSave)) {
-        await supabase.from("treasury_transactions").insert({
-          treasury_id: group.treasuryId,
-          type: "deposit",
-          amount: group.amount,
-          balance_after: 0,
-          description: `تسديد من الزبون - ${project?.name || ""}${totalFee > 0 ? ` (شامل نسبة خدمات ${formatCurrencyLYD(totalFee)})` : ""}${surplus > 0 ? ` (رصيد فائض مقبوض ${formatCurrencyLYD(surplus)})` : ""}`,
-          date: formData.date,
-          reference_type: "client_payment",
-          reference_id: payment.id,
-          source: "client_payment",
-        });
-      }
-
-      // Add to income table
+      // Add to income table for reporting
       await supabase.from("income").insert({
         project_id: activeProjectId!,
         client_id: project?.client_id || null,
-        amount: finalAmount,
+        amount: amountNum,
         date: formData.date,
         type: "service",
         subtype: "client_payment",
         payment_method: formData.payment_method,
-        notes: formData.notes || `تسديد دفعة للمشروع: ${project?.name || ""}${surplus > 0 ? ` (رصيد فائض ${formatCurrencyLYD(surplus)})` : ""}`,
+        notes: formData.notes || `تسديد دفعة للمشروع: ${project?.name || ""}`,
         status: "received",
       });
+
+      return payment;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-payments", activeProjectId] });
-      queryClient.invalidateQueries({ queryKey: ["unpaid-invoices", activeProjectId] });
-      queryClient.invalidateQueries({ queryKey: ["payment-allocations", activeProjectId] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
-      toast({ title: "تم تسجيل التسديد بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-balance"] });
+      toast({ title: "تم تسجيل الدفعة بنجاح" });
+      resetReceiptForm();
       setDialogOpen(false);
     },
     onError: (error: any) => {
       toast({
         title: "خطأ",
-        description: error.message || "حدث خطأ أثناء تسجيل التسديد",
+        description: error.message || "حدث خطأ أثناء تسجيل الدفعة",
         variant: "destructive",
       });
     },
   });
+
+  const isReceiptFormDirty = useMemo(() => {
+    if (!dialogOpen) return false;
+    return (
+      (parseFloat(receiptForm.amount) || 0) > 0 ||
+      receiptForm.notes.trim().length > 0 ||
+      receiptForm.receipt_number.trim().length > 0
+    );
+  }, [dialogOpen, receiptForm]);
+
+  const isSubmittingReceipt = saveReceiptMutation.isPending;
+
+  const {
+    showConfirmDialog: showUnsavedDialog,
+    setShowConfirmDialog,
+    requestAction,
+    confirmDiscard: handleConfirmDiscard,
+    cancelDiscard: handleCancelDiscard,
+  } = useUnsavedChangesGuard({
+    isDirty: isReceiptFormDirty,
+    isSubmitting: isSubmittingReceipt,
+    onDiscard: () => {
+      resetReceiptForm();
+      setDialogOpen(false);
+    },
+  });
+
+  const handleReceiptDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      if (isSubmittingReceipt) return; // Block closing while mutation in-flight
+      if (isReceiptFormDirty) {
+        requestAction(() => {
+          resetReceiptForm();
+          setDialogOpen(false);
+        });
+      } else {
+        resetReceiptForm();
+        setDialogOpen(false);
+      }
+    } else {
+      setDialogOpen(true);
+    }
+  };
+
+  const handleReceiptSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveReceiptMutation.mutate(receiptForm);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (paymentId: string) => {
@@ -515,31 +550,6 @@ const ProjectPayments = () => {
         .select("amount, date")
         .eq("id", paymentId)
         .maybeSingle();
-
-      const { data: paymentAllocs } = await supabase
-        .from("client_payment_allocations")
-        .select("reference_id, reference_type, amount")
-        .eq("payment_id", paymentId);
-
-      if (paymentAllocs && paymentAllocs.length > 0) {
-        for (const alloc of paymentAllocs) {
-          if (alloc.reference_type === "purchase" || alloc.reference_type === "rental") {
-            const { data: purchase } = await supabase
-              .from("purchases")
-              .select("paid_amount, total_amount")
-              .eq("id", alloc.reference_id)
-              .maybeSingle();
-            if (purchase) {
-              const newPaid = Math.max(0, Number(purchase.paid_amount) - Number(alloc.amount));
-              const newStatus = newPaid === 0 ? "due" : newPaid < Number(purchase.total_amount) ? "partial" : "paid";
-              await supabase
-                .from("purchases")
-                .update({ paid_amount: newPaid, status: newStatus })
-                .eq("id", alloc.reference_id);
-            }
-          }
-        }
-      }
 
       // 2. Delete from income table
       if (payment) {
@@ -586,7 +596,7 @@ const ProjectPayments = () => {
     const companyName = companySettings?.company_name || "شركة الفارس الذهبي للدعاية";
     const dateStr = format(new Date(payment.date), "dd/MM/yyyy");
 
-    const borderStyle = `border: ${companySettings?.print_border_width ?? 1}px solid ${companySettings?.print_table_border_color || "#ccc"};`;
+    const borderStyle = `border: 1px solid ${companySettings?.print_table_border_color || "#ccc"};`;
 
     const contentHtml = `
       <div class="print-area" style="box-shadow: none; margin: 0; padding: 20px;">
@@ -845,11 +855,8 @@ const ProjectPayments = () => {
     );
   }
 
-  return (
+  const content = (
     <div className="space-y-6" dir="rtl">
-      {/* ProjectNavBar only when accessed from a specific project URL */}
-      {urlProjectId && <ProjectNavBar />}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -857,9 +864,9 @@ const ProjectPayments = () => {
             <CreditCard className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">إيصالات مقبوضات الزبائن</h1>
-            <p className="text-sm text-muted-foreground">
-              {project ? `${project.name} — ${(project.clients as any)?.name || "بدون عميل"}` : "اختر الزبون والمشروع لعرض التسديدات"}
+            <h1 className="text-2xl font-bold">تحصيلات العميل</h1>
+            <p className="text-xs text-muted-foreground">
+              {project ? "إيصالات مقبوضات ودفعات الزبون على حساب المشروع" : "اختر الزبون والمشروع لعرض التسديدات"}
             </p>
           </div>
         </div>
@@ -1187,16 +1194,163 @@ const ProjectPayments = () => {
         </div>
       )}
 
-      {/* Payment Allocation Dialog */}
-      <PaymentAllocationDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        invoices={unpaidInvoices || []}
-        phases={phases || []}
-        allTreasuries={allTreasuries || []}
-        onSave={(formData, allocations) => saveMutation.mutate({ formData, allocations })}
-        isSaving={saveMutation.isPending}
-        projectName={project?.name}
+      {/* Canonical Project-Level Client Receipt Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={handleReceiptDialogOpenChange}>
+        <DialogContent className="max-w-lg" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground font-extrabold text-lg">
+              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <span>تسجيل دفعة سداد للمشروع</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              تسجيل إيصال استلام نقدية من الزبون على مستوى المشروع مباشرة مع احتساب المتبقي تلقائياً.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Project Summary Box */}
+          <div className="grid grid-cols-2 gap-3 my-2">
+            <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-1">
+              <p className="text-xs text-muted-foreground">إجمالي مطالبات المشروع</p>
+              <p className="text-lg font-bold text-primary font-mono">
+                {formatCurrencyLYD(projectTotalObligation)}
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-semibold">المتبقي قبل الدفعة</p>
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-400 font-mono">
+                {formatCurrencyLYD(projectRemainingBefore)}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleReceiptSubmit} className="space-y-4 pt-1">
+            {/* Amount */}
+            <div className="space-y-2">
+              <Label htmlFor="receipt-amount" className="text-xs font-bold flex items-center gap-1.5">
+                <Wallet className="h-4 w-4 text-emerald-600" />
+                <span>قيمة الدفعة المستلمة (د.ل) *</span>
+              </Label>
+              <Input
+                id="receipt-amount"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                value={receiptForm.amount}
+                onChange={(e) => setReceiptForm({ ...receiptForm, amount: e.target.value })}
+                placeholder="أدخل المبلغ..."
+                className="font-mono text-base h-11"
+              />
+              {/* Real-time calculated remaining and credit preview */}
+              {enteredAmountNum > 0 && (
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/40 text-xs flex justify-between items-center">
+                  <span>المتبقي بعد الدفعة: <strong className="font-mono text-foreground">{formatCurrencyLYD(projectRemainingAfter)}</strong></span>
+                  {creditCreatedPreview > 0 && (
+                    <Badge variant="outline" className="text-emerald-600 bg-emerald-500/10 border-emerald-500/30">
+                      رصيد زبون فائض: {formatCurrencyLYD(creditCreatedPreview)}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Treasury Selector */}
+            <TreasurySelector
+              value={receiptForm.treasury_id}
+              onValueChange={(val) => setReceiptForm({ ...receiptForm, treasury_id: val })}
+              projectType={project?.project_type || "contracting"}
+              projectDefaultTreasuryId={project?.default_treasury_id}
+              label="الخزينة المودع بها المبلغ"
+            />
+
+            {/* Payment Method & Date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="receipt-method" className="text-xs font-semibold">طريقة الدفع</Label>
+                <Select
+                  value={receiptForm.payment_method}
+                  onValueChange={(val) => setReceiptForm({ ...receiptForm, payment_method: val })}
+                >
+                  <SelectTrigger id="receipt-method" className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="cash">نقداً (كاش)</SelectItem>
+                    <SelectItem value="transfer">تحويل مصرفي</SelectItem>
+                    <SelectItem value="check">شيك</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="receipt-date" className="text-xs font-semibold">تاريخ الاستلام</Label>
+                <Input
+                  id="receipt-date"
+                  type="date"
+                  value={receiptForm.date}
+                  onChange={(e) => setReceiptForm({ ...receiptForm, date: e.target.value })}
+                  className="h-10"
+                />
+              </div>
+            </div>
+
+            {/* Receipt Number */}
+            <div className="space-y-2">
+              <Label htmlFor="receipt-number" className="text-xs font-semibold">رقم الإيصال / السند (اختياري)</Label>
+              <Input
+                id="receipt-number"
+                type="text"
+                placeholder="مثال: REC-2026-001"
+                value={receiptForm.receipt_number}
+                onChange={(e) => setReceiptForm({ ...receiptForm, receipt_number: e.target.value })}
+                className="h-10"
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="receipt-notes" className="text-xs font-semibold">ملاحظات</Label>
+              <Textarea
+                id="receipt-notes"
+                placeholder="أي ملاحظات إضافية على الدفعة..."
+                rows={2}
+                value={receiptForm.notes}
+                onChange={(e) => setReceiptForm({ ...receiptForm, notes: e.target.value })}
+              />
+            </div>
+
+            <DialogFooter className="pt-2 gap-2">
+              <Button
+                type="submit"
+                disabled={isSubmittingReceipt || enteredAmountNum <= 0}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11"
+              >
+                {isSubmittingReceipt ? (
+                  <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" />
+                ) : null}
+                <span>تسجيل واستلام {enteredAmountNum > 0 ? formatCurrencyLYD(enteredAmountNum) : ""}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmittingReceipt}
+                onClick={() => handleReceiptDialogOpenChange(false)}
+                className="h-11 px-5"
+              >
+                إلغاء
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onOpenChange={setShowConfirmDialog}
+        onConfirmDiscard={handleConfirmDiscard}
+        onStay={handleCancelDiscard}
       />
 
       {/* Delete Confirmation */}
@@ -1274,6 +1428,12 @@ const ProjectPayments = () => {
       </Dialog>
     </div>
   );
+
+  if (urlProjectId) {
+    return <ProjectWorkspaceLayout>{content}</ProjectWorkspaceLayout>;
+  }
+
+  return content;
 };
 
 export default ProjectPayments;

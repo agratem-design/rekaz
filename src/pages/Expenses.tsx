@@ -1,6 +1,7 @@
 import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -99,6 +100,15 @@ export default function Expenses() {
     },
   });
 
+  const { data: settings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const treasuryParents = React.useMemo(() => treasuries.filter(t => !(t as any).parent_id), [treasuries]);
   const allTreasuries = React.useMemo(() => treasuries.filter(t => (t as any).parent_id), [treasuries]);
 
@@ -139,23 +149,8 @@ export default function Expenses() {
   // Expense mutations
   const createExpenseMutation = useMutation({
     mutationFn: async (data: ExpenseInsert) => {
-      const { data: insertedExp, error } = await supabase.from("expenses").insert(data).select("id").single();
+      const { error } = await supabase.from("expenses").insert(data);
       if (error) throw error;
-
-      if (data.treasury_id && insertedExp) {
-        await supabase.from("treasury_transactions").insert({
-          treasury_id: data.treasury_id,
-          type: "withdrawal",
-          amount: Number(data.amount),
-          balance_after: 0,
-          description: `مصروف: ${data.description}`,
-          date: data.date,
-          source: "expense",
-          reference_type: "expense",
-          reference_id: insertedExp.id,
-          notes: data.notes || null,
-        });
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
@@ -603,9 +598,9 @@ export default function Expenses() {
                 <Input name="date" type="date" defaultValue={editingExpense?.date ?? new Date().toISOString().slice(0, 10)} />
               </div>
 
-              {/* Treasury Branch Selector */}
+              {/* Treasury Selector */}
               <div>
-                <Label>الخزينة المخصوم منها (الفرع) *</Label>
+                <Label>الخزينة المخصوم منها *</Label>
                 <select
                   name="treasury_id"
                   value={selectedSubTreasuryId}
@@ -613,15 +608,24 @@ export default function Expenses() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   required
                 >
-                  <option value="">-- اختر فرع الخزينة المخصوم منه --</option>
+                  <option value="">-- اختر الخزينة المخصوم منها --</option>
                   {treasuryParents.map((parent) => {
-                    const children = allTreasuries.filter(c => (c as any).parent_id === parent.id);
-                    if (children.length === 0) return null;
+                    const children = treasuries.filter((c) => (c as any).parent_id === parent.id);
+                    if (children.length === 0) {
+                      return (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.name} (رئيسية - الرصيد: {formatCurrencyLYD(parent.balance || 0)})
+                        </option>
+                      );
+                    }
                     return (
                       <optgroup key={parent.id} label={parent.name}>
+                        <option value={parent.id}>
+                          {parent.name} (رئيسية - الرصيد: {formatCurrencyLYD(parent.balance || 0)})
+                        </option>
                         {children.map((child) => (
                           <option key={child.id} value={child.id}>
-                            {child.name} (الرصيد: {formatCurrencyLYD(child.balance || 0)})
+                            └─ {child.name} ({(child as any).treasury_type === "bank" ? "مصرفي" : "فرع"} - الرصيد: {formatCurrencyLYD(child.balance || 0)})
                           </option>
                         ))}
                       </optgroup>

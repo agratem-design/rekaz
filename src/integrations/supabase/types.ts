@@ -207,6 +207,74 @@ export type Database = {
           },
         ]
       }
+      client_credit_ledger: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          entry_type: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
+          id: string
+          notes: string | null
+          reference_entry_id: string | null
+          source_payment_id: string | null
+          target_project_id: string | null
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          entry_type: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
+          id?: string
+          notes?: string | null
+          reference_entry_id?: string | null
+          source_payment_id?: string | null
+          target_project_id?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          entry_type?: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
+          id?: string
+          notes?: string | null
+          reference_entry_id?: string | null
+          source_payment_id?: string | null
+          target_project_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_credit_ledger_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_reference_entry_id_fkey"
+            columns: ["reference_entry_id"]
+            isOneToOne: false
+            referencedRelation: "client_credit_ledger"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "client_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_target_project_id_fkey"
+            columns: ["target_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_payments: {
         Row: {
           amount: number
@@ -346,6 +414,8 @@ export type Database = {
           report_padding_right_mm: number | null
           report_padding_top_mm: number | null
           print_date_position: string | null
+          contracting_treasury_id: string | null
+          finishing_treasury_id: string | null
           updated_at: string
         }
         Insert: {
@@ -386,6 +456,8 @@ export type Database = {
           report_padding_right_mm?: number | null
           report_padding_top_mm?: number | null
           print_date_position?: string | null
+          contracting_treasury_id?: string | null
+          finishing_treasury_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -426,9 +498,26 @@ export type Database = {
           report_padding_right_mm?: number | null
           report_padding_top_mm?: number | null
           print_date_position?: string | null
+          contracting_treasury_id?: string | null
+          finishing_treasury_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "company_settings_contracting_treasury_id_fkey"
+            columns: ["contracting_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_settings_finishing_treasury_id_fkey"
+            columns: ["finishing_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contract_clause_templates: {
         Row: {
@@ -857,6 +946,7 @@ export type Database = {
           subtype: string | null
           supplier_id: string | null
           technician_id: string | null
+          treasury_id: string | null
           type: string
           updated_at: string
         }
@@ -871,9 +961,11 @@ export type Database = {
           payment_method?: string | null
           phase_id?: string | null
           project_id?: string | null
+          project_item_id?: string | null
           subtype?: string | null
           supplier_id?: string | null
           technician_id?: string | null
+          treasury_id?: string | null
           type?: string
           updated_at?: string
         }
@@ -888,9 +980,11 @@ export type Database = {
           payment_method?: string | null
           phase_id?: string | null
           project_id?: string | null
+          project_item_id?: string | null
           subtype?: string | null
           supplier_id?: string | null
           technician_id?: string | null
+          treasury_id?: string | null
           type?: string
           updated_at?: string
         }
@@ -921,6 +1015,13 @@ export type Database = {
             columns: ["technician_id"]
             isOneToOne: false
             referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
             referencedColumns: ["id"]
           },
         ]
@@ -1694,15 +1795,19 @@ export type Database = {
           budget: number | null
           budget_type: string | null
           client_id: string | null
+          code: string | null
           created_at: string
+          default_treasury_id: string | null
           description: string | null
           end_date: string | null
+          finishing_percentage: number | null
           id: string
           image_url: string | null
           location: string | null
           name: string
           notes: string | null
           progress: number | null
+          project_type: string
           spent: number | null
           start_date: string | null
           status: string
@@ -1713,15 +1818,19 @@ export type Database = {
           budget?: number | null
           budget_type?: string | null
           client_id?: string | null
+          code?: string | null
           created_at?: string
+          default_treasury_id?: string | null
           description?: string | null
           end_date?: string | null
+          finishing_percentage?: number | null
           id?: string
           image_url?: string | null
           location?: string | null
           name: string
           notes?: string | null
           progress?: number | null
+          project_type?: string
           spent?: number | null
           start_date?: string | null
           status?: string
@@ -1732,15 +1841,19 @@ export type Database = {
           budget?: number | null
           budget_type?: string | null
           client_id?: string | null
+          code?: string | null
           created_at?: string
+          default_treasury_id?: string | null
           description?: string | null
           end_date?: string | null
+          finishing_percentage?: number | null
           id?: string
           image_url?: string | null
           location?: string | null
           name?: string
           notes?: string | null
           progress?: number | null
+          project_type?: string
           spent?: number | null
           start_date?: string | null
           status?: string
@@ -1756,10 +1869,71 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "projects_default_treasury_id_fkey"
+            columns: ["default_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "projects_supervising_engineer_id_fkey"
             columns: ["supervising_engineer_id"]
             isOneToOne: false
             referencedRelation: "engineers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_payments: {
+        Row: {
+          amount: number
+          commission: number | null
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          payment_method: string
+          purchase_id: string
+          treasury_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          commission?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          purchase_id: string
+          treasury_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          commission?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          purchase_id?: string
+          treasury_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_payments_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_payments_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
             referencedColumns: ["id"]
           },
         ]
@@ -1779,9 +1953,11 @@ export type Database = {
           phase_id: string | null
           project_id: string | null
           project_item_id?: string | null
+          purchase_type: string | null
           rental_id: string | null
           status: string | null
           supplier_id: string | null
+          title: string | null
           total_amount: number
           treasury_id: string | null
           updated_at: string
@@ -1799,9 +1975,12 @@ export type Database = {
           paid_amount?: number
           phase_id?: string | null
           project_id?: string | null
+          project_item_id?: string | null
+          purchase_type?: string | null
           rental_id?: string | null
           status?: string | null
           supplier_id?: string | null
+          title?: string | null
           total_amount?: number
           treasury_id?: string | null
           updated_at?: string
@@ -1819,9 +1998,12 @@ export type Database = {
           paid_amount?: number
           phase_id?: string | null
           project_id?: string | null
+          project_item_id?: string | null
+          purchase_type?: string | null
           rental_id?: string | null
           status?: string | null
           supplier_id?: string | null
+          title?: string | null
           total_amount?: number
           treasury_id?: string | null
           updated_at?: string
@@ -2063,7 +2245,10 @@ export type Database = {
           date: string
           id: string
           notes: string | null
-          project_item_id: string
+          project_id: string
+          phase_id: string | null
+          project_item_id: string | null
+          idempotency_key: string | null
           quantity_completed: number
           rate?: number | null
           earned_amount?: number | null
@@ -2074,8 +2259,13 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
-          project_item_id: string
+          project_id: string
+          phase_id?: string | null
+          project_item_id?: string | null
+          idempotency_key?: string | null
           quantity_completed?: number
+          rate?: number | null
+          earned_amount?: number | null
           technician_id: string
         }
         Update: {
@@ -2083,11 +2273,30 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
-          project_item_id?: string
+          project_id?: string
+          phase_id?: string | null
+          project_item_id?: string | null
+          idempotency_key?: string | null
           quantity_completed?: number
+          rate?: number | null
+          earned_amount?: number | null
           technician_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "technician_progress_records_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technician_progress_records_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "project_phases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "technician_progress_records_project_item_id_fkey"
             columns: ["project_item_id"]
@@ -2217,6 +2426,7 @@ export type Database = {
           name: string
           notes: string | null
           parent_id: string | null
+          project_category: string | null
           treasury_type: string
           updated_at: string
         }
@@ -2231,6 +2441,7 @@ export type Database = {
           name: string
           notes?: string | null
           parent_id?: string | null
+          project_category?: string | null
           treasury_type?: string
           updated_at?: string
         }
@@ -2245,6 +2456,7 @@ export type Database = {
           name?: string
           notes?: string | null
           parent_id?: string | null
+          project_category?: string | null
           treasury_type?: string
           updated_at?: string
         }

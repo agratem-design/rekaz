@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { DeterministicBreadcrumb } from "@/components/navigation/DeterministicBreadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { openPrintWindow } from "@/lib/printStyles";
 import { toast } from "sonner";
+import { calculateProjectFinancials } from "@/lib/financialCore";
 import {
   Dialog,
   DialogContent,
@@ -99,12 +101,14 @@ type Phase = {
 
 type ProjectItem = {
   id: string;
+  project_id?: string | null;
   phase_id: string;
   total_price: number;
 };
 
 type Purchase = {
   id: string;
+  project_id?: string | null;
   phase_id: string;
   total_amount: number;
   rental_id: string | null;
@@ -133,6 +137,8 @@ type Contract = {
   status: string;
   amount: number;
   start_date: string;
+  project_id?: string | null;
+  client_id?: string | null;
 };
 
 type Treasury = {
@@ -354,9 +360,29 @@ export default function ClientDetail() {
   const { data: purchases } = useQuery<Purchase[]>({
     queryKey: ["client-purchases", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, rental_id");
+      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id");
       if (error) throw error;
-      return data;
+      return data as any;
+    },
+    enabled: !!id,
+  });
+
+  const { data: clientExpenses } = useQuery({
+    queryKey: ["client-expenses", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: clientTechProgress } = useQuery({
+    queryKey: ["client-tech-progress", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!id,
   });
@@ -406,20 +432,6 @@ export default function ClientDetail() {
           reference_id: payment.id,
         });
       if (incErr) throw incErr;
-
-      // 3. Log Treasury Transaction
-      await supabase.from("treasury_transactions").insert({
-        treasury_id: selectedTreasuryId,
-        type: "deposit",
-        amount: amt,
-        balance_after: 0,
-        description: `تسديد من الزبون: ${client?.name || ""}`,
-        date: paymentDate,
-        source: "client_payment",
-        reference_type: "client_payment",
-        reference_id: payment.id,
-        notes: notes || null,
-      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client", id] });
@@ -450,7 +462,7 @@ export default function ClientDetail() {
     addPaymentMutation.mutate();
   };
 
-  // Calculate detailed financial totals
+  // Calculate detailed financial totals using Central Financial Domain
   const clientFinancials = useMemo(() => {
     if (!projects || !phases || !projectItems || !purchases || !payments) {
       return {
@@ -477,48 +489,26 @@ export default function ClientDetail() {
     const projectBills: Record<string, number> = {};
 
     projects.forEach((proj) => {
+      const projPurchases = purchases.filter((p) => p.project_id === proj.id);
       const projItems = projectItems.filter((item) => item.project_id === proj.id);
-      const projPurchases = purchases.filter((p) => p.project_id === proj.id && p.rental_id === null);
-      const projRentals = purchases.filter((p) => p.project_id === proj.id && p.rental_id !== null);
-
-      const itemsSum = projItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
-      const purchSum = projPurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
-      const rentSum = projRentals.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
-
-      // Sum active contracts for this project or contracting project of this client
       const projContracts = (contracts || []).filter(
         (c) => c.status !== "cancelled" && (c.project_id === proj.id || (!c.project_id && c.client_id === proj.client_id && proj.project_type === "contracting"))
       );
-      const contractsSum = projContracts.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+      const projExpenses = (clientExpenses || []).filter((e: any) => e.project_id === proj.id);
+      const projTech = (clientTechProgress || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
+      const projPayments = (payments || []).filter((p: any) => p.project_id === proj.id);
 
-      let percentageFeeSum = 0;
-      const allProjPurchasesAndRentals = purchases.filter((p) => p.project_id === proj.id);
-      allProjPurchasesAndRentals.forEach((p) => {
-        let pct = 0;
-        if (p.phase_id) {
-          const phase = phases.find((ph) => ph.id === p.phase_id);
-          if (phase) {
-            pct = phase.has_percentage && phase.percentage_value > 0 
-              ? Number(phase.percentage_value) 
-              : (proj.project_type === "finishing" ? Number((proj as any).finishing_percentage || 0) : 0);
-          } else {
-            pct = proj.project_type === "finishing" ? Number((proj as any).finishing_percentage || 0) : 0;
-          }
-        } else {
-          pct = proj.project_type === "finishing" ? Number((proj as any).finishing_percentage || 0) : 0;
-        }
-        
-        if (pct > 0) {
-          percentageFeeSum += (Number(p.total_amount || 0) * pct) / 100;
-        }
+      const projResult = calculateProjectFinancials({
+        project: proj,
+        contracts: projContracts,
+        projectItems: projItems,
+        purchases: projPurchases,
+        techProgressRecords: projTech,
+        expenses: projExpenses,
+        clientPayments: projPayments,
       });
 
-      const budgetVal = Number(proj.budget || 0);
-
-      // Base project value: maximum of executed items, signed contracts, or approved budget
-      const projectBaseValue = Math.max(itemsSum, contractsSum, budgetVal);
-
-      const projectTotal = projectBaseValue + purchSum + rentSum + percentageFeeSum;
+      const projectTotal = projResult.clientObligation;
       projectBills[proj.id] = projectTotal;
       totalBilled += projectTotal;
 
@@ -564,7 +554,7 @@ export default function ClientDetail() {
       finishingRemaining,
       projectBills,
     };
-  }, [projects, phases, projectItems, purchases, payments, contracts]);
+  }, [projects, phases, projectItems, purchases, payments, contracts, clientExpenses, clientTechProgress]);
 
   const totalContractsAmount = useMemo(() => {
     if (!contracts) return 0;
@@ -697,7 +687,7 @@ export default function ClientDetail() {
       if (proj) matchedProjectName = proj.name;
     }
 
-    const borderStyle = `border: ${companySettings?.print_border_width ?? 1}px solid ${companySettings?.print_table_border_color || "#ccc"};`;
+    const borderStyle = `border: 1px solid ${companySettings?.print_table_border_color || "#ccc"};`;
 
     const contentHtml = `
       <div class="print-area" style="box-shadow: none; margin: 0; padding: 20px; direction: rtl;">
@@ -822,7 +812,7 @@ export default function ClientDetail() {
     const headerText = companySettings?.print_header_text_color || '#ffffff';
     const titleColor = companySettings?.print_section_title_color || '#7A5A10';
     const borderColor = companySettings?.print_table_border_color || '#d1d5db';
-    const borderWidth = companySettings?.print_border_width ?? 1;
+    const borderWidth = 1;
     const borderCss = `border: ${borderWidth}px solid ${borderColor};`;
 
     const contractingProjects = projects?.filter((p) => p.project_type === "contracting") || [];
@@ -1019,13 +1009,13 @@ export default function ClientDetail() {
     <div className="space-y-6" dir="rtl">
       {/* Breadcrumb & Print */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to="/clients" className="hover:text-foreground">
-            العملاء
-          </Link>
-          <ArrowRight className="h-4 w-4 rotate-180" />
-          <span className="text-foreground">{client.name}</span>
-        </div>
+        <DeterministicBreadcrumb
+          items={[
+            { label: "العملاء", href: "/clients" },
+            { label: client.name, isCurrent: true },
+          ]}
+          fallbackBackHref="/clients"
+        />
         <div className="flex gap-2">
           <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
             <DialogTrigger asChild>
@@ -1610,7 +1600,7 @@ export default function ClientDetail() {
                             </TableCell>
                             <TableCell className="text-left">
                               <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}/phases`}>
+                                <Link to={`/projects/${project.id}`}>
                                   <span>عرض التفاصيل</span>
                                   <ArrowUpRight className="h-4 w-4 mr-1" />
                                 </Link>
@@ -1673,7 +1663,7 @@ export default function ClientDetail() {
                             </TableCell>
                             <TableCell className="text-left">
                               <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}/phases`}>
+                                <Link to={`/projects/${project.id}`}>
                                   <span>عرض التفاصيل</span>
                                   <ArrowUpRight className="h-4 w-4 mr-1" />
                                 </Link>
@@ -1736,7 +1726,7 @@ export default function ClientDetail() {
                             </TableCell>
                             <TableCell className="text-left">
                               <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}/phases`}>
+                                <Link to={`/projects/${project.id}`}>
                                   <span>عرض التفاصيل</span>
                                   <ArrowUpRight className="h-4 w-4 mr-1" />
                                 </Link>

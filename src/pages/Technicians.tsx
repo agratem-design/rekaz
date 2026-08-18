@@ -12,6 +12,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
 import {
   Select,
   SelectContent,
@@ -20,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Phone, Wrench, Zap, Droplet, Hammer, Ruler, Edit, Trash2, Eye, Calendar } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrencyLYD } from "@/lib/currency";
@@ -30,6 +32,7 @@ import { ar } from "date-fns/locale";
 
 interface TechnicianForm {
   name: string;
+  technician_type_id: string;
   specialty: string;
   phone: string;
   email: string;
@@ -43,6 +46,7 @@ interface TechnicianForm {
 
 const initialForm: TechnicianForm = {
   name: "",
+  technician_type_id: "",
   specialty: "",
   phone: "",
   email: "",
@@ -55,6 +59,7 @@ const initialForm: TechnicianForm = {
 };
 
 const Technicians = () => {
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTechnician, setEditingTechnician] = useState<string | null>(null);
@@ -65,11 +70,24 @@ const Technicians = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("technicians")
-        .select("*")
+        .select("*, technician_types(id, name, code)")
         .order("created_at", { ascending: false });
       
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: technicianTypes = [] } = useQuery<any[]>({
+    queryKey: ["technician-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("technician_types" as any)
+        .select("id, name, code")
+        .eq("is_active", true)
+        .order("created_at");
+      if (error) throw error;
+      return (data as any[]) || [];
     },
   });
 
@@ -136,16 +154,19 @@ const Technicians = () => {
   const { data: allPurchasePayments } = useQuery({
     queryKey: ["all-technicians-purchase-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("purchase_payments")
-        .select(`
-          *,
-          purchases!inner (
-            technician_id
-          )
-        `);
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await (supabase.from("purchase_payments" as any) as any)
+          .select(`
+            *,
+            purchases!inner (
+              technician_id
+            )
+          `);
+        if (error) return [];
+        return (data || []) as any[];
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -241,7 +262,7 @@ const Technicians = () => {
     mutationFn: async (data: TechnicianForm) => {
       const techData = {
         name: data.name,
-        specialty: data.specialty,
+        technician_type_id: data.technician_type_id || null,
         phone: data.phone || null,
         email: data.email || null,
         hourly_rate: data.hourly_rate ? parseFloat(data.hourly_rate) : null,
@@ -298,6 +319,7 @@ const Technicians = () => {
     setEditingTechnician(tech.id);
     setForm({
       name: tech.name,
+      technician_type_id: tech.technician_type_id || "",
       specialty: tech.specialty || "",
       phone: tech.phone || "",
       email: tech.email || "",
@@ -350,27 +372,27 @@ const Technicians = () => {
   const specialties = ["نجار", "كهربائي", "سباك", "حداد", "بنّاء", "دهّان", "بلّاط", "ألمنيوم", "أخرى"];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">الفنيون</h1>
-          <p className="text-muted-foreground">إدارة الفنيين والمقاولين في المشاريع</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-5 w-5" />
-              فني جديد
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editingTechnician ? "تعديل بيانات الفني" : "إضافة فني جديد"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+      <PageHeader
+        title="الفنيون"
+        description="إدارة الفنيين والمقاولين في المشاريع ومتابعة نسب الإنجاز والمستحقات"
+        actions={
+          <Button className="gap-2 cursor-pointer" onClick={() => { setEditingTechnician(null); setForm(initialForm); setIsDialogOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            <span>فني جديد</span>
+          </Button>
+        }
+      />
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingTechnician ? "تعديل بيانات الفني" : "إضافة فني جديد"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">اسم الفني *</Label>
                 <Input
@@ -382,18 +404,21 @@ const Technicians = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="specialty">التخصص</Label>
+                <Label htmlFor="technician_type_id">التخصص الفني</Label>
                 <Select
-                  value={form.specialty}
-                  onValueChange={(value) => setForm({ ...form, specialty: value })}
+                  value={form.technician_type_id}
+                  onValueChange={(value) => {
+                    const selectedType = technicianTypes.find((t: any) => t.id === value);
+                    setForm({ ...form, technician_type_id: value, specialty: selectedType?.name || "" });
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="اختر التخصص" />
+                    <SelectValue placeholder="اختر التخصص الفني" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {specialties.map((spec) => (
-                      <SelectItem key={spec} value={spec}>
-                        {spec}
+                  <SelectContent dir="rtl">
+                    {technicianTypes.map((type: any) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -510,7 +535,6 @@ const Technicians = () => {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-5">
@@ -552,8 +576,28 @@ const Technicians = () => {
       </div>
 
       {/* Technicians Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {technicians?.map((tech) => {
+      {(!technicians || technicians.length === 0) ? (
+        <EmptyState
+          icon={Wrench}
+          title="لا يوجد فنيون حتى الآن"
+          description="ابدأ بإضافة أول فني إلى المنظومة لمتابعة أعماله في المشاريع ونسب الإنجاز والمستحقات."
+          action={
+            <Button
+              className="gap-2 cursor-pointer"
+              onClick={() => {
+                setEditingTechnician(null);
+                setForm(initialForm);
+                setIsDialogOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              <span>إضافة فني جديد</span>
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {technicians.map((tech) => {
           const IconComponent = getSpecialtyIcon(tech.specialty || "");
           return (
             <Card key={tech.id} className="p-6 card-hover">
@@ -622,7 +666,7 @@ const Technicians = () => {
                 })()}
 
                 <div className="flex gap-2">
-                  <Link to={`/technicians/${tech.id}`} className="flex-1">
+                  <Link to={`/technicians/${tech.id}`} state={{ returnTo: `${location.pathname}${location.search}` }} className="flex-1">
                     <Button variant="outline" className="w-full">
                       <Eye className="h-4 w-4 ml-1" />
                       عرض
@@ -649,6 +693,7 @@ const Technicians = () => {
           );
         })}
       </div>
+      )}
     </div>
   );
 };

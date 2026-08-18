@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ProjectNavBar } from "@/components/layout/ProjectNavBar";
+import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -111,6 +111,8 @@ const ProjectProgress = () => {
         .from("project_items")
         .select(`
           id,
+          project_id,
+          phase_id,
           name,
           quantity,
           measurement_type,
@@ -186,6 +188,8 @@ const ProjectProgress = () => {
       const { error } = await supabase
         .from("technician_progress_records")
         .insert({
+          project_id: projectId!,
+          phase_id: (selectedItem as any)?.phase_id || null,
           project_item_id: selectedItem!.id,
           technician_id: data.technician_id,
           quantity_completed: qty,
@@ -219,6 +223,10 @@ const ProjectProgress = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-items-progress", projectId] });
       queryClient.invalidateQueries({ queryKey: ["progress-records", selectedItem?.id] });
+      queryClient.invalidateQueries({ queryKey: ["technician-progress-records"] });
+      queryClient.invalidateQueries({ queryKey: ["all-technicians-progress"] });
+      queryClient.invalidateQueries({ queryKey: ["technicians-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["project-financial-summary"] });
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       toast({
         title: "تم تسجيل التقدم",
@@ -396,28 +404,14 @@ const ProjectProgress = () => {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <ProjectNavBar />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">تقدم بنود المشروع</h1>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span>{project.name}</span>
-            {(project as any).clients && (
-              <>
-                <span>•</span>
-                <Link 
-                  to={`/projects/client/${(project as any).clients.id}`}
-                  className="text-primary hover:underline"
-                >
-                  {(project as any).clients.name}
-                </Link>
-              </>
-            )}
+    <ProjectWorkspaceLayout>
+      <div className="space-y-6" dir="rtl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">نسب إنجاز الفنيين</h1>
+            <p className="text-xs text-muted-foreground">متابعة إنجاز واستحقاقات الفنيين على بنود المشروع</p>
           </div>
         </div>
-      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -737,7 +731,8 @@ const ProjectProgress = () => {
         item={selectedItem}
         projectName={project?.name}
       />
-    </div>
+      </div>
+    </ProjectWorkspaceLayout>
   );
 };
 

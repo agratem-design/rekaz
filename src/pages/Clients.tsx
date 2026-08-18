@@ -22,9 +22,10 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { openPrintWindow } from "@/lib/printStyles";
+import { calculateProjectFinancials } from "@/lib/financialCore";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
 
 interface ClientForm {
   name: string;
@@ -53,6 +56,8 @@ const initialForm: ClientForm = {
 
 export default function Clients() {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<string | null>(null);
   const [form, setForm] = useState<ClientForm>(initialForm);
@@ -64,7 +69,18 @@ export default function Clients() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteCheckboxChecked, setDeleteCheckboxChecked] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchQuery = searchParams.get("search") || "";
+  const setSearchQuery = (newSearch: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newSearch) {
+        next.set("search", newSearch);
+      } else {
+        next.delete("search");
+      }
+      return next;
+    }, { replace: true });
+  };
 
   // Fetch clients metadata
   const { data: clients, isLoading: loadingClients } = useQuery({
@@ -74,6 +90,15 @@ export default function Clients() {
         .from("clients")
         .select("*")
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -101,27 +126,45 @@ export default function Clients() {
   const { data: projectItems } = useQuery({
     queryKey: ["all-items-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("project_items").select("id, phase_id, total_price");
+      const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price");
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
   const { data: purchases } = useQuery({
     queryKey: ["all-purchases-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("purchases").select("id, phase_id, total_amount, rental_id");
+      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id");
       if (error) throw error;
-      return data;
+      return data as any;
+    },
+  });
+
+  const { data: clientExpenses } = useQuery({
+    queryKey: ["all-expenses-clients-page"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: clientTechProgress } = useQuery({
+    queryKey: ["all-tech-progress-clients-page"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const { data: clientPayments } = useQuery({
     queryKey: ["all-payments-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("client_payments").select("id, client_id, amount");
+      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount");
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
@@ -134,7 +177,7 @@ export default function Clients() {
     },
   });
 
-  // Map clients to their calculated financial overview
+  // Map clients to their calculated financial overview using Central Financial Domain
   const clientsWithFinancials = useMemo(() => {
     if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments) return [];
 
@@ -145,48 +188,28 @@ export default function Clients() {
       let totalBilled = 0;
 
       clientProjList.forEach((proj) => {
-        const projItems = projectItems.filter((item) => item.project_id === proj.id);
-        const projPurchases = purchases.filter((p) => p.project_id === proj.id && p.rental_id === null);
-        const projRentals = purchases.filter((p) => p.project_id === proj.id && p.rental_id !== null);
-
-        const itemsSum = projItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
-        const purchSum = projPurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
-        const rentSum = projRentals.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
-
+        const projPurchases = purchases.filter((p: any) => p.project_id === proj.id);
+        const projItems = projectItems.filter((item: any) => item.project_id === proj.id);
         const projContracts = clientContracts.filter(c => c.project_id === proj.id || (!c.project_id && proj.project_type === "contracting"));
-        const contractsSum = projContracts.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+        const projExpenses = (clientExpenses || []).filter((e: any) => e.project_id === proj.id);
+        const projTech = (clientTechProgress || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
+        const projPayments = clientPayments.filter((p: any) => p.project_id === proj.id);
 
-        let percentageFeeSum = 0;
-        const allProjPurchasesAndRentals = purchases.filter((p) => p.project_id === proj.id);
-        
-        allProjPurchasesAndRentals.forEach((p) => {
-          let pct = 0;
-          if (p.phase_id) {
-            const phase = phases.find((ph) => ph.id === p.phase_id);
-            if (phase) {
-              pct = phase.has_percentage && phase.percentage_value > 0 
-                ? Number(phase.percentage_value) 
-                : (proj.project_type === "finishing" ? Number(proj.finishing_percentage || 0) : 0);
-            } else {
-              pct = proj.project_type === "finishing" ? Number(proj.finishing_percentage || 0) : 0;
-            }
-          } else {
-            pct = proj.project_type === "finishing" ? Number(proj.finishing_percentage || 0) : 0;
-          }
-          
-          if (pct > 0) {
-            percentageFeeSum += (Number(p.total_amount || 0) * pct) / 100;
-          }
+        const projResult = calculateProjectFinancials({
+          project: proj,
+          contracts: projContracts,
+          projectItems: projItems,
+          purchases: projPurchases,
+          techProgressRecords: projTech,
+          expenses: projExpenses,
+          clientPayments: projPayments,
         });
 
-        const budgetVal = Number(proj.budget || 0);
-        const projectBaseValue = Math.max(itemsSum, contractsSum, budgetVal);
-
-        totalBilled += projectBaseValue + purchSum + rentSum + percentageFeeSum;
+        totalBilled += projResult.clientObligation;
       });
 
-      const clientPaymentsList = clientPayments.filter((cp) => cp.client_id === client.id);
-      const totalPaid = clientPaymentsList.reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
+      const clientPaymentsList = clientPayments.filter((cp: any) => cp.client_id === client.id);
+      const totalPaid = clientPaymentsList.reduce((sum: number, cp: any) => sum + Number(cp.amount || 0), 0);
 
       const remaining = totalBilled - totalPaid;
 
@@ -198,7 +221,7 @@ export default function Clients() {
         remaining,
       };
     });
-  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts]);
+  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts, clientExpenses, clientTechProgress]);
 
   // Filter clients by search query
   const filteredClients = useMemo(() => {
@@ -471,114 +494,111 @@ export default function Clients() {
       </div>
     `;
 
-    openPrintWindow("كشف العملاء الإجمالي", printHTML);
+    openPrintWindow("كشف العملاء الإجمالي", printHTML, companySettings);
   };
 
   return (
     <div className="space-y-6" dir="rtl">
       {/* Page Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-foreground">العملاء</h1>
-          <p className="text-muted-foreground mt-1">
-            إدارة قاعدة بيانات العملاء ومتابعة قيم الأعمال، المدفوعات والذمم المتبقية
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={handlePrintClientsReport} variant="outline" className="gap-2 cursor-pointer">
-            <Printer className="h-4 w-4" />
-            <span>طباعة الكشف الإجمالي</span>
-          </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 cursor-pointer" onClick={() => { setEditingClient(null); setForm(initialForm); }}>
-                <Plus className="h-5 w-5" />
-                <span>عميل جديد</span>
+      <PageHeader
+        title="العملاء"
+        description="إدارة قاعدة بيانات العملاء ومتابعة قيم الأعمال، المدفوعات والذمم المتبقية"
+        actions={
+          <>
+            <Button onClick={handlePrintClientsReport} variant="outline" className="gap-2 cursor-pointer">
+              <Printer className="h-4 w-4" />
+              <span>طباعة الكشف الإجمالي</span>
+            </Button>
+            <Button className="gap-2 cursor-pointer" onClick={() => { setEditingClient(null); setForm(initialForm); setIsDialogOpen(true); }}>
+              <Plus className="h-4 w-4" />
+              <span>عميل جديد</span>
+            </Button>
+          </>
+        }
+      />
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">اسم العميل *</Label>
+              <Input
+                id="name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="أدخل اسم العميل"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone">رقم الهاتف</Label>
+                <Input
+                  id="phone"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="09xxxxxxxx"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="example@mail.com"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="city">المدينة</Label>
+              <Input
+                id="city"
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                placeholder="أدخل المدينة"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address">العنوان</Label>
+              <Input
+                id="address"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="أدخل العنوان التفصيلي"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">ملاحظات</Label>
+              <Textarea
+                id="notes"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="أي ملاحظات إضافية..."
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button type="submit" className="flex-1 cursor-pointer" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "جاري الحفظ..." : editingClient ? "تحديث" : "إضافة"}
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingClient ? "تعديل بيانات العميل" : "إضافة عميل جديد"}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">اسم العميل *</Label>
-                  <Input
-                    id="name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="أدخل اسم العميل"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">رقم الهاتف</Label>
-                    <Input
-                      id="phone"
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      placeholder="09xxxxxxxx"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">البريد الإلكتروني</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      placeholder="example@mail.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="city">المدينة</Label>
-                  <Input
-                    id="city"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    placeholder="أدخل المدينة"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">العنوان</Label>
-                  <Input
-                    id="address"
-                    value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
-                    placeholder="أدخل العنوان التفصيلي"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">ملاحظات</Label>
-                  <Textarea
-                    id="notes"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    placeholder="أي ملاحظات إضافية..."
-                    rows={2}
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1 cursor-pointer" disabled={saveMutation.isPending}>
-                    {saveMutation.isPending ? "جاري الحفظ..." : editingClient ? "تحديث" : "إضافة"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleCloseDialog} className="cursor-pointer">
-                    إلغاء
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+              <Button type="button" variant="outline" onClick={handleCloseDialog} className="cursor-pointer">
+                إلغاء
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats Cards */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-4">
@@ -642,7 +662,38 @@ export default function Clients() {
       {loadingClients ? (
         <div className="text-center py-12 text-muted-foreground">جاري تحميل بيانات العملاء...</div>
       ) : filteredClients.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">لا يوجد زبائن مطابقين للبحث.</div>
+        <EmptyState
+          icon={Building}
+          title={searchQuery ? "لا يوجد عملاء مطابقين للبحث" : "لا يوجد عملاء حتى الآن"}
+          description={
+            searchQuery
+              ? `لم نتمكن من العثور على أي عميل يطابق "${searchQuery}".`
+              : "ابدأ بإضافة أول عميل إلى المنظومة لمتابعة مشاريعه وحساباته المالية."
+          }
+          action={
+            !searchQuery ? (
+              <Button
+                className="gap-2 cursor-pointer"
+                onClick={() => {
+                  setEditingClient(null);
+                  setForm(initialForm);
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                <span>إضافة عميل</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setSearchQuery("")}
+                className="cursor-pointer"
+              >
+                مسح البحث
+              </Button>
+            )
+          }
+        />
       ) : (
         <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {filteredClients.map((client) => {
@@ -746,7 +797,7 @@ export default function Clients() {
 
                 <div className="pt-4 mt-4">
                   <Button variant="outline" className="w-full text-xs h-9 cursor-pointer flex items-center justify-center gap-1 font-semibold" asChild>
-                    <Link to={`/clients/${client.id}`}>
+                    <Link to={`/clients/${client.id}`} state={{ returnTo: `${location.pathname}${location.search}` }}>
                       <span>عرض تفاصيل الحساب والدفعات</span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
