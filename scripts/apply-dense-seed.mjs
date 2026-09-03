@@ -57,37 +57,8 @@ async function runSeed() {
 
   // 1. TREASURIES - ensure roots & branch exist
   console.log('\n--- 1. ENSURING CANONICAL TREASURIES ---');
-  // First contracting cash (root)
-  await supabase.from('treasuries').upsert({
-    id: T_CONTRACTING_CASH,
-    name: 'خزينة المقاولات الرئيسية',
-    treasury_type: 'cash',
-    project_category: 'contracting',
-    parent_id: null,
-    is_active: true,
-    description: 'الخزينة النقدية الرئيسية المعتمدة لمشاريع المقاولات العامة والإنشاءات'
-  });
-  // Then contracting bank (child)
-  await supabase.from('treasuries').upsert({
-    id: T_CONTRACTING_BANK,
-    name: 'حساب مصرف الوحدة (جاري)',
-    treasury_type: 'bank',
-    project_category: 'contracting',
-    parent_id: T_CONTRACTING_CASH,
-    is_active: true,
-    description: 'الحساب المصرفي الجاري المخصص لعمليات وتحويلات المقاولات'
-  });
-  // Then finishing cash (root)
-  await supabase.from('treasuries').upsert({
-    id: T_FINISHING_CASH,
-    name: 'خزينة التشطيبات الرئيسية',
-    treasury_type: 'cash',
-    project_category: 'finishing',
-    parent_id: null,
-    is_active: true,
-    description: 'الخزينة النقدية الرئيسية المعتمدة لمشاريع وأعمال التشطيبات والديكور'
-  });
-  console.log('  ✓ Verified 3 canonical treasuries');
+  const treasuries = [
+    {
       id: T_CONTRACTING_CASH,
       name: 'خزينة المقاولات الرئيسية',
       description: 'الخزينة النقدية الرئيسية المعتمدة لمشاريع المقاولات العامة والإنشاءات',

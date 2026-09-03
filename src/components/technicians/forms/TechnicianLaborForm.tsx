@@ -29,7 +29,9 @@ import {
 import { toast } from "sonner";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { QuickAddTechnicianDialog } from "@/components/technicians/QuickAddTechnicianDialog";
-import { generateIdempotencyKey } from "@/lib/uuid";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
+import { invalidateProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
 
 interface TechnicianLaborFormProps {
   projectId: string;
@@ -106,20 +108,20 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
     editingRecord?.technician_id || ""
   );
   const [workDescription, setWorkDescription] = useState<string>(
-    editingRecord?.notes || ""
+    editingRecord?.title || editingRecord?.notes || ""
   );
   const [date, setDate] = useState<string>(
     editingRecord?.date || new Date().toISOString().split("T")[0]
   );
   const [quantity, setQuantity] = useState<string>(
-    editingRecord?.quantity_completed ? String(editingRecord.quantity_completed) : "1"
+    String(editingRecord?.quantity_completed ?? editingRecord?.quantity ?? editingRecord?.items?.[0]?.qty ?? 1)
   );
   const [rate, setRate] = useState<string>(
-    editingRecord?.rate ? String(editingRecord.rate) : ""
+    String(editingRecord?.rate ?? editingRecord?.items?.[0]?.price ?? "")
   );
   const [notes, setNotes] = useState<string>("");
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
-  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateIdempotencyKey("tpr"));
+  const workOperation = useOperationKey();
 
   // Effective Phase ID
   const effectivePhaseId = activePhaseId || (phaseId && phaseId !== "none" ? phaseId : null);
@@ -187,7 +189,7 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
         throw new Error("يرجى اختيار الفني أو العامل");
       }
       if (projectType === "contracting" && !projectItemId) {
-        throw new Error("يرجى اختيار بند المقايسة المرتبط في مشاريع المقاولات");
+        throw new Error("يرجى اختيار بند المشروع المرتبط في مشاريع المقاولات");
       }
       if (projectType === "finishing" && !workDescription.trim()) {
         throw new Error("يرجى كتابة بيان / وصف العمل المنفذ لمشروع التشطيبات");
@@ -212,60 +214,35 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
         phase_id: effectivePhaseId || null,
         project_item_id: projectType === "contracting" ? projectItemId : null,
         technician_id: technicianId,
-        quantity_completed: qtyNum,
+        quantity: qtyNum,
+        title: workDescription.trim(),
         rate: rateNum,
         earned_amount: calculatedEarnedAmount,
         date: date,
         notes: fullNotes,
-        idempotency_key: idempotencyKey,
       };
 
-      if (editingRecord?.id) {
-        const { error } = await supabase
-          .from("technician_progress_records")
-          .update({
-            project_id: payload.project_id,
-            phase_id: payload.phase_id,
-            project_item_id: payload.project_item_id,
-            technician_id: payload.technician_id,
-            quantity_completed: payload.quantity_completed,
-            rate: payload.rate,
-            earned_amount: payload.earned_amount,
-            date: payload.date,
-            notes: payload.notes,
-          })
-          .eq("id", editingRecord.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("technician_progress_records")
-          .insert(payload);
-
-        if (error) throw error;
-      }
+      const args = { p_record_id: editingRecord?.id || null, p_payload: payload };
+      return financialRpc("save_technician_work_v2", { ...args, p_request_key: workOperation.getKey(args) });
     },
     onSuccess: () => {
       // Invalidate all relevant React Query keys
-      queryClient.invalidateQueries({ queryKey: ["technician-progress-records"] });
-      queryClient.invalidateQueries({ queryKey: ["all-technicians-progress"] });
+      queryClient.invalidateQueries({ queryKey: ["technician-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["all-technicians-rates"] });
       queryClient.invalidateQueries({ queryKey: ["technicians-stats"] });
       queryClient.invalidateQueries({ queryKey: ["technicians"] });
-      queryClient.invalidateQueries({ queryKey: ["project-financial-summary", projectId] });
+      invalidateProjectFinancialSummary(queryClient, projectId);
       queryClient.invalidateQueries({ queryKey: ["phase-workspace-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["technician-rates"] });
+      queryClient.invalidateQueries({ queryKey: ["purchases", projectId] });
 
-      toast.success(
-        editingRecord?.id
-          ? "تم تحديث استحقاق العمل الفني بنجاح"
-          : "تم تسجيل استحقاق العمل الفني وزيادة رصيد الفني فوراً"
-      );
-      setIdempotencyKey(generateIdempotencyKey("tpr"));
+      toast.success("تم تسجيل عمل الفني وزيادة رصيد حسابه بنجاح");
+      workOperation.reset();
+      invalidateFinancialQueries(queryClient);
       onSuccess();
     },
     onError: (err: any) => {
-      toast.error(err.message || "حدث خطأ أثناء حفظ استحقاق العمل الفني");
+      toast.error(err.message || "حدث خطأ أثناء حفظ عمل الفني");
     },
   });
 
@@ -370,12 +347,12 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
           </div>
         ) : null}
 
-        {/* Contracting: Mandatory BOQ Item */}
+        {/* Contracting: Mandatory Project Item */}
         {projectType === "contracting" && (
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground flex items-center gap-1">
               <Package className="h-3.5 w-3.5" />
-              بند المقايسة المرتبط <span className="text-destructive">*</span>
+              بند المشروع المرتبط <span className="text-destructive">*</span>
             </Label>
             {filteredProjectItems.length > 0 ? (
               <Select
@@ -384,7 +361,7 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
                 disabled={saveMutation.isPending}
               >
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="اختر بند المقايسة التابع للمرحلة..." />
+                  <SelectValue placeholder="اختر بند المشروع التابع للمرحلة..." />
                 </SelectTrigger>
                 <SelectContent dir="rtl">
                   {filteredProjectItems.map((item) => (
@@ -397,7 +374,7 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
             ) : (
               <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-600 text-xs flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>لا توجد بنود مقايسة متاحة في هذه المرحلة. يرجى إضافة بنود مقايسة أولاً.</span>
+                <span>لا توجد بنود مشروع متاحة في هذه المرحلة. يرجى إضافة بنود أولاً.</span>
               </div>
             )}
           </div>

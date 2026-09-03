@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Plus, ClipboardCheck, TrendingUp, Users, Calendar, Eye } from "lucide-react";
 import { TechnicianDuesDialog } from "@/components/progress/TechnicianDuesDialog";
 import { toast } from "@/hooks/use-toast";
+import { invalidateProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -226,7 +227,7 @@ const ProjectProgress = () => {
       queryClient.invalidateQueries({ queryKey: ["technician-progress-records"] });
       queryClient.invalidateQueries({ queryKey: ["all-technicians-progress"] });
       queryClient.invalidateQueries({ queryKey: ["technicians-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["project-financial-summary"] });
+      invalidateProjectFinancialSummary(queryClient, projectId);
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       toast({
         title: "تم تسجيل التقدم",

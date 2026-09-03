@@ -36,7 +36,7 @@ import { formatCurrencyLYD } from "@/lib/currency";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
-  const { isEngineer, isAdmin, isAccountant } = useAuth();
+  const { isEngineer, isAdmin, isAccountant, role } = useAuth();
   const [activeTab, setActiveTab] = useState("projects");
 
   // Safety fetch handler to prevent individual table errors from rejecting the whole Promise.all
@@ -77,7 +77,7 @@ const Dashboard = () => {
       ] = await Promise.all([
         fetchSafety(supabase.from("projects").select("id, status, progress, budget, spent, name, image_url")),
         fetchSafety(supabase.from("clients").select("id", { count: "exact", head: true })),
-        fetchSafety(supabase.from("client_payments").select("amount")),
+        fetchSafety(supabase.from("client_payments").select("amount").is("reversed_at", null)),
         fetchSafety(supabase.from("income").select("amount")),
         fetchSafety(supabase.from("expenses").select("amount")),
         fetchSafety(supabase.from("purchases").select("total_amount, paid_amount, status, date")),
@@ -183,80 +183,88 @@ const Dashboard = () => {
     day: "numeric",
   });
 
+  const roleLabel = {
+    admin: "مدير النظام",
+    engineer: "مهندس المشاريع",
+    accountant: "المحاسب المالي",
+    supervisor: "مشرف الموقع",
+  }[role ?? ""] ?? "المستخدم";
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300" dir="rtl">
+    <div className="content-enter space-y-6" dir="rtl">
       
       {/* Smart Welcome Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/40 p-6 sm:p-8 text-white border border-border/20 shadow-xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl"></div>
+      <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-5 text-foreground shadow-xs sm:p-7">
+        <div className="absolute inset-y-0 right-0 w-1 bg-primary" aria-hidden="true" />
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl pointer-events-none"></div>
         <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-semibold text-emerald-400">حالة المنظومة: مستقرة وجاهزة</span>
+              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 motion-safe:animate-pulse"></span>
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">حالة المنظومة: مستقرة وجاهزة</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {getGreeting()}، مدير النظام
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground dark:text-white">
+              {getGreeting()}، {roleLabel}
             </h1>
-            <p className="text-neutral-300 text-sm max-w-xl">
+            <p className="text-muted-foreground dark:text-neutral-300 text-sm max-w-xl font-medium leading-relaxed">
               مرحباً بك في ركاز. لديك اليوم <span className="text-primary font-bold">{stats?.activeProjects || 0} مشاريع نشطة</span> تجري متابعتها، و إجمالي <span className="text-primary font-bold">{stats?.activeRentals || 0} معدات</span> في مواقع العمل.
             </p>
           </div>
           <div className="flex flex-col sm:items-end justify-center shrink-0">
-            <span className="text-xs text-neutral-400">{formattedDate}</span>
+            <span className="text-xs text-muted-foreground dark:text-neutral-400 font-semibold">{formattedDate}</span>
             {stats?.overdueCount && stats.overdueCount > 0 ? (
-              <Badge variant="destructive" className="mt-2 text-xs px-3 py-1 flex items-center gap-1.5 w-fit">
+              <Badge variant="destructive" className="mt-2 text-xs px-3 py-1 flex items-center gap-1.5 w-fit font-bold shadow-xs">
                 <AlertCircle className="h-3.5 w-3.5" />
                 {stats.overdueCount} مشتريات مستحقة الدفع
               </Badge>
             ) : (
-              <Badge variant="outline" className="mt-2 text-xs px-3 py-1 flex items-center gap-1.5 border-emerald-500/30 text-emerald-400 w-fit">
-                <CheckCircle2 className="h-3.5 w-3.5" />
+              <Badge variant="outline" className="mt-2 text-xs px-3 py-1 flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 w-fit font-bold">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 لا توجد مستحقات متأخرة
               </Badge>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Quick Shortcuts Section */}
-      <div className="bg-card/50 backdrop-blur-sm p-4 rounded-xl border border-border/60">
-        <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">الوصول والعمليات السريعة</p>
+      <section className="surface-panel p-4" aria-labelledby="quick-actions-title">
+        <p id="quick-actions-title" className="mb-3 text-xs font-bold tracking-wide text-foreground/80">الوصول السريع</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {isAdmin && (
-            <Link to="/projects/new">
-              <Button variant="outline" className="w-full text-xs gap-1.5 h-10 cursor-pointer border-dashed hover:border-primary hover:text-primary">
-                <Plus className="h-4 w-4" />
+            <Button asChild className="w-full text-xs font-bold gap-2 h-10">
+              <Link to="/projects/new">
+                <Plus className="h-4 w-4 shrink-0" />
                 مشروع جديد
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           )}
-          <Link to="/expenses">
-            <Button variant="outline" className="w-full text-xs gap-1.5 h-10 cursor-pointer hover:border-primary hover:text-primary">
-              <DollarSign className="h-4 w-4" />
+          <Button asChild variant="outline" className="w-full text-xs font-bold gap-2 h-10">
+            <Link to="/expenses">
+              <DollarSign className="h-4 w-4 text-primary shrink-0" />
               تسجيل مصروف
-            </Button>
-          </Link>
-          <Link to="/transfers">
-            <Button variant="outline" className="w-full text-xs gap-1.5 h-10 cursor-pointer hover:border-primary hover:text-primary">
-              <ArrowLeftRight className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full text-xs font-bold gap-2 h-10">
+            <Link to="/transfers">
+              <ArrowLeftRight className="h-4 w-4 text-primary shrink-0" />
               حركة خزينة
-            </Button>
-          </Link>
-          <Link to="/equipment">
-            <Button variant="outline" className="w-full text-xs gap-1.5 h-10 cursor-pointer hover:border-primary hover:text-primary">
-              <Wrench className="h-4 w-4" />
-              تأجير معدة
-            </Button>
-          </Link>
-          <Link to="/clients">
-            <Button variant="outline" className="w-full text-xs gap-1.5 h-10 cursor-pointer hover:border-primary hover:text-primary">
-              <Users className="h-4 w-4" />
-              إضافة عميل
-            </Button>
-          </Link>
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full text-xs font-bold gap-2 h-10">
+            <Link to="/equipment">
+              <Wrench className="h-4 w-4 text-primary shrink-0" />
+              سجل المعدات
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full text-xs font-bold gap-2 h-10">
+            <Link to="/clients">
+              <Users className="h-4 w-4 text-primary shrink-0" />
+              سجل العملاء
+            </Link>
+          </Button>
         </div>
-      </div>
+      </section>
 
       {/* Stats KPI Grid */}
       {statsLoading ? (
@@ -269,16 +277,16 @@ const Dashboard = () => {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Net Profit Card */}
           {!isEngineer && (
-            <Card className="p-4 border-primary/20 bg-gradient-to-br from-card to-primary/5 hover:shadow-md transition-all">
+            <Card className="min-h-32 border-primary/30 bg-primary/[0.04] p-4 transition-all duration-200 hover:border-primary/60 hover:shadow-md">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground font-medium">صافي الأرباح</span>
-                  <p className={`text-2xl font-bold ${stats?.netProfit && stats.netProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  <span className="text-xs text-muted-foreground font-bold">صافي الأرباح</span>
+                  <p className={`text-2xl font-black ${stats?.netProfit && stats.netProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
                     {formatCurrencyLYD(stats?.netProfit || 0)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">الإيرادات المخصوم منها المصاريف والموردين</p>
+                  <p className="text-xs text-muted-foreground font-medium">الإيرادات المخصوم منها المصاريف والموردين</p>
                 </div>
-                <div className="p-2.5 bg-primary/10 rounded-lg">
+                <div className="p-2.5 bg-primary/15 rounded-xl text-primary">
                   <TrendingUp className="h-5 w-5 text-primary" />
                 </div>
               </div>
@@ -286,54 +294,54 @@ const Dashboard = () => {
           )}
 
           {/* Active Projects Card */}
-          <Card className="p-4 hover:shadow-md transition-all">
+          <Card className="min-h-32 p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md">
             <div className="flex justify-between items-start">
               <div className="space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">المشاريع النشطة</span>
-                <p className="text-2xl font-bold text-foreground">
-                  {stats?.activeProjects || 0} <span className="text-xs text-muted-foreground font-normal">/ {stats?.projects?.length || 0} كلي</span>
+                <span className="text-xs text-muted-foreground font-bold">المشاريع النشطة</span>
+                <p className="text-2xl font-black text-foreground">
+                  {stats?.activeProjects || 0} <span className="text-xs text-muted-foreground font-semibold">/ {stats?.projects?.length || 0} كلي</span>
                 </p>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
                   <span>متوسط الإنجاز:</span>
-                  <span className="font-semibold text-primary">{stats?.avgProgress || 0}%</span>
+                  <span className="font-bold text-primary">{stats?.avgProgress || 0}%</span>
                 </div>
               </div>
-              <div className="p-2.5 bg-blue-500/10 rounded-lg">
-                <FolderKanban className="h-5 w-5 text-blue-500" />
+              <div className="p-2.5 bg-primary/15 rounded-xl">
+                <FolderKanban className="h-5 w-5 text-primary" />
               </div>
             </div>
           </Card>
 
           {/* Treasuries Cash Balance */}
           {!isEngineer && (
-            <Card className="p-4 hover:shadow-md transition-all">
+            <Card className="min-h-32 p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground font-medium">رصيد الخزائن</span>
-                  <p className="text-2xl font-bold text-foreground">
+                  <span className="text-xs text-muted-foreground font-bold">رصيد الخزائن</span>
+                  <p className="text-2xl font-black text-foreground">
                     {formatCurrencyLYD(stats?.totalTreasury || 0)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">السيولة النقدية المتوفرة حالياً</p>
+                  <p className="text-xs text-muted-foreground font-medium">السيولة النقدية المتوفرة حالياً</p>
                 </div>
-                <div className="p-2.5 bg-emerald-500/10 rounded-lg">
-                  <Wallet className="h-5 w-5 text-emerald-500" />
+                <div className="p-2.5 bg-emerald-500/15 rounded-xl">
+                  <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
               </div>
             </Card>
           )}
 
           {/* Active Rentals & Logistics */}
-          <Card className="p-4 hover:shadow-md transition-all">
+          <Card className="min-h-32 p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md">
             <div className="flex justify-between items-start">
               <div className="space-y-1">
-                <span className="text-xs text-muted-foreground font-medium">معدات بالمواقع</span>
-                <p className="text-2xl font-bold text-foreground">
-                  {stats?.activeRentals || 0} <span className="text-xs text-muted-foreground font-normal">مؤجرة</span>
+                <span className="text-xs text-muted-foreground font-bold">معدات بالمواقع</span>
+                <p className="text-2xl font-black text-foreground">
+                  {stats?.activeRentals || 0} <span className="text-xs text-muted-foreground font-semibold">مؤجرة</span>
                 </p>
-                <p className="text-[10px] text-muted-foreground">إجمالي المعدات بالنظام: {stats?.totalEquipment || 0}</p>
+                <p className="text-xs text-muted-foreground font-medium">إجمالي المعدات بالنظام: {stats?.totalEquipment || 0}</p>
               </div>
-              <div className="p-2.5 bg-purple-500/10 rounded-lg">
-                <Wrench className="h-5 w-5 text-purple-500" />
+              <div className="p-2.5 bg-primary/15 rounded-xl">
+                <Wrench className="h-5 w-5 text-primary" />
               </div>
             </div>
           </Card>
@@ -342,31 +350,31 @@ const Dashboard = () => {
 
       {/* Main Tabs Area */}
       <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl" className="w-full">
-        <TabsList className="w-full justify-start border-b border-border bg-transparent p-0 rounded-none h-11">
+        <TabsList className="h-auto min-h-12 w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border/80 bg-card p-1 shadow-xs">
           <TabsTrigger
             value="projects"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary px-4 py-2 text-sm font-semibold cursor-pointer"
+            className="shrink-0 border-b-2 border-transparent px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:text-sm"
           >
             المشاريع والعمليات الجارية
           </TabsTrigger>
           {!isEngineer && (
             <TabsTrigger
               value="financials"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary px-4 py-2 text-sm font-semibold cursor-pointer"
+              className="shrink-0 border-b-2 border-transparent px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:text-sm"
             >
               التحليلات والموقف المالي
             </TabsTrigger>
           )}
           <TabsTrigger
             value="logistics"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary px-4 py-2 text-sm font-semibold cursor-pointer"
+            className="shrink-0 border-b-2 border-transparent px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:text-sm"
           >
             المعدات واللوجستيات
           </TabsTrigger>
           {!isEngineer && (
             <TabsTrigger
               value="operations"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary px-4 py-2 text-sm font-semibold cursor-pointer"
+              className="shrink-0 border-b-2 border-transparent px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:text-sm"
             >
               الرقابة وسجل النشاط
             </TabsTrigger>

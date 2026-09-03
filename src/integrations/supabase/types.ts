@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -162,6 +162,74 @@ export type Database = {
           },
         ]
       }
+      client_credit_ledger: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string
+          created_by: string | null
+          entry_type: string
+          id: string
+          notes: string | null
+          reference_entry_id: string | null
+          source_payment_id: string | null
+          target_project_id: string | null
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          entry_type: string
+          id?: string
+          notes?: string | null
+          reference_entry_id?: string | null
+          source_payment_id?: string | null
+          target_project_id?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          entry_type?: string
+          id?: string
+          notes?: string | null
+          reference_entry_id?: string | null
+          source_payment_id?: string | null
+          target_project_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_credit_ledger_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_reference_entry_id_fkey"
+            columns: ["reference_entry_id"]
+            isOneToOne: false
+            referencedRelation: "client_credit_ledger"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "client_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_credit_ledger_target_project_id_fkey"
+            columns: ["target_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_payment_allocations: {
         Row: {
           amount: number
@@ -207,110 +275,51 @@ export type Database = {
           },
         ]
       }
-      client_credit_ledger: {
-        Row: {
-          amount: number
-          client_id: string
-          created_at: string
-          created_by: string | null
-          entry_type: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
-          id: string
-          notes: string | null
-          reference_entry_id: string | null
-          source_payment_id: string | null
-          target_project_id: string | null
-        }
-        Insert: {
-          amount: number
-          client_id: string
-          created_at?: string
-          created_by?: string | null
-          entry_type: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
-          id?: string
-          notes?: string | null
-          reference_entry_id?: string | null
-          source_payment_id?: string | null
-          target_project_id?: string | null
-        }
-        Update: {
-          amount?: number
-          client_id?: string
-          created_at?: string
-          created_by?: string | null
-          entry_type?: "CREDIT_CREATED" | "CREDIT_APPLIED" | "CREDIT_APPLICATION_REVERSED" | "CREDIT_CREATION_REVERSED"
-          id?: string
-          notes?: string | null
-          reference_entry_id?: string | null
-          source_payment_id?: string | null
-          target_project_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_credit_ledger_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_credit_ledger_reference_entry_id_fkey"
-            columns: ["reference_entry_id"]
-            isOneToOne: false
-            referencedRelation: "client_credit_ledger"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_credit_ledger_source_payment_id_fkey"
-            columns: ["source_payment_id"]
-            isOneToOne: false
-            referencedRelation: "client_payments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_credit_ledger_target_project_id_fkey"
-            columns: ["target_project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_payments: {
         Row: {
           amount: number
           client_id: string | null
           created_at: string
+          credit_used: number
           date: string
           id: string
           notes: string | null
           payment_method: string | null
+          payment_type: string
           project_id: string | null
           treasury_id: string
           updated_at: string
+          used_amount: number
         }
         Insert: {
           amount?: number
           client_id?: string | null
           created_at?: string
+          credit_used?: number
           date?: string
           id?: string
           notes?: string | null
           payment_method?: string | null
+          payment_type?: string
           project_id?: string | null
           treasury_id: string
           updated_at?: string
+          used_amount?: number
         }
         Update: {
           amount?: number
           client_id?: string | null
           created_at?: string
+          credit_used?: number
           date?: string
           id?: string
           notes?: string | null
           payment_method?: string | null
+          payment_type?: string
           project_id?: string | null
           treasury_id?: string
           updated_at?: string
+          used_amount?: number
         }
         Relationships: [
           {
@@ -374,17 +383,31 @@ export type Database = {
       }
       company_settings: {
         Row: {
+          cloudinary_api_key: string | null
+          cloudinary_cloud_name: string | null
+          cloudinary_upload_preset: string | null
+          company_address: string | null
           company_logo: string | null
           company_name: string
           company_phone: string | null
-          company_address: string | null
-          print_header_enabled: boolean | null
+          company_tagline: string | null
           contract_accent_color: string | null
+          contract_background: string | null
+          contract_bg_pos_x_mm: number | null
+          contract_bg_pos_y_mm: number | null
+          contract_bg_scale_percent: number | null
           contract_font_size_body: number | null
           contract_font_size_title: number | null
+          contract_footer_bottom_mm: number | null
+          contract_footer_enabled: boolean | null
+          contract_footer_height_mm: number | null
           contract_header_bg_color: string | null
           contract_header_text_color: string | null
           contract_logo_position: string | null
+          contract_padding_bottom_mm: number | null
+          contract_padding_left_mm: number | null
+          contract_padding_right_mm: number | null
+          contract_padding_top_mm: number | null
           contract_show_clauses: boolean | null
           contract_show_description: boolean | null
           contract_show_items_table: boolean | null
@@ -392,15 +415,50 @@ export type Database = {
           contract_show_signatures: boolean | null
           contract_signature_labels: Json | null
           contract_title_text: string | null
+          contracting_treasury_id: string | null
           created_at: string
+          custom_font_data: string | null
+          custom_font_name: string | null
+          default_theme: string | null
+          finishing_treasury_id: string | null
+          footer_font_size: number | null
+          footer_icon_color: string | null
+          freeimage_api_key: string | null
+          google_drive_billboard_script_url: string | null
+          google_drive_script_url: string | null
+          header_flipped: boolean | null
+          header_font_size_meta: number | null
+          header_font_size_name: number | null
+          header_font_size_tagline: number | null
+          header_height_mm: number | null
+          header_logo_height: number | null
+          header_show_logo: boolean | null
+          header_show_name: boolean | null
+          header_show_tagline: boolean | null
           id: string
+          image_upload_provider: string
+          imgbb_api_key: string | null
+          postimages_api_key: string | null
+          print_border_radius: number | null
+          print_border_width: number | null
+          print_cell_padding: number | null
+          print_date_position: string | null
+          print_font_family: string | null
+          print_header_enabled: boolean | null
+          print_header_font_size: number | null
           print_header_text_color: string | null
           print_labels: Json | null
           print_section_title_color: string | null
           print_table_border_color: string | null
+          print_table_font_size: number | null
           print_table_header_color: string | null
           print_table_row_even_color: string | null
           print_table_row_odd_color: string | null
+          print_table_text_color: string | null
+          print_title_font_size: number | null
+          print_totals_bg_color: string | null
+          print_totals_text_color: string | null
+          print_zoom_percent: number | null
           report_background: string | null
           report_bg_pos_x_mm: number | null
           report_bg_pos_y_mm: number | null
@@ -413,20 +471,37 @@ export type Database = {
           report_padding_left_mm: number | null
           report_padding_right_mm: number | null
           report_padding_top_mm: number | null
-          print_date_position: string | null
-          contracting_treasury_id: string | null
-          finishing_treasury_id: string | null
+          signee_name: string | null
+          signee_title: string | null
+          theme_color: string | null
           updated_at: string
         }
         Insert: {
+          cloudinary_api_key?: string | null
+          cloudinary_cloud_name?: string | null
+          cloudinary_upload_preset?: string | null
+          company_address?: string | null
           company_logo?: string | null
           company_name?: string
+          company_phone?: string | null
+          company_tagline?: string | null
           contract_accent_color?: string | null
+          contract_background?: string | null
+          contract_bg_pos_x_mm?: number | null
+          contract_bg_pos_y_mm?: number | null
+          contract_bg_scale_percent?: number | null
           contract_font_size_body?: number | null
           contract_font_size_title?: number | null
+          contract_footer_bottom_mm?: number | null
+          contract_footer_enabled?: boolean | null
+          contract_footer_height_mm?: number | null
           contract_header_bg_color?: string | null
           contract_header_text_color?: string | null
           contract_logo_position?: string | null
+          contract_padding_bottom_mm?: number | null
+          contract_padding_left_mm?: number | null
+          contract_padding_right_mm?: number | null
+          contract_padding_top_mm?: number | null
           contract_show_clauses?: boolean | null
           contract_show_description?: boolean | null
           contract_show_items_table?: boolean | null
@@ -434,15 +509,50 @@ export type Database = {
           contract_show_signatures?: boolean | null
           contract_signature_labels?: Json | null
           contract_title_text?: string | null
+          contracting_treasury_id?: string | null
           created_at?: string
+          custom_font_data?: string | null
+          custom_font_name?: string | null
+          default_theme?: string | null
+          finishing_treasury_id?: string | null
+          footer_font_size?: number | null
+          footer_icon_color?: string | null
+          freeimage_api_key?: string | null
+          google_drive_billboard_script_url?: string | null
+          google_drive_script_url?: string | null
+          header_flipped?: boolean | null
+          header_font_size_meta?: number | null
+          header_font_size_name?: number | null
+          header_font_size_tagline?: number | null
+          header_height_mm?: number | null
+          header_logo_height?: number | null
+          header_show_logo?: boolean | null
+          header_show_name?: boolean | null
+          header_show_tagline?: boolean | null
           id?: string
+          image_upload_provider?: string
+          imgbb_api_key?: string | null
+          postimages_api_key?: string | null
+          print_border_radius?: number | null
+          print_border_width?: number | null
+          print_cell_padding?: number | null
+          print_date_position?: string | null
+          print_font_family?: string | null
+          print_header_enabled?: boolean | null
+          print_header_font_size?: number | null
           print_header_text_color?: string | null
           print_labels?: Json | null
           print_section_title_color?: string | null
           print_table_border_color?: string | null
+          print_table_font_size?: number | null
           print_table_header_color?: string | null
           print_table_row_even_color?: string | null
           print_table_row_odd_color?: string | null
+          print_table_text_color?: string | null
+          print_title_font_size?: number | null
+          print_totals_bg_color?: string | null
+          print_totals_text_color?: string | null
+          print_zoom_percent?: number | null
           report_background?: string | null
           report_bg_pos_x_mm?: number | null
           report_bg_pos_y_mm?: number | null
@@ -455,20 +565,37 @@ export type Database = {
           report_padding_left_mm?: number | null
           report_padding_right_mm?: number | null
           report_padding_top_mm?: number | null
-          print_date_position?: string | null
-          contracting_treasury_id?: string | null
-          finishing_treasury_id?: string | null
+          signee_name?: string | null
+          signee_title?: string | null
+          theme_color?: string | null
           updated_at?: string
         }
         Update: {
+          cloudinary_api_key?: string | null
+          cloudinary_cloud_name?: string | null
+          cloudinary_upload_preset?: string | null
+          company_address?: string | null
           company_logo?: string | null
           company_name?: string
+          company_phone?: string | null
+          company_tagline?: string | null
           contract_accent_color?: string | null
+          contract_background?: string | null
+          contract_bg_pos_x_mm?: number | null
+          contract_bg_pos_y_mm?: number | null
+          contract_bg_scale_percent?: number | null
           contract_font_size_body?: number | null
           contract_font_size_title?: number | null
+          contract_footer_bottom_mm?: number | null
+          contract_footer_enabled?: boolean | null
+          contract_footer_height_mm?: number | null
           contract_header_bg_color?: string | null
           contract_header_text_color?: string | null
           contract_logo_position?: string | null
+          contract_padding_bottom_mm?: number | null
+          contract_padding_left_mm?: number | null
+          contract_padding_right_mm?: number | null
+          contract_padding_top_mm?: number | null
           contract_show_clauses?: boolean | null
           contract_show_description?: boolean | null
           contract_show_items_table?: boolean | null
@@ -476,15 +603,50 @@ export type Database = {
           contract_show_signatures?: boolean | null
           contract_signature_labels?: Json | null
           contract_title_text?: string | null
+          contracting_treasury_id?: string | null
           created_at?: string
+          custom_font_data?: string | null
+          custom_font_name?: string | null
+          default_theme?: string | null
+          finishing_treasury_id?: string | null
+          footer_font_size?: number | null
+          footer_icon_color?: string | null
+          freeimage_api_key?: string | null
+          google_drive_billboard_script_url?: string | null
+          google_drive_script_url?: string | null
+          header_flipped?: boolean | null
+          header_font_size_meta?: number | null
+          header_font_size_name?: number | null
+          header_font_size_tagline?: number | null
+          header_height_mm?: number | null
+          header_logo_height?: number | null
+          header_show_logo?: boolean | null
+          header_show_name?: boolean | null
+          header_show_tagline?: boolean | null
           id?: string
+          image_upload_provider?: string
+          imgbb_api_key?: string | null
+          postimages_api_key?: string | null
+          print_border_radius?: number | null
+          print_border_width?: number | null
+          print_cell_padding?: number | null
+          print_date_position?: string | null
+          print_font_family?: string | null
+          print_header_enabled?: boolean | null
+          print_header_font_size?: number | null
           print_header_text_color?: string | null
           print_labels?: Json | null
           print_section_title_color?: string | null
           print_table_border_color?: string | null
+          print_table_font_size?: number | null
           print_table_header_color?: string | null
           print_table_row_even_color?: string | null
           print_table_row_odd_color?: string | null
+          print_table_text_color?: string | null
+          print_title_font_size?: number | null
+          print_totals_bg_color?: string | null
+          print_totals_text_color?: string | null
+          print_zoom_percent?: number | null
           report_background?: string | null
           report_bg_pos_x_mm?: number | null
           report_bg_pos_y_mm?: number | null
@@ -497,9 +659,9 @@ export type Database = {
           report_padding_left_mm?: number | null
           report_padding_right_mm?: number | null
           report_padding_top_mm?: number | null
-          print_date_position?: string | null
-          contracting_treasury_id?: string | null
-          finishing_treasury_id?: string | null
+          signee_name?: string | null
+          signee_title?: string | null
+          theme_color?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -593,6 +755,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          measurement_factor: number | null
           name: string
           notes: string | null
           order_index: number
@@ -607,6 +770,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          measurement_factor?: number | null
           name: string
           notes?: string | null
           order_index?: number
@@ -621,6 +785,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          measurement_factor?: number | null
           name?: string
           notes?: string | null
           order_index?: number
@@ -942,7 +1107,7 @@ export type Database = {
           payment_method: string | null
           phase_id: string | null
           project_id: string | null
-          project_item_id?: string | null
+          project_item_id: string | null
           subtype: string | null
           supplier_id: string | null
           technician_id: string | null
@@ -1004,6 +1169,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_project_item_id_fkey"
+            columns: ["project_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
@@ -1026,6 +1198,51 @@ export type Database = {
           },
         ]
       }
+      general_item_technician_requirements: {
+        Row: {
+          created_at: string
+          general_item_id: string
+          id: string
+          notes: string | null
+          required_count: number
+          technician_type_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          general_item_id: string
+          id?: string
+          notes?: string | null
+          required_count?: number
+          technician_type_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          general_item_id?: string
+          id?: string
+          notes?: string | null
+          required_count?: number
+          technician_type_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "general_item_technician_requirements_general_item_id_fkey"
+            columns: ["general_item_id"]
+            isOneToOne: false
+            referencedRelation: "general_project_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "general_item_technician_requirements_technician_type_id_fkey"
+            columns: ["technician_type_id"]
+            isOneToOne: false
+            referencedRelation: "technician_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       general_project_items: {
         Row: {
           category: string | null
@@ -1035,6 +1252,7 @@ export type Database = {
           formula: string | null
           id: string
           measurement_config_id: string | null
+          measurement_factor: number | null
           measurement_type: string
           name: string
           notes: string | null
@@ -1048,6 +1266,7 @@ export type Database = {
           formula?: string | null
           id?: string
           measurement_config_id?: string | null
+          measurement_factor?: number | null
           measurement_type?: string
           name: string
           notes?: string | null
@@ -1061,6 +1280,7 @@ export type Database = {
           formula?: string | null
           id?: string
           measurement_config_id?: string | null
+          measurement_factor?: number | null
           measurement_type?: string
           name?: string
           notes?: string | null
@@ -1086,6 +1306,7 @@ export type Database = {
           notes: string | null
           payment_method: string | null
           project_id: string | null
+          reference_id: string | null
           status: string | null
           subtype: string | null
           type: string
@@ -1100,6 +1321,7 @@ export type Database = {
           notes?: string | null
           payment_method?: string | null
           project_id?: string | null
+          reference_id?: string | null
           status?: string | null
           subtype?: string | null
           type?: string
@@ -1114,6 +1336,7 @@ export type Database = {
           notes?: string | null
           payment_method?: string | null
           project_id?: string | null
+          reference_id?: string | null
           status?: string | null
           subtype?: string | null
           type?: string
@@ -1401,10 +1624,66 @@ export type Database = {
           },
         ]
       }
+      project_item_technician_requirements: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          project_item_id: string
+          required_count: number
+          source_general_item_requirement_id: string | null
+          technician_type_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_item_id: string
+          required_count?: number
+          source_general_item_requirement_id?: string | null
+          technician_type_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_item_id?: string
+          required_count?: number
+          source_general_item_requirement_id?: string | null
+          technician_type_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_item_technician_requi_source_general_item_requirem_fkey"
+            columns: ["source_general_item_requirement_id"]
+            isOneToOne: false
+            referencedRelation: "general_item_technician_requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_item_technician_requirements_project_item_id_fkey"
+            columns: ["project_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_item_technician_requirements_technician_type_id_fkey"
+            columns: ["technician_type_id"]
+            isOneToOne: false
+            referencedRelation: "technician_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_item_technicians: {
         Row: {
           created_at: string
           id: string
+          linked_quantity: boolean | null
           notes: string | null
           project_item_id: string
           quantity: number | null
@@ -1416,6 +1695,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          linked_quantity?: boolean | null
           notes?: string | null
           project_item_id: string
           quantity?: number | null
@@ -1427,6 +1707,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          linked_quantity?: boolean | null
           notes?: string | null
           project_item_id?: string
           quantity?: number | null
@@ -1459,6 +1740,7 @@ export type Database = {
           description: string | null
           engineer_id: string | null
           formula: string | null
+          general_item_id: string | null
           height: number | null
           id: string
           length: number | null
@@ -1482,6 +1764,7 @@ export type Database = {
           description?: string | null
           engineer_id?: string | null
           formula?: string | null
+          general_item_id?: string | null
           height?: number | null
           id?: string
           length?: number | null
@@ -1505,6 +1788,7 @@ export type Database = {
           description?: string | null
           engineer_id?: string | null
           formula?: string | null
+          general_item_id?: string | null
           height?: number | null
           id?: string
           length?: number | null
@@ -1528,6 +1812,13 @@ export type Database = {
             columns: ["engineer_id"]
             isOneToOne: false
             referencedRelation: "engineers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_items_general_item_id_fkey"
+            columns: ["general_item_id"]
+            isOneToOne: false
+            referencedRelation: "general_project_items"
             referencedColumns: ["id"]
           },
           {
@@ -1564,6 +1855,7 @@ export type Database = {
           notes: string | null
           order_index: number
           percentage_value: number
+          phase_category: string
           phase_number: number | null
           project_id: string
           reference_number: string | null
@@ -1582,6 +1874,7 @@ export type Database = {
           notes?: string | null
           order_index?: number
           percentage_value?: number
+          phase_category?: string
           phase_number?: number | null
           project_id: string
           reference_number?: string | null
@@ -1600,6 +1893,7 @@ export type Database = {
           notes?: string | null
           order_index?: number
           percentage_value?: number
+          phase_category?: string
           phase_number?: number | null
           project_id?: string
           reference_number?: string | null
@@ -1795,69 +2089,78 @@ export type Database = {
           budget: number | null
           budget_type: string | null
           client_id: string | null
-          code: string | null
           created_at: string
           default_treasury_id: string | null
           description: string | null
           end_date: string | null
           finishing_percentage: number | null
+          has_purchase_sections: boolean | null
           id: string
           image_url: string | null
           location: string | null
           name: string
           notes: string | null
           progress: number | null
+          progress_tracking_enabled: boolean | null
           project_type: string
           spent: number | null
           start_date: string | null
           status: string
           supervising_engineer_id: string | null
+          supervision_amount: number | null
+          supervision_mode: string
           updated_at: string
         }
         Insert: {
           budget?: number | null
           budget_type?: string | null
           client_id?: string | null
-          code?: string | null
           created_at?: string
           default_treasury_id?: string | null
           description?: string | null
           end_date?: string | null
           finishing_percentage?: number | null
+          has_purchase_sections?: boolean | null
           id?: string
           image_url?: string | null
           location?: string | null
           name: string
           notes?: string | null
           progress?: number | null
+          progress_tracking_enabled?: boolean | null
           project_type?: string
           spent?: number | null
           start_date?: string | null
           status?: string
           supervising_engineer_id?: string | null
+          supervision_amount?: number | null
+          supervision_mode?: string
           updated_at?: string
         }
         Update: {
           budget?: number | null
           budget_type?: string | null
           client_id?: string | null
-          code?: string | null
           created_at?: string
           default_treasury_id?: string | null
           description?: string | null
           end_date?: string | null
           finishing_percentage?: number | null
+          has_purchase_sections?: boolean | null
           id?: string
           image_url?: string | null
           location?: string | null
           name?: string
           notes?: string | null
           progress?: number | null
+          progress_tracking_enabled?: boolean | null
           project_type?: string
           spent?: number | null
           start_date?: string | null
           status?: string
           supervising_engineer_id?: string | null
+          supervision_amount?: number | null
+          supervision_mode?: string
           updated_at?: string
         }
         Relationships: [
@@ -1891,6 +2194,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          idempotency_key: string | null
           notes: string | null
           payment_method: string
           purchase_id: string
@@ -1903,6 +2207,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          idempotency_key?: string | null
           notes?: string | null
           payment_method?: string
           purchase_id: string
@@ -1915,6 +2220,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          idempotency_key?: string | null
           notes?: string | null
           payment_method?: string
           purchase_id?: string
@@ -1946,17 +2252,23 @@ export type Database = {
           date: string
           fund_source: string | null
           id: string
+          invoice_image_url: string | null
           invoice_number: string | null
+          is_return: boolean
           items: Json | null
           notes: string | null
           paid_amount: number
           phase_id: string | null
           project_id: string | null
-          project_item_id?: string | null
-          purchase_type: string | null
+          project_item_id: string | null
+          purchase_section: string | null
+          purchase_source: string
+          purchase_type: string
           rental_id: string | null
+          return_for_purchase_id: string | null
           status: string | null
           supplier_id: string | null
+          technician_id: string | null
           title: string | null
           total_amount: number
           treasury_id: string | null
@@ -1969,17 +2281,23 @@ export type Database = {
           date?: string
           fund_source?: string | null
           id?: string
+          invoice_image_url?: string | null
           invoice_number?: string | null
+          is_return?: boolean
           items?: Json | null
           notes?: string | null
           paid_amount?: number
           phase_id?: string | null
           project_id?: string | null
           project_item_id?: string | null
-          purchase_type?: string | null
+          purchase_section?: string | null
+          purchase_source?: string
+          purchase_type?: string
           rental_id?: string | null
+          return_for_purchase_id?: string | null
           status?: string | null
           supplier_id?: string | null
+          technician_id?: string | null
           title?: string | null
           total_amount?: number
           treasury_id?: string | null
@@ -1992,17 +2310,23 @@ export type Database = {
           date?: string
           fund_source?: string | null
           id?: string
+          invoice_image_url?: string | null
           invoice_number?: string | null
+          is_return?: boolean
           items?: Json | null
           notes?: string | null
           paid_amount?: number
           phase_id?: string | null
           project_id?: string | null
           project_item_id?: string | null
-          purchase_type?: string | null
+          purchase_section?: string | null
+          purchase_source?: string
+          purchase_type?: string
           rental_id?: string | null
+          return_for_purchase_id?: string | null
           status?: string | null
           supplier_id?: string | null
+          technician_id?: string | null
           title?: string | null
           total_amount?: number
           treasury_id?: string | null
@@ -2031,6 +2355,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "purchases_project_item_id_fkey"
+            columns: ["project_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchases_rental_id_fkey"
             columns: ["rental_id"]
             isOneToOne: false
@@ -2038,10 +2369,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "purchases_return_for_purchase_id_fkey"
+            columns: ["return_for_purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchases_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
             referencedColumns: ["id"]
           },
           {
@@ -2197,6 +2542,105 @@ export type Database = {
           },
         ]
       }
+      supplier_payment_allocations: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_id: string
+          purchase_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_id: string
+          purchase_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_id?: string
+          purchase_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payment_allocations_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          idempotency_key: string | null
+          notes: string | null
+          payment_method: string
+          reference: string | null
+          supplier_id: string
+          treasury_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          date: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_method: string
+          reference?: string | null
+          supplier_id: string
+          treasury_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_method?: string
+          reference?: string | null
+          supplier_id?: string
+          treasury_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payments_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -2239,62 +2683,176 @@ export type Database = {
         }
         Relationships: []
       }
-      technician_progress_records: {
+      technician_payment_allocations: {
         Row: {
+          amount: number
           created_at: string
-          date: string
           id: string
-          notes: string | null
-          project_id: string
-          phase_id: string | null
-          project_item_id: string | null
-          idempotency_key: string | null
-          quantity_completed: number
-          rate?: number | null
-          earned_amount?: number | null
-          technician_id: string
+          payment_id: string
+          project_id: string | null
         }
         Insert: {
+          amount: number
           created_at?: string
-          date?: string
           id?: string
-          notes?: string | null
-          project_id: string
-          phase_id?: string | null
-          project_item_id?: string | null
-          idempotency_key?: string | null
-          quantity_completed?: number
-          rate?: number | null
-          earned_amount?: number | null
-          technician_id: string
+          payment_id: string
+          project_id?: string | null
         }
         Update: {
+          amount?: number
           created_at?: string
-          date?: string
           id?: string
-          notes?: string | null
-          project_id?: string
-          phase_id?: string | null
-          project_item_id?: string | null
-          idempotency_key?: string | null
-          quantity_completed?: number
-          rate?: number | null
-          earned_amount?: number | null
-          technician_id?: string
+          payment_id?: string
+          project_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "technician_progress_records_project_id_fkey"
+            foreignKeyName: "technician_payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "technician_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technician_payment_allocations_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      technician_payments: {
+        Row: {
+          amount: number
+          context_project_id: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          idempotency_key: string | null
+          notes: string | null
+          payment_method: string
+          reference: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          status: string
+          technician_id: string
+          treasury_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          context_project_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          date: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_method: string
+          reference?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          status?: string
+          technician_id: string
+          treasury_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          context_project_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          payment_method?: string
+          reference?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          status?: string
+          technician_id?: string
+          treasury_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technician_payments_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "technicians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technician_payments_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technician_progress_records: {
+        Row: {
+          created_at: string
+          date: string
+          earned_amount: number | null
+          id: string
+          idempotency_key: string | null
+          notes: string | null
+          phase_id: string | null
+          project_id: string
+          project_item_id: string | null
+          quantity_completed: number
+          rate: number | null
+          technician_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          earned_amount?: number | null
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          phase_id?: string | null
+          project_id: string
+          project_item_id?: string | null
+          quantity_completed?: number
+          rate?: number | null
+          technician_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          earned_amount?: number | null
+          id?: string
+          idempotency_key?: string | null
+          notes?: string | null
+          phase_id?: string | null
+          project_id?: string
+          project_item_id?: string | null
+          quantity_completed?: number
+          rate?: number | null
+          technician_id?: string
+        }
+        Relationships: [
           {
             foreignKeyName: "technician_progress_records_phase_id_fkey"
             columns: ["phase_id"]
             isOneToOne: false
             referencedRelation: "project_phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technician_progress_records_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -2313,6 +2871,36 @@ export type Database = {
           },
         ]
       }
+      technician_types: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       technicians: {
         Row: {
           created_at: string
@@ -2326,6 +2914,7 @@ export type Database = {
           phone: string | null
           piece_rate: number | null
           specialty: string | null
+          technician_type_id: string | null
           updated_at: string
         }
         Insert: {
@@ -2340,6 +2929,7 @@ export type Database = {
           phone?: string | null
           piece_rate?: number | null
           specialty?: string | null
+          technician_type_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -2354,9 +2944,18 @@ export type Database = {
           phone?: string | null
           piece_rate?: number | null
           specialty?: string | null
+          technician_type_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "technicians_technician_type_id_fkey"
+            columns: ["technician_type_id"]
+            isOneToOne: false
+            referencedRelation: "technician_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transfers: {
         Row: {
@@ -2470,16 +3069,78 @@ export type Database = {
           },
         ]
       }
+      treasury_debts: {
+        Row: {
+          amount: number
+          created_at: string
+          creditor_treasury_id: string
+          date: string
+          debtor_treasury_id: string
+          id: string
+          notes: string | null
+          paid_amount: number
+          remaining_amount: number
+          status: string
+          transfer_transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          creditor_treasury_id: string
+          date?: string
+          debtor_treasury_id: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number
+          remaining_amount?: number
+          status?: string
+          transfer_transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          creditor_treasury_id?: string
+          date?: string
+          debtor_treasury_id?: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number
+          remaining_amount?: number
+          status?: string
+          transfer_transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treasury_debts_creditor_treasury_id_fkey"
+            columns: ["creditor_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treasury_debts_debtor_treasury_id_fkey"
+            columns: ["debtor_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       treasury_transactions: {
         Row: {
           amount: number
           balance_after: number
+          client_id: string | null
           commission: number
           created_at: string
           date: string
           description: string
           id: string
           notes: string | null
+          project_id: string | null
           reference_id: string | null
           reference_type: string | null
           source: string | null
@@ -2491,12 +3152,14 @@ export type Database = {
         Insert: {
           amount?: number
           balance_after?: number
+          client_id?: string | null
           commission?: number
           created_at?: string
           date?: string
           description?: string
           id?: string
           notes?: string | null
+          project_id?: string | null
           reference_id?: string | null
           reference_type?: string | null
           source?: string | null
@@ -2508,12 +3171,14 @@ export type Database = {
         Update: {
           amount?: number
           balance_after?: number
+          client_id?: string | null
           commission?: number
           created_at?: string
           date?: string
           description?: string
           id?: string
           notes?: string | null
+          project_id?: string | null
           reference_id?: string | null
           reference_type?: string | null
           source?: string | null
@@ -2636,7 +3301,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_client_credit: {
+        Args: { target_client_id: string }
+        Returns: undefined
+      }
+      apply_client_credit: {
+        Args: {
+          p_amount: number
+          p_client_id: string
+          p_notes?: string
+          p_target_project_id: string
+        }
+        Returns: Json
+      }
+      create_purchase_with_immediate_payment: {
+        Args: { p_payment: Json; p_purchase: Json }
+        Returns: Json
+      }
+      delete_project_cascade: { Args: { p_id: string }; Returns: undefined }
       generate_access_code: { Args: never; Returns: string }
+      get_client_available_credit: {
+        Args: { p_client_id: string }
+        Returns: number
+      }
+      get_dashboard_financial_summary: { Args: never; Returns: Json }
+      get_project_authoritative_remaining: {
+        Args: { p_project_id: string }
+        Returns: number
+      }
+      get_technician_earned_summary: { Args: never; Returns: number }
+      get_treasury_root_domain: {
+        Args: { t_id: string }
+        Returns: {
+          is_active: boolean
+          root_domain: string
+          root_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2644,9 +3345,89 @@ export type Database = {
         }
         Returns: boolean
       }
+      pay_supplier_on_account_atomic: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_idempotency_key?: string
+          p_notes?: string
+          p_payment_method: string
+          p_reference?: string
+          p_supplier_id: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      pay_technician_on_account_atomic: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_context_project_id?: string
+          p_idempotency_key?: string
+          p_notes?: string
+          p_payment_method: string
+          p_reference?: string
+          p_technician_id: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      record_client_payment_atomic: {
+        Args: {
+          p_amount: number
+          p_client_id: string
+          p_date?: string
+          p_notes?: string
+          p_payment_method?: string
+          p_project_id: string | null
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      reverse_client_credit_application: {
+        Args: { p_entry_id: string; p_notes?: string }
+        Returns: Json
+      }
+      reverse_client_payment_atomic: {
+        Args: { p_payment_id: string }
+        Returns: Json
+      }
+      run_accounting_invariants_suite: { Args: never; Returns: Json }
+      run_golden_accounting_reconciliation: { Args: never; Returns: Json }
+      settle_supplier_project_invoices_atomic: {
+        Args: {
+          p_allocations: Json
+          p_date: string
+          p_notes: string
+          p_payment_method: string
+          p_project_id: string
+          p_supplier_id: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      snapshot_project_item_requirements_from_general_item: {
+        Args: { p_general_item_id: string; p_project_item_id: string }
+        Returns: number
+      }
       sync_treasury_balance: {
         Args: { treasury_uuid: string }
         Returns: undefined
+      }
+      test_duplicate_technician_assignment: {
+        Args: { p_project_item_id: string; p_technician_id: string }
+        Returns: Json
+      }
+      transfer_between_treasuries: {
+        Args: {
+          p_amount: number
+          p_date?: string
+          p_from_treasury_id: string
+          p_notes?: string
+          p_to_treasury_id: string
+          p_transfer_id?: string
+        }
+        Returns: Json
       }
     }
     Enums: {

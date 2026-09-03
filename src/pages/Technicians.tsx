@@ -65,7 +65,12 @@ const Technicians = () => {
   const [editingTechnician, setEditingTechnician] = useState<string | null>(null);
   const [form, setForm] = useState<TechnicianForm>(initialForm);
 
-  const { data: technicians, isLoading } = useQuery({
+  // Inline Specialty Create State
+  const [isAddTypeDialogOpen, setIsAddTypeDialogOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const [newTypeDesc, setNewTypeDesc] = useState("");
+
+  const { data: technicians, isLoading, error: techniciansError } = useQuery({
     queryKey: ["technicians"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -91,82 +96,68 @@ const Technicians = () => {
     },
   });
 
-  // Fetch all progress records for technicians
-  const { data: allProgressRecords } = useQuery({
-    queryKey: ["all-technicians-progress"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("technician_progress_records")
-        .select(`
-          *,
-          project_item:project_items(
-            id,
-            name,
-            unit_price,
-            project_id
-          )
-        `)
-        .order("date", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch all technician rates (project_item_technicians)
-  const { data: allTechnicianRates } = useQuery({
+  // Fetch all technician rates (project_item_technicians - Canonical Work Authority)
+  const { data: allTechnicianRates, error: ratesError } = useQuery({
     queryKey: ["all-technicians-rates"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_item_technicians")
-        .select("*");
+        .select(`
+          *,
+          project_items (
+            id,
+            name
+          )
+        `);
       if (error) throw error;
       return data;
     },
   });
 
+  const { data: allLaborPurchases = [], isLoading: loadingLabor, error: laborError } = useQuery({
+    queryKey: ["all-technician-labor-purchases"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("purchases").select("technician_id, total_amount")
+        .not("technician_id", "is", null);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   // Fetch all expenses for technicians
-  const { data: allExpenses } = useQuery({
+  const { data: allExpenses, error: expensesError } = useQuery({
     queryKey: ["all-technicians-expenses"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
+        .eq("type", "labor")
         .not("technician_id", "is", null);
       if (error) throw error;
       return data;
     },
   });
 
-  // Fetch all purchases for technicians
-  const { data: allPurchases } = useQuery({
-    queryKey: ["all-technicians-purchases"],
+  // Fetch all on-account payments for technicians
+  const { data: allDirectPayments = [], isLoading: loadingDirect, error: directError } = useQuery<Array<{ id: string; technician_id: string; amount: number; status: string }>>({
+    queryKey: ["all-technicians-direct-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("purchases")
-        .select("*")
-        .not("technician_id", "is", null);
+      const { data, error } = await (supabase
+        .from("technician_payments" as any) as any)
+        .select("id, technician_id, amount, status")
+        .eq("status", "completed");
       if (error) throw error;
-      return data;
+      return (data || []) as Array<{ id: string; technician_id: string; amount: number; status: string }>;
     },
   });
 
-  // Fetch all purchase payments for technicians
-  const { data: allPurchasePayments } = useQuery({
-    queryKey: ["all-technicians-purchase-payments"],
+  const { data: laborInvoicePayments = [], isLoading: loadingInvoices, error: invoicesError } = useQuery({
+    queryKey: ["all-technician-labor-invoice-payments"],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase.from("purchase_payments" as any) as any)
-          .select(`
-            *,
-            purchases!inner (
-              technician_id
-            )
-          `);
-        if (error) return [];
-        return (data || []) as any[];
-      } catch {
-        return [];
-      }
+      const { data, error } = await supabase.from("purchase_payments")
+        .select("amount, purchases!inner(technician_id)").not("purchases.technician_id", "is", null);
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -187,82 +178,65 @@ const Technicians = () => {
     },
   });
 
-  // Calculate technician stats (dues, debt, last work)
+  // Calculate technician stats (work value, paid, signed balance, last work)
   const technicianStats = useMemo(() => {
     const statsMap = new Map<string, {
-      totalDeserved: number;
-      totalWithdrawn: number;
-      balance: number;
-      lastWorkDate: string | null;
+      totalWorkValue: number;
+      totalPaid: number;
+      signedBalance: number;
       lastWorkItem: string | null;
+      lastWorkDate: string | null;
       lastAddedDate: string | null;
     }>();
 
     technicians?.forEach((tech) => {
-      // Get rates for this technician
+      // Get canonical assigned works for this technician
       const techRates = allTechnicianRates?.filter((r) => r.technician_id === tech.id) || [];
-      const ratesMap = new Map<string, number>();
-      techRates.forEach((r) => {
-        ratesMap.set(r.project_item_id, r.rate || 0);
-      });
+      const laborWorks = allLaborPurchases.filter(work => work.technician_id === tech.id);
+      const totalWorkValue = techRates.reduce((sum, r) => {
+        const rawCost = Number(r.total_cost);
+        const wVal = rawCost > 0 ? rawCost : (Number(r.rate || 0) * Number(r.quantity ?? 1));
+        return sum + wVal;
+      }, 0) + laborWorks.reduce((sum, work) => sum + Number(work.total_amount || 0), 0);
 
-      // Get progress records for this technician
-      const techProgress = allProgressRecords?.filter((p) => p.technician_id === tech.id) || [];
-      
-      // Calculate total deserved
-      let totalDeserved = 0;
-      techProgress.forEach((record: any) => {
-        const directEarned = Number(record.earned_amount || 0);
-        if (directEarned > 0) {
-          totalDeserved += directEarned;
-        } else {
-          let rate = Number(record.rate || 0);
-          if (!rate) rate = ratesMap.get(record.project_item_id) || 0;
-          if (!rate) rate = Number(tech.meter_rate || tech.piece_rate || tech.daily_rate || tech.hourly_rate || 0);
-          totalDeserved += (Number(record.quantity_completed) * rate);
-        }
-      });
-
-      // Add purchases (labor invoices) to totalDeserved
-      const techPurchases = allPurchases?.filter((p: any) => p.technician_id === tech.id) || [];
-      totalDeserved += techPurchases.reduce((acc: number, p: any) => acc + Number(p.total_amount || 0), 0);
-
-      // Get expenses (withdrawn) for this technician
+      // Get expenses (legacy labor payments) for this technician
       const techExpenses = allExpenses?.filter((e) => e.technician_id === tech.id) || [];
       const totalExpensesPaid = techExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
 
-      // Get purchase payments for this technician
-      const techPurchasePayments = allPurchasePayments?.filter((pay: any) => pay.purchases?.technician_id === tech.id) || [];
-      const totalPurchasesPaid = techPurchasePayments.reduce((acc: number, pay: any) => acc + Number(pay.amount || 0), 0);
+      // Get direct technician on-account payments
+      const techDirectPayments = allDirectPayments?.filter((dp: any) => dp.technician_id === tech.id) || [];
+      const totalDirectPaid = techDirectPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
 
-      const totalWithdrawn = totalExpensesPaid + totalPurchasesPaid;
+      const totalInvoicePaid = laborInvoicePayments.filter(payment => payment.purchases.technician_id === tech.id)
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const totalPaid = totalExpensesPaid + totalDirectPaid + totalInvoicePaid;
+      const signedBalance = totalWorkValue - totalPaid;
 
-      // Get last work (most recent progress record)
-      const lastWork = techProgress[0];
-      
       // Get last added date (from technician rates - when they were assigned to items)
       const lastRate = techRates.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )[0];
 
       statsMap.set(tech.id, {
-        totalDeserved,
-        totalWithdrawn,
-        balance: totalDeserved - totalWithdrawn,
-        lastWorkDate: lastWork?.date || null,
-        lastWorkItem: lastWork?.project_item?.name || null,
+        totalWorkValue,
+        totalPaid,
+        signedBalance,
+        lastWorkItem: (lastRate as any)?.project_items?.name || null,
+        lastWorkDate: lastRate?.created_at || null,
         lastAddedDate: lastRate?.created_at || null,
       });
     });
 
     return statsMap;
-  }, [technicians, allProgressRecords, allTechnicianRates, allExpenses, allPurchases, allPurchasePayments]);
+  }, [technicians, allTechnicianRates, allExpenses, allDirectPayments, allLaborPurchases, laborInvoicePayments]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: TechnicianForm) => {
+      const selectedType = technicianTypes.find((t: any) => t.id === data.technician_type_id);
       const techData = {
-        name: data.name,
+        name: data.name.trim(),
         technician_type_id: data.technician_type_id || null,
+        specialty: selectedType?.name || null, // Synchronized legacy cache only
         phone: data.phone || null,
         email: data.email || null,
         hourly_rate: data.hourly_rate ? parseFloat(data.hourly_rate) : null,
@@ -291,6 +265,39 @@ const Technicians = () => {
     },
     onError: () => {
       toast.error("حدث خطأ أثناء حفظ البيانات");
+    },
+  });
+
+  const createTypeMutation = useMutation({
+    mutationFn: async ({ name, description }: { name: string; description: string }) => {
+      const code = `type_${Date.now()}`;
+      const { data, error } = await (supabase
+        .from("technician_types" as any)
+        .insert({
+          name,
+          description: description || null,
+          code,
+          is_active: true,
+        } as any)
+        .select("id, name, code")
+        .single() as any);
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (newType: any) => {
+      queryClient.invalidateQueries({ queryKey: ["technician-types"] });
+      setForm((prev) => ({
+        ...prev,
+        technician_type_id: newType.id,
+        specialty: newType.name,
+      }));
+      setIsAddTypeDialogOpen(false);
+      setNewTypeName("");
+      setNewTypeDesc("");
+      toast.success(`تمت إضافة التخصص "${newType.name}" بنجاح واختياره`);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "حدث خطأ أثناء إضافة التخصص");
     },
   });
 
@@ -353,7 +360,13 @@ const Technicians = () => {
     return icons[specialty] || Wrench;
   };
 
-  if (isLoading) {
+  if (techniciansError || ratesError || laborError || expensesError || directError || invoicesError) return (
+    <Card className="p-6 space-y-3" dir="rtl" role="alert">
+      <p>تعذر تحميل حسابات الفنيين كاملة. لم نعرض أرصدة جزئية.</p>
+      <Button variant="outline" onClick={() => queryClient.invalidateQueries()}>إعادة المحاولة</Button>
+    </Card>
+  );
+  if (isLoading || loadingLabor || loadingDirect || loadingInvoices || !allExpenses || !allTechnicianRates) {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">جاري التحميل...</p>
@@ -386,7 +399,7 @@ const Technicians = () => {
       />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>
               {editingTechnician ? "تعديل بيانات الفني" : "إضافة فني جديد"}
@@ -404,7 +417,19 @@ const Technicians = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="technician_type_id">التخصص الفني</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="technician_type_id" className="text-xs font-bold">التخصص الفني *</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-primary hover:text-primary/90 font-bold px-1.5 gap-1 cursor-pointer"
+                    onClick={() => setIsAddTypeDialogOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>إضافة تخصص جديد</span>
+                  </Button>
+                </div>
                 <Select
                   value={form.technician_type_id}
                   onValueChange={(value) => {
@@ -415,7 +440,7 @@ const Technicians = () => {
                   <SelectTrigger>
                     <SelectValue placeholder="اختر التخصص الفني" />
                   </SelectTrigger>
-                  <SelectContent dir="rtl">
+                  <SelectContent dir="rtl" className="max-h-60">
                     {technicianTypes.map((type: any) => (
                       <SelectItem key={type.id} value={type.id}>
                         {type.name}
@@ -536,44 +561,24 @@ const Technicians = () => {
           </DialogContent>
         </Dialog>
 
-      {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-5">
-        <Card className="p-4 bg-amber-500/10 border-amber-500/30">
-          <div className="text-center">
-            <Hammer className="h-6 w-6 mx-auto mb-2 text-amber-500" />
-            <p className="text-sm text-muted-foreground mb-1">نجارون</p>
-            <p className="text-2xl font-bold text-amber-500">{stats?.["نجار"] || 0}</p>
-          </div>
-        </Card>
-        <Card className="p-4 bg-yellow-500/10 border-yellow-500/30">
-          <div className="text-center">
-            <Zap className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
-            <p className="text-sm text-muted-foreground mb-1">كهربائيون</p>
-            <p className="text-2xl font-bold text-yellow-500">{stats?.["كهربائي"] || 0}</p>
-          </div>
-        </Card>
-        <Card className="p-4 bg-blue-500/10 border-blue-500/30">
-          <div className="text-center">
-            <Droplet className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-            <p className="text-sm text-muted-foreground mb-1">سباكون</p>
-            <p className="text-2xl font-bold text-blue-500">{stats?.["سباك"] || 0}</p>
-          </div>
-        </Card>
-        <Card className="p-4 bg-gray-500/10 border-gray-500/30">
-          <div className="text-center">
-            <Wrench className="h-6 w-6 mx-auto mb-2 text-gray-400" />
-            <p className="text-sm text-muted-foreground mb-1">حدادون</p>
-            <p className="text-2xl font-bold text-gray-400">{stats?.["حداد"] || 0}</p>
-          </div>
-        </Card>
-        <Card className="p-4 bg-orange-500/10 border-orange-500/30">
-          <div className="text-center">
-            <Ruler className="h-6 w-6 mx-auto mb-2 text-orange-500" />
-            <p className="text-sm text-muted-foreground mb-1">بنّاؤون</p>
-            <p className="text-2xl font-bold text-orange-500">{stats?.["بنّاء"] || 0}</p>
-          </div>
-        </Card>
-      </div>
+      {/* Stats Cards - Dynamic from technician_types */}
+      {technicianTypes.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+          {technicianTypes.map((type: any) => {
+            const count = technicians?.filter((t) => t.technician_type_id === type.id || t.specialty === type.name).length || 0;
+            const IconComponent = getSpecialtyIcon(type.name);
+            return (
+              <Card key={type.id} className="p-4 bg-primary/5 border-primary/20">
+                <div className="text-center">
+                  <IconComponent className="h-6 w-6 mx-auto mb-2 text-primary" />
+                  <p className="text-sm text-muted-foreground mb-1">{type.name}</p>
+                  <p className="text-2xl font-bold text-primary">{count}</p>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* Technicians Grid */}
       {(!technicians || technicians.length === 0) ? (
@@ -598,15 +603,16 @@ const Technicians = () => {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {technicians.map((tech) => {
-          const IconComponent = getSpecialtyIcon(tech.specialty || "");
+          const typeName = (tech.technician_types as any)?.name || tech.specialty || "غير محدد";
+          const IconComponent = getSpecialtyIcon(typeName);
           return (
             <Card key={tech.id} className="p-6 card-hover">
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="text-lg font-bold mb-2">{tech.name}</h3>
-                    <Badge variant="outline" className={specialtyColors[tech.specialty || ""]}>
-                      {tech.specialty || "غير محدد"}
+                    <Badge variant="outline" className={specialtyColors[typeName] || "bg-primary/10 text-primary border-primary/20"}>
+                      {typeName}
                     </Badge>
                   </div>
                   <IconComponent className="h-8 w-8 text-primary/40" />
@@ -626,15 +632,21 @@ const Technicians = () => {
                       {/* Financial Stats */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">المستحقات</p>
-                          <p className="text-sm font-bold text-green-500">
-                            {formatCurrencyLYD(stats?.totalDeserved || 0)}
+                          <p className="text-xs text-muted-foreground mb-1">قيمة الأعمال</p>
+                          <p className="text-sm font-bold text-foreground">
+                            {formatCurrencyLYD(stats?.totalWorkValue || 0)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">الدين</p>
-                          <p className={`text-sm font-bold ${(stats?.balance || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {formatCurrencyLYD(stats?.balance || 0)}
+                          <p className="text-xs text-muted-foreground mb-1">
+                            {(stats?.signedBalance || 0) > 0
+                              ? "المتبقي"
+                              : (stats?.signedBalance || 0) < 0
+                              ? "رصيد مقدم"
+                              : "الرصيد"}
+                          </p>
+                          <p className={`text-sm font-bold ${(stats?.signedBalance || 0) > 0 ? 'text-green-500' : (stats?.signedBalance || 0) < 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>
+                            {(stats?.signedBalance || 0) !== 0 ? formatCurrencyLYD(Math.abs(stats?.signedBalance || 0)) : formatCurrencyLYD(0)}
                           </p>
                         </div>
                       </div>
@@ -694,6 +706,56 @@ const Technicians = () => {
         })}
       </div>
       )}
+
+      {/* INLINE ADD SPECIALTY DIALOG */}
+      <Dialog open={isAddTypeDialogOpen} onOpenChange={setIsAddTypeDialogOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-primary" />
+              <span>إضافة تخصص فني جديد</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">اسم التخصص *</Label>
+              <Input
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="مثال: فني كاميرات وشبكات"
+                className="text-xs h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">الوصف (اختياري)</Label>
+              <Input
+                value={newTypeDesc}
+                onChange={(e) => setNewTypeDesc(e.target.value)}
+                placeholder="وصف مختصر لطبيعة العمل"
+                className="text-xs h-9"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                className="flex-1 text-xs h-8 font-bold"
+                disabled={createTypeMutation.isPending || !newTypeName.trim()}
+                onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), description: newTypeDesc.trim() })}
+              >
+                {createTypeMutation.isPending ? "جاري الحفظ..." : "حفظ التخصص"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-xs h-8"
+                onClick={() => setIsAddTypeDialogOpen(false)}
+              >
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

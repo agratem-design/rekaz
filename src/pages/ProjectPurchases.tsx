@@ -310,9 +310,18 @@ const ProjectPurchases = () => {
       return data;
     },
   });
-  // Only sub-treasuries (children) should be selectable
-  const treasuryParents = allTreasuriesRaw.filter(t => !(t as any).parent_id);
-  const allTreasuries = allTreasuriesRaw.filter(t => (t as any).parent_id);
+  // Only sub-treasuries (children) should be selectable, restricted to project sector
+  const allParents = useMemo(() => allTreasuriesRaw.filter(t => !(t as any).parent_id), [allTreasuriesRaw]);
+  const treasuryParents = useMemo(() => {
+    const pType = project?.project_type || "contracting";
+    const matched = allParents.filter((t: any) =>
+      t.project_category === pType ||
+      (pType === "contracting" && (t.name.includes("مقاولات") || t.name.includes("المقاولات"))) ||
+      (pType === "finishing" && (t.name.includes("تشطيب") || t.name.includes("التشطيب")))
+    );
+    return matched.length > 0 ? matched : allParents;
+  }, [allParents, project?.project_type]);
+  const allTreasuries = useMemo(() => allTreasuriesRaw.filter(t => (t as any).parent_id), [allTreasuriesRaw]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -477,7 +486,7 @@ const ProjectPurchases = () => {
       : (companySettings as any)?.contracting_treasury_id || "";
 
     const purchaseTreasuryId = (purchase as any).treasury_id || "";
-    let parentId = targetParentId || "";
+    let parentId = targetParentId || treasuryParents[0]?.id || "";
     let subTreasuryId = "";
 
     if (purchaseTreasuryId) {
@@ -1785,7 +1794,7 @@ const ProjectPurchases = () => {
         editingRecord={
           editingPurchase
             ? {
-                type: (editingPurchase as any).purchase_type === "service" ? "service" : "material",
+                type: (editingPurchase as any).purchase_type === "labor" ? "labor" : (editingPurchase as any).purchase_type === "service" ? "service" : "material",
                 data: editingPurchase,
               }
             : null
@@ -1984,21 +1993,21 @@ const ProjectPurchases = () => {
 
             {/* Treasury Selection (Double Dropdown) */}
             <div className="space-y-3">
-              <Label className="text-base font-semibold">الخزينة المسحوب منها *</Label>
-              <div className="p-3 bg-muted/50 rounded-lg border space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-muted/50 rounded-xl border space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>الخزينة الرئيسية</Label>
+                    <Label className="text-xs font-semibold">القسم / الخزينة الرئيسية *</Label>
                     <Select
                       value={paySelectedParentTreasuryId}
                       onValueChange={(value) => {
                         setPaySelectedParentTreasuryId(value);
                         setPayFormData(prev => ({ ...prev, treasury_id: "" })); // reset sub
                       }}
-                      disabled={true}
+                      disabled={treasuryParents.length <= 1}
+                      dir="rtl"
                     >
-                      <SelectTrigger dir="rtl">
-                        <SelectValue placeholder="اختر الخزينة الرئيسية" />
+                      <SelectTrigger className="h-10 rounded-xl" dir="rtl">
+                        <SelectValue placeholder="اختر الخزينة الرئيسية..." />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
                         {treasuryParents.map((t) => (
@@ -2010,14 +2019,15 @@ const ProjectPurchases = () => {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>الخزينة الفرعية</Label>
+                    <Label className="text-xs font-semibold">الحساب / الفرع المخصوم منه *</Label>
                     <Select
                       value={payFormData.treasury_id}
                       onValueChange={(value) => setPayFormData(prev => ({ ...prev, treasury_id: value }))}
                       disabled={!paySelectedParentTreasuryId}
+                      dir="rtl"
                     >
-                      <SelectTrigger dir="rtl">
-                        <SelectValue placeholder="اختر الخزينة الفرعية" />
+                      <SelectTrigger className="h-10 rounded-xl" dir="rtl">
+                        <SelectValue placeholder={paySelectedParentTreasuryId ? "اختر الحساب / الفرع..." : "حدد الخزينة الرئيسية أولاً"} />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
                         {allTreasuries

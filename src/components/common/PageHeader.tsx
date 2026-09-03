@@ -17,25 +17,25 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-col gap-2 sm:gap-3 pb-2", className)}>
-      {breadcrumb && <div className="text-xs text-muted-foreground">{breadcrumb}</div>}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
+    <header className={cn("flex flex-col gap-3 border-b border-border/60 pb-4 sm:pb-5", className)} dir="rtl">
+      {breadcrumb && <nav aria-label="مسار الصفحة" className="text-xs font-medium text-muted-foreground">{breadcrumb}</nav>}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 flex-1 border-r-2 border-primary pr-3">
+          <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-foreground sm:text-3xl">
             {title}
           </h1>
           {description && (
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 leading-relaxed">
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
               {description}
             </p>
           )}
         </div>
         {actions && (
-          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:self-center">
+          <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {actions}
           </div>
         )}
       </div>
-    </div>
+    </header>
   );
 }

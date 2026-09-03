@@ -58,7 +58,7 @@ const Reports = () => {
         supabase.from("projects").select("id, status, progress, budget, name, client_id, project_type"),
         supabase.from("clients").select("id, name"),
         supabase.from("suppliers").select("id, name, total_purchases"),
-        supabase.from("client_payments").select("amount, date"),
+        supabase.from("client_payments").select("amount, date").is("reversed_at", null),
         supabase.from("income").select("amount, date, type"),
         supabase.from("expenses").select("amount, date, type, project_id"),
         supabase.from("purchases").select("id, total_amount, paid_amount, status, supplier_id, purchase_type, date"),

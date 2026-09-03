@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { invalidateFinancialQueries } from "@/lib/financialMutations";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,7 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
 }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const paymentOperation = useOperationKey();
 
   const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
   const [createdPurchaseId, setCreatedPurchaseId] = useState<string | null>(null);
@@ -177,7 +180,7 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!supplierId) {
-        throw new Error("يرجى اختيار مقدم الخدمة / مقاول الباطن.");
+        throw new Error("يرجى اختيار مقدم الخدمة / المورد.");
       }
       if (!serviceTitle.trim()) {
         throw new Error("يرجى إدخال وصف أو اسم الخدمة.");
@@ -199,6 +202,9 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
         }
         if (!treasuryId) {
           throw new Error("يرجى اختيار الخزينة المخصوم منها.");
+        }
+        if (!paymentMethod) {
+          throw new Error("يرجى تحديد طريقة الدفع للسداد الفوري.");
         }
       }
 
@@ -224,7 +230,30 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
           .update(purchasePayload)
           .eq("id", editingPurchase.id);
         if (updateErr) throw updateErr;
+      } else if (hasPaidNow && numPaidNow > 0) {
+        // Immediate Payment: Atomic DB RPC
+        const paymentPayload = {
+          treasury_id: treasuryId,
+          amount: numPaidNow,
+          payment_method: paymentMethod,
+          date: paymentDate,
+          notes: `سداد أولي لخدمة: ${serviceTitle}`,
+          idempotency_key: paymentOperation.getKey({ purchasePayload, treasuryId, numPaidNow, paymentMethod, paymentDate }),
+        };
+
+        const { data: rpcRes, error: rpcErr } = await (supabase.rpc as any)(
+          "create_purchase_with_immediate_payment",
+          {
+            p_purchase: purchasePayload,
+            p_payment: paymentPayload,
+          }
+        );
+
+        if (rpcErr) throw rpcErr;
+        activePurchaseId = rpcRes?.purchase_id;
+        setCreatedPurchaseId(activePurchaseId);
       } else {
+        // Unpaid / Credit Purchase: Standard Purchase Insert under RLS
         purchasePayload.paid_amount = 0;
         purchasePayload.status = "due";
         const { data: newPurchase, error: insertErr } = await supabase
@@ -237,49 +266,11 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
         setCreatedPurchaseId(activePurchaseId);
       }
 
-      // Initial Payment Execution
-      if (!editingPurchase && hasPaidNow && numPaidNow > 0 && activePurchaseId) {
-        const idempotencyKey = `initial_payment_${activePurchaseId}`;
-        try {
-          const { error: payErr } = await supabase.from("purchase_payments").insert([
-            {
-              purchase_id: activePurchaseId,
-              treasury_id: treasuryId,
-              amount: numPaidNow,
-              payment_method: paymentMethod,
-              date: paymentDate,
-              notes: `سداد أولي لخدمة: ${serviceTitle}`,
-              idempotency_key: idempotencyKey,
-            },
-          ]);
-
-          if (payErr) {
-            setPaymentFailedState({
-              failed: true,
-              errorMsg: payErr.message,
-              amount: numPaidNow,
-              treasuryId,
-              method: paymentMethod,
-            });
-            throw new Error(`PURCHASE_SAVED_PAYMENT_FAILED: ${payErr.message}`);
-          }
-        } catch (payEx: any) {
-          if (!payEx.message?.startsWith("PURCHASE_SAVED_PAYMENT_FAILED")) {
-            setPaymentFailedState({
-              failed: true,
-              errorMsg: payEx.message,
-              amount: numPaidNow,
-              treasuryId,
-              method: paymentMethod,
-            });
-          }
-          throw payEx;
-        }
-      }
-
       return activePurchaseId;
     },
     onSuccess: () => {
+      paymentOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["project-purchases", projectId] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
@@ -391,17 +382,17 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
         </Alert>
       )}
 
-      {/* SECTION 1: WHO (Subcontractor / Service Provider) */}
+      {/* SECTION 1: WHO (Service Provider / Supplier) */}
       <div className="space-y-2 p-3.5 rounded-xl border border-border/80 bg-card">
         <Label className="text-sm font-bold flex items-center gap-1.5">
           <Building2 className="h-4 w-4 text-primary" />
-          مقدم الخدمة / مقاول الباطن <span className="text-destructive">*</span>
+          مقدم الخدمة / المورد <span className="text-destructive">*</span>
         </Label>
         <EntityCombobox
           options={supplierOptions}
           value={supplierId}
           onValueChange={setSupplierId}
-          placeholder="ابحث عن المورد أو مقاول الباطن..."
+          placeholder="ابحث عن المورد أو مقدم الخدمة..."
           searchPlaceholder="ابحث بالاسم أو الهاتف..."
           onCreateNew={() => setQuickSupplierOpen(true)}
           createButtonText="+ إضافة مورد جديد"
@@ -506,11 +497,11 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
           <div className="space-y-1.5 pt-1">
             <Label className="text-xs text-muted-foreground flex items-center gap-1">
               <Layers className="h-3.5 w-3.5" />
-              بند المقايسة المرتبط (اختياري)
+              بند المشروع المرتبط (اختياري)
             </Label>
             <Select value={projectItemId} onValueChange={setProjectItemId} disabled={saveMutation.isPending}>
               <SelectTrigger className="text-right" dir="rtl">
-                <SelectValue placeholder="اختر بند المقايسة المرتبط بالخدمة..." />
+                <SelectValue placeholder="اختر بند المشروع المرتبط بالخدمة..." />
               </SelectTrigger>
               <SelectContent dir="rtl">
                 <SelectItem value="__none__">غير مرتبط ببند محدد (عام للمشروع)</SelectItem>
@@ -521,6 +512,9 @@ export const SupplierServiceForm: React.FC<SupplierServiceFormProps> = ({
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground">
+              اختياري — اختر البند الذي ترتبط به هذه العملية داخل المشروع.
+            </p>
           </div>
         )}
       </div>

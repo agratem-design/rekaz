@@ -38,10 +38,10 @@ const statusLabels = {
 };
 
 const statusColors = {
-  active: "bg-green-500/20 text-green-500",
-  pending: "bg-yellow-500/20 text-yellow-500",
-  completed: "bg-blue-500/20 text-blue-500",
-  cancelled: "bg-red-500/20 text-red-500"
+  active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-bold",
+  pending: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 font-bold",
+  completed: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 font-bold",
+  cancelled: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 font-bold"
 };
 
 export const ProjectCard = ({ 
@@ -72,7 +72,7 @@ export const ProjectCard = ({
   };
 
   return (
-    <Card className="p-5 card-hover overflow-hidden">
+    <Card className="p-5 bg-card border border-border/80 shadow-xs hover:border-primary/50 hover:shadow-md transition-all overflow-hidden">
       <div className="space-y-4">
         {/* Project Image */}
         {imageUrl && (
@@ -91,19 +91,19 @@ export const ProjectCard = ({
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="rounded-lg bg-primary/20 p-2 shrink-0">
+            <div className="rounded-xl bg-primary/15 p-2.5 shrink-0 text-primary">
               <FolderKanban className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-lg truncate">{name}</h3>
+              <h3 className="font-bold text-lg truncate text-foreground">{name}</h3>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge className={statusColors[status]} variant="outline">
                   {statusLabels[status]}
                 </Badge>
                 {supervisingEngineerName && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <HardHat className="h-3 w-3" />
-                    <span className="truncate max-w-[100px]">{supervisingEngineerName}</span>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground font-medium">
+                    <HardHat className="h-3.5 w-3.5" />
+                    <span className="truncate max-w-[120px]">{supervisingEngineerName}</span>
                   </div>
                 )}
               </div>
@@ -116,7 +116,7 @@ export const ProjectCard = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link to={`/projects/${id}/report`}>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer">
                       <Printer className="h-4 w-4" />
                     </Button>
                   </Link>
@@ -126,7 +126,7 @@ export const ProjectCard = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link to={`/projects/${id}/edit?returnTo=${returnTo}`}>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer">
                       <Pencil className="h-4 w-4" />
                     </Button>
                   </Link>
@@ -138,83 +138,83 @@ export const ProjectCard = ({
         </div>
 
         {/* Progress */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-xs font-semibold">
             <span className="text-muted-foreground">التقدم</span>
-            <span className="font-semibold text-primary">{progress}%</span>
+            <span className="font-bold text-primary">{progress}%</span>
           </div>
-          <Progress value={progress} className="h-2" />
+          <Progress value={progress} className="h-2 bg-muted/60" />
         </div>
 
         {/* Budget */}
         {!shouldHideFinancials && (
-          <div className="flex justify-between text-sm pt-2 border-t border-border">
+          <div className="flex justify-between text-sm pt-3 border-t border-border/80">
             <div>
-              <p className="text-muted-foreground text-xs">الميزانية</p>
-              <p className="font-semibold">{budget}</p>
+              <p className="text-muted-foreground text-xs font-bold">الميزانية</p>
+              <p className="font-bold text-foreground">{budget}</p>
             </div>
             <div className="text-left">
-              <p className="text-muted-foreground text-xs">المصروف</p>
-              <p className="font-semibold">{spent}</p>
+              <p className="text-muted-foreground text-xs font-bold">المصروف</p>
+              <p className="font-bold text-foreground">{spent}</p>
             </div>
           </div>
         )}
 
         {/* Contract Summary */}
         {!shouldHideFinancials && contractsCount > 0 && (
-          <div className="flex items-center justify-between text-sm pt-2 border-t border-border bg-primary/5 -mx-5 px-5 py-2">
+          <div className="flex items-center justify-between text-sm pt-2 border-t border-border/80 bg-primary/10 -mx-5 px-5 py-2.5">
             <div className="flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5 text-primary" />
-              <span className="text-muted-foreground">{contractsCount} عقد</span>
+              <span className="text-foreground/80 font-bold text-xs">{contractsCount} عقد</span>
             </div>
-            <span className="font-bold text-primary">{formatAmount(contractsValue)}</span>
+            <span className="font-black text-primary text-sm">{formatAmount(contractsValue)}</span>
           </div>
         )}
 
         {/* Financial Summaries */}
         {!shouldHideFinancials && (purchasesTotal > 0 || expensesTotal > 0 || rentalsTotal > 0) && (
-          <div className={`grid gap-2 pt-2 border-t border-border`} style={{ gridTemplateColumns: `repeat(${[purchasesTotal > 0, expensesTotal > 0, rentalsTotal > 0].filter(Boolean).length}, 1fr)` }}>
+          <div className={`grid gap-2 pt-2 border-t border-border/80`} style={{ gridTemplateColumns: `repeat(${[purchasesTotal > 0, expensesTotal > 0, rentalsTotal > 0].filter(Boolean).length}, 1fr)` }}>
             {purchasesTotal > 0 && (
-              <div className="text-center p-2 bg-blue-500/10 rounded-lg">
-                <ShoppingCart className="h-3.5 w-3.5 text-blue-500 mx-auto mb-1" />
-                <p className="text-xs font-medium">{formatAmount(purchasesTotal)}</p>
+              <div className="text-center p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                <ShoppingCart className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mx-auto mb-1" />
+                <p className="text-xs font-bold text-foreground">{formatAmount(purchasesTotal)}</p>
               </div>
             )}
             {expensesTotal > 0 && (
-              <div className="text-center p-2 bg-orange-500/10 rounded-lg">
-                <Coins className="h-3.5 w-3.5 text-orange-500 mx-auto mb-1" />
-                <p className="text-xs font-medium">{formatAmount(expensesTotal)}</p>
+              <div className="text-center p-2 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                <Coins className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400 mx-auto mb-1" />
+                <p className="text-xs font-bold text-foreground">{formatAmount(expensesTotal)}</p>
               </div>
             )}
             {rentalsTotal > 0 && (
-              <div className="text-center p-2 bg-purple-500/10 rounded-lg">
-                <Wrench className="h-3.5 w-3.5 text-purple-500 mx-auto mb-1" />
-                <p className="text-xs font-medium">{formatAmount(rentalsTotal)}</p>
+              <div className="text-center p-2 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                <Wrench className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 mx-auto mb-1" />
+                <p className="text-xs font-bold text-foreground">{formatAmount(rentalsTotal)}</p>
               </div>
             )}
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="pt-2 border-t border-border space-y-2">
+        <div className="pt-2 border-t border-border/80 space-y-2">
           {/* Standard layout for all projects */}
           <>
               <div className="grid grid-cols-3 gap-2">
                 <Link to={`/projects/${id}/phases`}>
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9">
-                    <Box className="h-4 w-4" />
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9 bg-card border-border/80 hover:border-primary hover:bg-primary/10 hover:text-primary font-bold text-xs text-foreground transition-all shadow-2xs cursor-pointer">
+                    <Box className="h-4 w-4 text-primary shrink-0" />
                     <span className="truncate">المراحل</span>
                   </Button>
                 </Link>
                 <Link to={`/projects/${id}/progress`}>
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9">
-                    <TrendingUp className="h-4 w-4" />
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9 bg-card border-border/80 hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400 font-bold text-xs text-foreground transition-all shadow-2xs cursor-pointer">
+                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span className="truncate">التقدم</span>
                   </Button>
                 </Link>
                 <Link to={`/projects/${id}/contracts`}>
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9">
-                    <FileText className="h-4 w-4" />
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 h-9 bg-card border-border/80 hover:border-blue-500/60 hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400 font-bold text-xs text-foreground transition-all shadow-2xs cursor-pointer">
+                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                     <span className="truncate">العقود</span>
                   </Button>
                 </Link>
@@ -223,20 +223,20 @@ export const ProjectCard = ({
               {!shouldHideFinancials && (
                 <div className="grid grid-cols-3 gap-2">
                   <Link to={`/projects/${id}/purchases`}>
-                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2">
-                      <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2 bg-card border-border/80 hover:border-primary hover:bg-primary/10 hover:text-primary font-semibold text-foreground transition-all shadow-2xs cursor-pointer">
+                      <ShoppingCart className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
                       <span className="truncate">المشتريات</span>
                     </Button>
                   </Link>
                   <Link to={`/projects/${id}/equipment`}>
-                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2">
-                      <Wrench className="h-3.5 w-3.5 shrink-0" />
+                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2 bg-card border-border/80 hover:border-purple-500/60 hover:bg-purple-500/10 hover:text-purple-700 dark:hover:text-purple-400 font-semibold text-foreground transition-all shadow-2xs cursor-pointer">
+                      <Wrench className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
                       <span className="truncate">الإيجارات</span>
                     </Button>
                   </Link>
                   <Link to={`/projects/${id}/expenses`}>
-                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2">
-                      <Coins className="h-3.5 w-3.5 shrink-0" />
+                    <Button variant="outline" size="sm" className="w-full gap-1 h-9 text-xs px-2 bg-card border-border/80 hover:border-orange-500/60 hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-400 font-semibold text-foreground transition-all shadow-2xs cursor-pointer">
+                      <Coins className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400" />
                       <span className="truncate">المصروفات</span>
                     </Button>
                   </Link>

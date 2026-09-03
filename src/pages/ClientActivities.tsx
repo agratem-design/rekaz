@@ -124,7 +124,7 @@ const ClientActivities = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("id, amount, date, notes, payment_method, client_id, clients(name), project_id, projects(name)")
+        .select("id, amount, date, notes, payment_method, client_id, clients(name), project_id, projects(name)").is("reversed_at", null)
         .order("date", { ascending: false });
       if (error) throw error;
       return data;

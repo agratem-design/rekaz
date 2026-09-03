@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,12 @@ const Index = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { setTheme } = useTheme();
+  const location = useLocation();
+  const mainContentRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [location.pathname]);
 
   // Convert Hex to HSL space-separated values for Tailwind
   const hexToHSL = (hexColor: string) => {
@@ -104,7 +110,13 @@ const Index = () => {
   });
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-background" dir="rtl">
+      <a
+        href="#main-content"
+        className="fixed right-4 top-3 z-[100] -translate-y-20 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-lg transition-transform duration-200 focus:translate-y-0"
+      >
+        الانتقال إلى المحتوى
+      </a>
       {/* Global App Sidebar (Desktop + Mobile Sheet) */}
       <AppSidebar
         collapsed={sidebarCollapsed}
@@ -120,14 +132,21 @@ const Index = () => {
       {/* Main Content Area */}
       <div 
         className={cn(
-          "flex-1 flex flex-col transition-all duration-200 ease-in-out min-w-0",
+          "min-w-0 flex-1 flex flex-col transition-all duration-200 ease-out motion-reduce:transition-none",
           sidebarCollapsed ? "md:mr-[70px]" : "md:mr-64",
           "mr-0"
         )}
       >
         <Header onMobileMenuToggle={() => setIsMobileSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <Outlet />
+        <main
+          id="main-content"
+          ref={mainContentRef}
+          tabIndex={-1}
+          className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 focus:outline-none sm:px-5 sm:py-6 lg:px-6"
+        >
+          <div className="mx-auto w-full max-w-[1600px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

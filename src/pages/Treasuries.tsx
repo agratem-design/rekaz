@@ -163,7 +163,7 @@ const Treasuries = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("id, amount, date, payment_method, notes, client_id, treasury_id, clients(name)");
+        .select("id, amount, date, payment_method, notes, client_id, treasury_id, clients(name)").is("reversed_at", null);
       if (error) throw error;
       return data || [];
     },

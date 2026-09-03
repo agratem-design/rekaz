@@ -19,6 +19,7 @@ import {
 import {
   Building2,
   ChevronDown,
+  ChevronUp,
   LogOut,
   PanelRightClose,
   PanelRightOpen,
@@ -128,7 +129,7 @@ export function AppSidebar({
   // Helper to render nav items
   const renderNavList = (isMobile: boolean = false) => {
     return (
-      <ul className="space-y-3.5">
+      <ul className="space-y-2.5">
         {navigationGroups.map((group) => {
           const hasActiveChild = group.items.some((item) =>
             isNavItemActive(item, location.pathname, role)
@@ -145,22 +146,22 @@ export function AppSidebar({
                   aria-expanded={isOpen}
                   aria-controls={`group-items-${group.id}`}
                   className={cn(
-                    "flex w-full items-center justify-between px-2.5 py-1.5 rounded-md text-[11px] font-semibold tracking-wider transition-colors cursor-pointer select-none",
+                    "flex w-full cursor-pointer items-center justify-between rounded-md px-2.5 py-1.5 text-[11px] font-bold tracking-wider transition-all duration-200 select-none",
+                    isMobile && "min-h-10",
                     hasActiveChild
-                      ? "text-foreground/90 font-bold"
-                      : "text-muted-foreground/70 hover:text-foreground hover:bg-sidebar-accent/30"
+                      ? "text-foreground font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50"
                   )}
                 >
                   <span className="truncate">{group.label}</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200 shrink-0",
-                      !isOpen && "-rotate-90"
-                    )}
-                  />
+                  {isOpen ? (
+                    <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
                 </button>
               ) : (
-                <div className="my-1.5 mx-auto w-6 border-t border-sidebar-border/40" />
+                <div className="my-1.5 mx-auto w-6 border-t border-sidebar-border/60" />
               )}
 
               {/* Group Items */}
@@ -177,12 +178,13 @@ export function AppSidebar({
                           <TooltipTrigger asChild>
                             <Link
                               to={item.href}
+                              aria-label={item.name}
                               aria-current={isActive ? "page" : undefined}
                               className={cn(
-                                "relative flex h-10 w-10 mx-auto items-center justify-center rounded-lg transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                "relative flex h-10 w-10 mx-auto cursor-pointer items-center justify-center rounded-lg transition-all duration-200 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                 isActive
-                                  ? "bg-primary/[0.08] text-primary font-semibold before:absolute before:right-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-l-full before:bg-primary"
-                                  : "text-muted-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+                                  ? "bg-primary/10 text-primary font-bold before:absolute before:right-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-l-full before:bg-primary shadow-2xs"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60"
                               )}
                             >
                               <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -192,7 +194,7 @@ export function AppSidebar({
                             </Link>
                           </TooltipTrigger>
                           <TooltipContent side="left" className="text-right">
-                            <p className="font-semibold text-xs">{item.name}</p>
+                            <p className="font-bold text-xs">{item.name}</p>
                             <p className="text-[10px] text-muted-foreground">{group.label}</p>
                           </TooltipContent>
                         </Tooltip>
@@ -203,7 +205,7 @@ export function AppSidebar({
               ) : (
                 // Expanded mode / Mobile mode
                 isOpen && (
-                  <ul id={`group-items-${group.id}`} className="space-y-0.5 pr-0.5">
+                  <ul id={`group-items-${group.id}`} className="space-y-0.5 pr-0.5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
                     {group.items.map((item) => {
                       const Icon = item.icon;
                       const isActive = isNavItemActive(item, location.pathname, role);
@@ -219,11 +221,11 @@ export function AppSidebar({
                             }}
                             aria-current={isActive ? "page" : undefined}
                             className={cn(
-                              "group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              "group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
                               isMobile && "min-h-[44px]",
                               isActive
-                                ? "bg-primary/[0.08] text-foreground font-semibold before:absolute before:right-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-l-full before:bg-primary"
-                                : "text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+                                ? "bg-primary/10 text-primary font-bold before:absolute before:right-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-l-full before:bg-primary shadow-2xs"
+                                : "text-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 font-semibold"
                             )}
                           >
                             <Icon
@@ -231,14 +233,14 @@ export function AppSidebar({
                                 "h-[18px] w-[18px] shrink-0 transition-colors",
                                 isActive
                                   ? "text-primary"
-                                  : "text-muted-foreground/70 group-hover:text-sidebar-foreground"
+                                  : "text-muted-foreground group-hover:text-sidebar-foreground"
                               )}
                             />
                             <span className="truncate flex-1 text-right">{item.name}</span>
                             {item.id === "rentals" && activeRentalsCount > 0 && (
                               <Badge
                                 variant={isActive ? "default" : "secondary"}
-                                className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center shrink-0"
+                                className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center shrink-0 font-bold"
                               >
                                 {activeRentalsCount}
                               </Badge>
@@ -265,7 +267,7 @@ export function AppSidebar({
       <aside
         aria-label="القائمة الرئيسية"
         className={cn(
-          "fixed right-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground border-l border-sidebar-border/60 shadow-xs transition-all duration-200 ease-in-out hidden md:flex md:flex-col",
+          "fixed right-0 top-0 z-40 hidden h-screen border-l border-sidebar-border/60 bg-sidebar text-sidebar-foreground shadow-xs transition-all duration-200 ease-in-out motion-reduce:transition-none md:flex md:flex-col",
           collapsed ? "w-[70px]" : "w-64"
         )}
       >
@@ -304,12 +306,14 @@ export function AppSidebar({
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div
-                  className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 cursor-pointer"
+                <button
+                  type="button"
+                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-primary/10 text-primary transition-all duration-200 hover:bg-primary/15"
                   onClick={onToggleCollapse}
+                  aria-label="توسيع القائمة الجانبية"
                 >
                   <Building2 className="h-5 w-5" />
-                </div>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="left">
                 <p className="font-semibold text-xs">{settings?.company_name || "ركاز"}</p>
@@ -338,7 +342,7 @@ export function AppSidebar({
         </div>
 
         {/* Scrollable Navigation Body */}
-        <nav className="flex-1 overflow-y-auto px-2.5 py-3.5 scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent">
+        <nav className="flex-1 overscroll-contain overflow-y-auto px-2.5 py-3.5 scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent">
           {renderNavList(false)}
         </nav>
 

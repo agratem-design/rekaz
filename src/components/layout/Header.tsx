@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Search, Bell, Building2, LogOut, Settings, User, Shield, UserCog, CheckCheck, Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,6 +20,7 @@ import { ar } from "date-fns/locale";
 
 import { getAuditSummary } from "@/lib/auditHelpers";
 import { GlobalCommandPalette } from "@/components/navigation/GlobalCommandPalette";
+import { toast } from "sonner";
 
 export interface HeaderProps {
   onMobileMenuToggle?: () => void;
@@ -94,19 +94,23 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
     profile?.display_name || profile?.username || user?.email?.split("@")[0] || "المستخدم";
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate("/auth");
+    try {
+      await signOut();
+      navigate("/auth", { replace: true });
+    } catch {
+      toast.error("تعذر تسجيل الخروج. تحقق من الاتصال وحاول مرة أخرى.");
+    }
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border/70 bg-background/90 px-3 shadow-xs backdrop-blur-xl supports-[backdrop-filter]:bg-background/75 sm:gap-3 sm:px-5 lg:px-6" dir="rtl">
       {/* Mobile Menu Toggle Button */}
       {onMobileMenuToggle && (
         <Button
           variant="ghost"
           size="icon"
           onClick={onMobileMenuToggle}
-          className="md:hidden shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
+          className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground md:hidden"
           aria-label="فتح القائمة الجانبية"
         >
           <Menu className="h-5 w-5" />
@@ -114,7 +118,7 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
       )}
 
       {/* Company Logo & Name */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 md:hidden">
         {settings?.company_logo ? (
           <img
             src={settings.company_logo}
@@ -129,23 +133,21 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
             <Building2 className="h-4 w-4 text-primary" />
           </div>
         )}
-        <span className="font-bold text-base hidden sm:block">
-          {settings?.company_name || "اسم الشركة"}
-        </span>
       </div>
 
       {/* Real Command Palette Search Trigger (Fake search count = 0) */}
-      <div className="flex-1 flex items-center gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="relative flex-1 max-w-sm flex items-center justify-between px-3 h-9 rounded-xl bg-secondary/80 hover:bg-secondary border border-border/80 hover:border-primary/40 transition-all text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+          className="relative flex h-10 min-w-0 flex-1 cursor-pointer items-center justify-between rounded-xl border border-border/80 bg-secondary/70 px-3 text-xs text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:max-w-xl"
           aria-label="فتح البحث الشامل (Ctrl+K)"
           title="البحث الشامل في المنظومة (Ctrl+K)"
         >
           <div className="flex items-center gap-2 truncate">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="truncate">ابحث عن مشروع، عميل، مورد، صفحة...</span>
+            <span className="truncate sm:hidden">بحث شامل...</span>
+            <span className="hidden truncate sm:inline">ابحث عن مشروع، عميل، مورد، أو صفحة...</span>
           </div>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono bg-muted/80 px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0">
             <span>Ctrl</span>
@@ -164,7 +166,8 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
           size="icon"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           title={theme === "dark" ? "الوضع الفاتح" : "الوضع المظلم"}
-          className="cursor-pointer text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground"
+          aria-label={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع المظلم"}
         >
           {mounted && theme === "dark" ? (
             <Sun className="h-5 w-5 text-amber-500" />
@@ -177,7 +180,7 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
         {isAdmin && (
           <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className="relative" aria-label={`فتح آخر التعديلات، ${unreadCount} عناصر`}>
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
                   <Badge
@@ -249,7 +252,7 @@ export const Header = ({ onMobileMenuToggle }: HeaderProps = {}) => {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 px-2">
+            <Button variant="ghost" size="sm" className="gap-2 px-2" aria-label={`قائمة حساب ${displayName}`}>
               <div className="h-7 w-7 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0">
                 {isAdmin ? (
                   <Shield className="h-3.5 w-3.5" />

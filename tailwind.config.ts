@@ -14,8 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Cairo', 'sans-serif'],
-        mono: ['Cairo', 'monospace'],
+        sans: ['Tajawal', 'sans-serif'],
+        mono: ['Manrope', 'Tajawal', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",

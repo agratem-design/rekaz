@@ -179,7 +179,7 @@ const ProjectPhases = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("amount")
+        .select("amount").is("reversed_at", null)
         .eq("project_id", projectId!);
       if (error) throw error;
       return data;
@@ -508,13 +508,14 @@ const ProjectPhases = () => {
       const opt = {
         margin: 0,
         filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
+        image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
         pagebreak: { mode: ['avoid-all', 'css'] }
       };
 
-      await html2pdf().set(opt).from(printWrapper).toPdf().get('pdf').then((pdf: any) => {
+      const pdfWorker = html2pdf().set(opt).from(printWrapper).toPdf();
+      await pdfWorker.get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i);
@@ -529,7 +530,8 @@ const ProjectPhases = () => {
           // Draw page numbers "1 / 3" at the same spot
           pdf.text(i + " / " + totalPages, v.padLeft + 1, 297 - v.footerBottom);
         }
-      }).save();
+      });
+      await pdfWorker.save();
       document.body.removeChild(printWrapper);
       toast({ title: "تم حفظ الملف بنجاح" });
     } catch (error) {
@@ -556,15 +558,18 @@ const ProjectPhases = () => {
     ]);
 
     const itemIds = items?.map((i) => i.id) || [];
-    const { data: progressRecords } = itemIds.length > 0
-      ? await supabase.from("technician_progress_records").select("earned_amount").in("project_item_id", itemIds)
-      : await supabase.from("technician_progress_records").select("earned_amount").eq("phase_id", phase.id);
+    const itemTechs: Array<{ total_cost?: number | null; rate?: number | null; quantity?: number | null }> = itemIds.length > 0
+      ? ((await supabase.from("project_item_technicians").select("total_cost, rate, quantity").in("project_item_id", itemIds)).data || [])
+      : [];
 
     const totalItems = items?.reduce((sum, i) => sum + Number(i.total_price || 0), 0) || 0;
     const totalPurch = purchases?.reduce((sum, p) => sum + Number(p.total_amount || 0), 0) || 0;
     const totalRent = rentalPurchases?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
     const totalExp = expenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-    const totalTech = progressRecords?.reduce((sum, r) => sum + Number(r.earned_amount || 0), 0) || 0;
+    const totalTech = itemTechs?.reduce((sum, t) => {
+      const rawC = Number(t.total_cost);
+      return sum + (rawC > 0 ? rawC : (Number(t.rate || 0) * Number(t.quantity || 1)));
+    }, 0) || 0;
     const clientPaidActual = 0;
 
     const projectPct = project?.project_type === "finishing" ? Number((project as any).finishing_percentage || 0) : 0;
@@ -608,7 +613,7 @@ const ProjectPhases = () => {
 
       const signeeName = (companySettings as any)?.signee_name || (project as any)?.engineers?.name || 'علي بن عروس شميله';
       const signeeTitle = (companySettings as any)?.signee_title || 'المهندس المشرف';
-      const projectRefCode = (project as any)?.reference_number || project?.code || '';
+      const projectRefCode = (project as any)?.reference_number || (project as any)?.code || '';
 
       let clientInvoiceHTML = `
         <style>

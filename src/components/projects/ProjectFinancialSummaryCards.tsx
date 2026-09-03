@@ -34,6 +34,13 @@ export function ProjectFinancialSummaryCards({
 }: ProjectFinancialSummaryCardsProps) {
   const summary = useProjectFinancialSummary(projectId);
 
+  if (summary.error) {
+    return <div role="alert" dir="rtl" className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-destructive">
+      تعذر تحميل الملخص المالي كاملاً. لم نعرض أرقاماً ناقصة.
+      <button className="ms-3 underline cursor-pointer" onClick={() => summary.refetch()}>إعادة المحاولة</button>
+    </div>;
+  }
+
   if (summary.isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 animate-pulse" dir="rtl">
@@ -163,15 +170,18 @@ export function ProjectFinancialSummaryCards({
                 <span className="font-semibold text-foreground text-sm">{formatCurrencyLYD(summary.technicianObligations)}</span>
               </div>
               <div className="flex justify-between items-center text-muted-foreground">
-                <span>المسدد للفنيين:</span>
+                <span>السداد المرتبط بفواتير عمالة:</span>
                 <span className="font-semibold text-emerald-600 text-sm">{formatCurrencyLYD(summary.technicianPaid)}</span>
               </div>
               <div className="border-t pt-1.5 flex justify-between items-center font-bold">
-                <span className="text-foreground">المتبقي للفنيين:</span>
+                <span className="text-foreground">متبقي المشروع (قبل الدفعات على الحساب):</span>
                 <span className={summary.technicianRemaining > 0 ? "text-purple-600 text-sm" : "text-muted-foreground text-sm"}>
                   {formatCurrencyLYD(summary.technicianRemaining)}
                 </span>
               </div>
+              <p className="pt-2 leading-relaxed text-[11px] text-muted-foreground">
+                الدفعات على حساب الفني تخفض رصيده الإجمالي العام في كشف حسابه ولا تسقط آلياً من ذمة هذا المشروع ما لم تُربط بفاتورة عمالة محددة.
+              </p>
             </div>
           </CardContent>
         </Card>

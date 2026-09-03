@@ -1,4 +1,7 @@
 import { useState, useMemo } from "react";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { useProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
+import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -108,6 +111,7 @@ const ProjectPayments = () => {
   const { id: urlProjectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const receiptOperation = useOperationKey();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
@@ -120,6 +124,7 @@ const ProjectPayments = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 
   const activeProjectId = urlProjectId || selectedProjectId;
+  const financialSummary = useProjectFinancialSummary(activeProjectId);
 
   // Fetch all clients
   const { data: allClients } = useQuery({
@@ -214,7 +219,7 @@ const ProjectPayments = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("*")
+        .select("*").is("reversed_at", null)
         .eq("project_id", activeProjectId!)
         .order("date", { ascending: false });
       if (error) throw error;
@@ -418,17 +423,8 @@ const ProjectPayments = () => {
 
   // Project financials summary
   const totalPaidSoFar = payments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
-  const projectTotalObligation = useMemo(() => {
-    if (!project) return 0;
-    if (project.project_type === "contracting") {
-      return Number((project as any).total_agreed_price || project.budget || 0);
-    }
-    const totalPurchasesCost = (unpaidInvoices || []).reduce((s, i) => s + Number(i.total_amount || 0), 0);
-    const serviceFeePct = Number(project.finishing_percentage || 0);
-    return totalPurchasesCost * (1 + serviceFeePct / 100);
-  }, [project, unpaidInvoices]);
-
-  const projectRemainingBefore = Math.max(0, projectTotalObligation - totalPaidSoFar);
+  const projectTotalObligation = financialSummary.clientObligation;
+  const projectRemainingBefore = financialSummary.clientRemaining;
   const enteredAmountNum = parseFloat(receiptForm.amount) || 0;
   const projectRemainingAfter = Math.max(0, projectRemainingBefore - enteredAmountNum);
   const creditCreatedPreview = enteredAmountNum > projectRemainingBefore ? enteredAmountNum - projectRemainingBefore : 0;
@@ -444,40 +440,15 @@ const ProjectPayments = () => {
         throw new Error("يرجى اختيار الخزينة المودع بها المبلغ");
       }
 
-      // Insert payment into client_payments (single authoritative record)
-      const { data: payment, error: paymentError } = await supabase
-        .from("client_payments")
-        .insert({
-          project_id: activeProjectId!,
-          client_id: project?.client_id || null,
-          amount: amountNum,
-          date: formData.date,
-          payment_method: formData.payment_method,
-          treasury_id: formData.treasury_id,
-          receipt_number: formData.receipt_number || null,
-          notes: formData.notes || null,
-        })
-        .select()
-        .single();
-
-      if (paymentError) throw paymentError;
-
-      // Add to income table for reporting
-      await supabase.from("income").insert({
-        project_id: activeProjectId!,
-        client_id: project?.client_id || null,
-        amount: amountNum,
-        date: formData.date,
-        type: "service",
-        subtype: "client_payment",
-        payment_method: formData.payment_method,
-        notes: formData.notes || `تسديد دفعة للمشروع: ${project?.name || ""}`,
-        status: "received",
-      });
-
-      return payment;
+      if (!project?.client_id) throw new Error("اربط المشروع بزبون قبل تسجيل الدفعة.");
+      const payload = { project_id: activeProjectId!, client_id: project.client_id, amount: amountNum,
+        date: formData.date, payment_method: formData.payment_method, treasury_id: formData.treasury_id,
+        reference: formData.receipt_number || null, notes: formData.notes || null };
+      return financialRpc("record_client_receipt_v2", { p_payload: payload, p_request_key: receiptOperation.getKey(payload) });
     },
     onSuccess: () => {
+      receiptOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client-payments", activeProjectId] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["client-credit-balance"] });
@@ -544,28 +515,10 @@ const ProjectPayments = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (paymentId: string) => {
-      // 1. Fetch payment details first
-      const { data: payment } = await supabase
-        .from("client_payments")
-        .select("amount, date")
-        .eq("id", paymentId)
-        .maybeSingle();
-
-      // 2. Delete from income table
-      if (payment) {
-        await supabase
-          .from("income")
-          .delete()
-          .eq("project_id", activeProjectId!)
-          .eq("amount", payment.amount)
-          .eq("date", payment.date)
-          .eq("subtype", "client_payment");
-      }
-
-      const { error } = await supabase.from("client_payments").delete().eq("id", paymentId);
-      if (error) throw error;
+      await financialRpc("reverse_client_receipt_v2", { p_payment_id: paymentId });
     },
     onSuccess: () => {
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client-payments", activeProjectId] });
       queryClient.invalidateQueries({ queryKey: ["unpaid-invoices", activeProjectId] });
       queryClient.invalidateQueries({ queryKey: ["payment-allocations", activeProjectId] });
@@ -818,14 +771,15 @@ const ProjectPayments = () => {
         const opt = {
           margin: 0,
           filename: filename,
-          image: { type: 'jpeg', quality: 0.98 },
+          image: { type: 'jpeg' as const, quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
           pagebreak: { mode: ['avoid-all', 'css'] }
         };
 
         const html2pdf = (await import("html2pdf.js")).default;
-        await html2pdf().set(opt).from(printWrapper).toPdf().get('pdf').then((pdf: any) => {
+        const pdfWorker = html2pdf().set(opt).from(printWrapper).toPdf();
+        await pdfWorker.get('pdf').then((pdf: any) => {
           const totalPages = pdf.internal.getNumberOfPages();
           for (let i = 1; i <= totalPages; i++) {
             pdf.setPage(i);
@@ -835,7 +789,8 @@ const ProjectPayments = () => {
             pdf.setTextColor(85, 85, 85);
             pdf.text(i + " / " + totalPages, v.padLeft + 1, 297 - v.footerBottom);
           }
-        }).save();
+        });
+        await pdfWorker.save();
         document.body.removeChild(printWrapper);
         toast({ title: "تم حفظ الملف بنجاح" });
       } catch (error) {
@@ -847,7 +802,7 @@ const ProjectPayments = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || financialSummary.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -857,6 +812,10 @@ const ProjectPayments = () => {
 
   const content = (
     <div className="space-y-6" dir="rtl">
+      {financialSummary.error && <Card role="alert" className="space-y-2 p-4">
+        <p className="text-sm text-destructive">تعذر تحميل ملخص الحساب كاملاً. أعد المحاولة قبل إضافة دفعة.</p>
+        <Button variant="outline" onClick={() => financialSummary.refetch()}>إعادة المحاولة</Button>
+      </Card>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -871,7 +830,7 @@ const ProjectPayments = () => {
           </div>
         </div>
         {activeProjectId && (
-          <Button onClick={handleOpenDialog} className="gap-2">
+          <Button onClick={handleOpenDialog} disabled={!!financialSummary.error} className="gap-2">
             <Plus className="h-4 w-4" />
             تسديد جديد
           </Button>

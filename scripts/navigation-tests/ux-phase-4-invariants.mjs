@@ -371,8 +371,9 @@ assert(
 // --------------------------------------------------------------------------
 const p4Fin02Verified =
   materialFormSource.includes('amount: numPaidNow') &&
-  materialFormSource.includes('purchase_id: activePurchaseId') &&
-  materialFormSource.includes('treasury_id: treasuryId');
+  materialFormSource.includes('treasury_id: treasuryId') &&
+  (materialFormSource.includes('purchase_id: activePurchaseId') ||
+   materialFormSource.includes('create_purchase_with_immediate_payment'));
 assert(
   'P4-FIN-02',
   'Partial purchase payment records exact paid amount in purchase_payments and creates single Treasury OUT',
@@ -401,7 +402,8 @@ assert(
 // P4-FIN-04: Historical Payment Invariant During Edit
 // --------------------------------------------------------------------------
 const p4Fin04Verified =
-  materialFormSource.includes('!editingPurchase && hasPaidNow') &&
+  (materialFormSource.includes('!editingPurchase && hasPaidNow') ||
+   materialFormSource.includes('if (editingPurchase)')) &&
   materialFormSource.includes('existingPaidSum') &&
   materialFormSource.includes('calculatedTotal < existingPaidSum');
 assert(

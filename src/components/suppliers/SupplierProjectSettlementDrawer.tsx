@@ -8,12 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { TreasurySelector } from "@/components/treasury/TreasurySelector";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { supabase } from "@/integrations/supabase/client";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { invalidateFinancialQueries } from "@/lib/financialMutations";
+import { invalidateProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { 
   Building2, User, Wallet, Calendar, FileText, CheckCircle2, 
-  AlertCircle, ArrowRight, Loader2, Sparkles, Receipt, Layers
+  AlertCircle, ArrowRight, Loader2, Sparkles, Receipt, Layers, Printer
 } from "lucide-react";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 interface SupplierProjectSettlementDrawerProps {
   isOpen: boolean;
@@ -45,6 +49,15 @@ export const SupplierProjectSettlementDrawer: React.FC<SupplierProjectSettlement
   onSuccess,
 }) => {
   const queryClient = useQueryClient();
+  const paymentOperation = useOperationKey();
+
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+      return data;
+    },
+  });
 
   // Fetch unpaid or partially paid purchases for this supplier on this project
   const { data: unpaidPurchases = [], isLoading: loadingPurchases } = useQuery({
@@ -163,12 +176,13 @@ export const SupplierProjectSettlementDrawer: React.FC<SupplierProjectSettlement
       }
 
       // Build payload for atomic RPC
+      const requestKey = paymentOperation.getKey({ supplierId, projectId, treasuryId, paymentMethod, paymentDate, notes, allocations });
       const allocList = Object.entries(allocations)
         .filter(([_, amt]) => amt > 0)
         .map(([purchaseId, amt]) => ({
           purchase_id: purchaseId,
           amount: amt,
-          idempotency_key: `SUP-PAY-${supplierId}-${purchaseId}-${Date.now()}`,
+          idempotency_key: `${requestKey}:${purchaseId}`,
         }));
 
       if (allocList.length === 0) {
@@ -189,15 +203,37 @@ export const SupplierProjectSettlementDrawer: React.FC<SupplierProjectSettlement
       return data;
     },
     onSuccess: () => {
+      paymentOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["supplier-payments-list", supplierId] });
       queryClient.invalidateQueries({ queryKey: ["supplier-purchase-stats"] });
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["project-financial-summary"] });
+      invalidateProjectFinancialSummary(queryClient, projectId);
       queryClient.invalidateQueries({ queryKey: ["supplier-unpaid-purchases", supplierId, projectId] });
 
-      toast.success(`تم سداد ${formatCurrencyLYD(calculatedTotalAllocated)} بنجاح وحفظ السندات.`);
+      toast.success(`تم سداد ${formatCurrencyLYD(calculatedTotalAllocated)} بنجاح وحفظ السندات.`, {
+        action: {
+          label: "طباعة سند الصرف",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `PAY-${Date.now().toString().slice(-6)}`,
+                date: paymentDate,
+                type: "payment",
+                amount: calculatedTotalAllocated,
+                paidToOrBy: supplierName,
+                description: `سداد مستحقات توريد - مشروع ${projectName}`,
+                projectName,
+                paymentMethod,
+                notes: notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       if (onSuccess) onSuccess();
       onClose();
     },

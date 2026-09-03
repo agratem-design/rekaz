@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { openPrintWindow } from "@/lib/printStyles";
 import { calculateProjectFinancials } from "@/lib/financialCore";
+import { useClientCreditLedger } from "@/hooks/useClientCreditLedger";
 
 type Client = {
   id: string;
@@ -71,7 +72,12 @@ type Purchase = {
   project_id?: string | null;
   phase_id?: string | null;
   total_amount: number;
+  paid_amount?: number | null;
+  purchase_type?: string | null;
+  supplier_id?: string | null;
+  technician_id?: string | null;
   rental_id?: string | null;
+  date?: string | null;
   created_at: string;
 };
 
@@ -102,11 +108,12 @@ const formatRelativeDays = (dateStr: string | null) => {
 };
 
 export default function Debts() {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDebtorsOnly, setFilterDebtorsOnly] = useState(true);
 
   // Fetch all required data
-  const { data: clients, isLoading: loadingClients } = useQuery<Client[]>({
+  const { data: clients, isLoading: loadingClients, error: clientsError } = useQuery<Client[]>({
     queryKey: ["all-clients-debts"],
     queryFn: async () => {
       const { data, error } = await supabase.from("clients").select("*").order("name");
@@ -115,7 +122,7 @@ export default function Debts() {
     },
   });
 
-  const { data: projects } = useQuery<Project[]>({
+  const { data: projects, error: projectsError } = useQuery<Project[]>({
     queryKey: ["all-projects-debts"],
     queryFn: async () => {
       const { data, error } = await supabase.from("projects").select("*");
@@ -124,7 +131,7 @@ export default function Debts() {
     },
   });
 
-  const { data: phases } = useQuery<Phase[]>({
+  const { data: phases, error: phasesError } = useQuery<Phase[]>({
     queryKey: ["all-phases-debts"],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_phases").select("*");
@@ -133,7 +140,7 @@ export default function Debts() {
     },
   });
 
-  const { data: projectItems } = useQuery<ProjectItem[]>({
+  const { data: projectItems, error: projectItemsError } = useQuery<ProjectItem[]>({
     queryKey: ["all-items-debts"],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price, created_at");
@@ -142,43 +149,54 @@ export default function Debts() {
     },
   });
 
-  const { data: purchases } = useQuery<Purchase[]>({
+  const { data: purchases, error: purchasesError } = useQuery<Purchase[]>({
     queryKey: ["all-purchases-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id, created_at");
+      const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id, date, created_at");
       if (error) throw error;
       return data as any;
     },
   });
 
-  const { data: expenses } = useQuery({
+  const { data: expenses, error: expensesError } = useQuery({
     queryKey: ["all-expenses-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount, type, technician_id");
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: techProgressRecords } = useQuery({
+  const { data: projectItemTechnicians, error: projectItemTechniciansError } = useQuery({
+    queryKey: ["all-item-techs-debts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("project_item_technicians").select("id, total_cost, rate, quantity, project_item_id, project_items(project_id)");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: techProgressRecords, error: techProgressRecordsError } = useQuery({
     queryKey: ["all-tech-progress-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      const { data, error } = await supabase
+        .from("technician_progress_records")
+        .select("id, project_id, project_item_id, technician_id, quantity_completed, earned_amount, project_items(project_id)");
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: clientPayments } = useQuery<ClientPayment[]>({
+  const { data: clientPayments, error: clientPaymentsError } = useQuery<ClientPayment[]>({
     queryKey: ["all-payments-debts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount, date, created_at").order("date", { ascending: false });
+      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount, date, created_at").is("reversed_at", null).order("date", { ascending: false });
       if (error) throw error;
       return data as any;
     },
   });
 
-  const { data: contracts } = useQuery({
+  const { data: contracts, error: contractsError } = useQuery({
     queryKey: ["all-contracts-debts"],
     queryFn: async () => {
       const { data, error } = await supabase.from("contracts").select("id, client_id, project_id, amount, status");
@@ -197,22 +215,27 @@ export default function Debts() {
   });
 
   // Calculate debts per client using Central Financial Domain
+  const creditLedgerQuery = useClientCreditLedger();
+  const creditLedger = creditLedgerQuery.data;
   const clientsDebtsList = useMemo(() => {
-    if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments) return [];
+    if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments || !creditLedger) return [];
 
     return clients.map((client) => {
       const clientProjList = projects.filter((p) => p.client_id === client.id);
       const clientContracts = (contracts || []).filter(c => c.client_id === client.id && c.status !== "cancelled");
 
       let totalBilled = 0;
+      let totalPaid = 0;
+      let debt = 0;
 
       clientProjList.forEach((proj) => {
         const projPurchases = purchases.filter((p) => p.project_id === proj.id);
         const projItems = projectItems.filter((item: any) => item.project_id === proj.id);
         const projContracts = clientContracts.filter(
-          (c) => c.project_id === proj.id || (!c.project_id && proj.project_type === "contracting")
+          (c) => c.project_id === proj.id
         );
         const projExpenses = (expenses || []).filter((e: any) => e.project_id === proj.id);
+        const projItemTechs = (projectItemTechnicians || []).filter((r: any) => r.project_items?.project_id === proj.id);
         const projTech = (techProgressRecords || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
         const projPayments = clientPayments.filter((p: any) => p.project_id === proj.id);
 
@@ -221,19 +244,18 @@ export default function Debts() {
           contracts: projContracts,
           projectItems: projItems,
           purchases: projPurchases,
-          techProgressRecords: projTech,
+          projectItemTechnicians: projItemTechs,
           expenses: projExpenses,
           clientPayments: projPayments,
+          creditLedger,
         });
 
         totalBilled += projResult.clientObligation;
+        totalPaid += projResult.totalSettled;
+        debt += projResult.clientRemaining;
       });
 
       const clientPaymentsList = clientPayments.filter((cp) => cp.client_id === client.id);
-      const totalPaid = clientPaymentsList.reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
-
-      const debt = totalBilled - totalPaid;
-
       // Latest payment date
       let lastPaymentDate: string | null = null;
       if (clientPaymentsList.length > 0) {
@@ -242,8 +264,12 @@ export default function Debts() {
 
       // Latest phase/invoice entry date
       let lastInvoiceDate: string | null = null;
-      const clientPhases = (phases || []).filter(ph => clientProjList.some(p => p.id === ph.project_id));
-      const phaseDates = clientPhases.map((ph) => ph.created_at).filter(Boolean);
+      const clientPhaseIds = phases.filter((p) => clientProjList.some((proj) => proj.id === p.project_id)).map((p) => p.id);
+      const phaseDates = purchases
+        .filter((p) => p.phase_id && clientPhaseIds.includes(p.phase_id))
+        .map((p) => p.date)
+        .filter(Boolean) as string[];
+      
       if (phaseDates.length > 0) {
         phaseDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
         lastInvoiceDate = phaseDates[0];
@@ -259,7 +285,7 @@ export default function Debts() {
         lastInvoiceDate,
       };
     });
-  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts]);
+  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts, expenses, projectItemTechnicians, techProgressRecords, creditLedger]);
 
   // Filter and sort
   const filteredAndSortedDebts = useMemo(() => {
@@ -365,6 +391,17 @@ export default function Debts() {
 
     openPrintWindow("تقرير ديون وذمم العملاء", printHTML, companySettings);
   };
+
+  const financialError = [clientsError, projectsError, phasesError, projectItemsError, purchasesError, expensesError, projectItemTechniciansError, techProgressRecordsError, clientPaymentsError, contractsError, creditLedgerQuery.error].find(Boolean);
+  if (financialError) return (
+    <Card className="p-6 space-y-3" dir="rtl" role="alert">
+      <p>تعذر تحميل الحسابات كاملة. لم نعرض أرصدة جزئية حتى لا تظهر أرقام غير صحيحة.</p>
+      <Button variant="outline" onClick={() => queryClient.invalidateQueries()}>إعادة المحاولة</Button>
+    </Card>
+  );
+  if (!clients || !projects || !phases || !projectItems || !purchases || !expenses || !projectItemTechnicians || !techProgressRecords || !clientPayments || !contracts || !creditLedger) return (
+    <Card className="p-6 text-muted-foreground" dir="rtl" role="status">جاري تحميل الحسابات ومطابقة الأرصدة…</Card>
+  );
 
   return (
     <div className="container mx-auto p-6 space-y-6" dir="rtl">

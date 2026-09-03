@@ -255,18 +255,19 @@ const TreasuryDetail = () => {
     mutationFn: async (form: typeof depositForm) => {
       if (form.amount <= 0) throw new Error("المبلغ يجب أن يكون أكبر من صفر");
 
+      const isOpening = isNewTreasury;
       // إدراج الحركة فقط - التريجر يحدث الرصيد تلقائياً
       const { error: txError } = await supabase.from("treasury_transactions").insert([{
         treasury_id: id!,
         type: "deposit",
         amount: form.amount,
         balance_after: 0, // يُحدَّث بواسطة التريجر
-        source: form.source || "deposit",
-        source_details: form.source_details || null,
-        description: form.description || (isNewTreasury ? "رصيد افتتاحي" : "إضافة رصيد"),
+        source: isOpening ? "opening_balance" : (form.source.trim() || "deposit"),
+        source_details: isOpening ? "رصيد افتتاحي لبداية التشغيل" : (form.source_details || null),
+        description: isOpening ? "رصيد افتتاحي" : (form.description || "إضافة رصيد"),
         date: form.date,
         notes: form.notes || null,
-        reference_type: "manual",
+        reference_type: isOpening ? "opening_balance" : "manual",
       }]);
       if (txError) throw txError;
     },
@@ -274,7 +275,7 @@ const TreasuryDetail = () => {
       queryClient.invalidateQueries({ queryKey: ["treasury", id] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions", id] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
-      toast({ title: "تم إضافة الرصيد بنجاح" });
+      toast({ title: isNewTreasury ? "تم قيد الرصيد الافتتاحي بنجاح" : "تم إضافة الرصيد بنجاح" });
       setDepositDialogOpen(false);
       setDepositForm({ amount: 0, source: "", source_details: "", description: "", date: new Date().toISOString().split("T")[0], notes: "" });
     },
@@ -283,7 +284,7 @@ const TreasuryDetail = () => {
     },
   });
 
-  const isNewTreasury = !loadingTx && (!transactions || transactions.length === 0) && treasury?.balance === 0;
+  const isNewTreasury = !loadingTx && (!transactions || transactions.length === 0);
 
   // Build source suggestions from defaults + previous transaction sources
   const sourceSuggestions = useMemo(() => {
@@ -891,40 +892,53 @@ const TreasuryDetail = () => {
       <Dialog open={depositDialogOpen} onOpenChange={(open) => { if (!open) setDepositDialogOpen(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{isNewTreasury ? "رصيد افتتاحي" : "إضافة رصيد للخزينة"}</DialogTitle>
+            <DialogTitle>{isNewTreasury ? "تسجيل الرصيد الافتتاحي" : "إضافة رصيد للخزينة"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {isNewTreasury && (
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary leading-relaxed">
+                تسجيل الرصيد الافتتاحي الأولي لبدء تشغيل هذه الخزينة. يُقيد دفترياً كحركة إيداع أولية ويُستثنى تماماً من إيرادات وأرباح المشاريع.
+              </div>
+            )}
             <div className="space-y-2">
               <Label>المبلغ (د.ل) *</Label>
               <Input
                 type="number"
                 step="0.01"
-                value={depositForm.amount}
+                min="0.01"
+                value={depositForm.amount || ""}
                 onChange={(e) => setDepositForm({ ...depositForm, amount: Number(e.target.value) })}
+                placeholder="0.00"
+                dir="ltr"
+                className="text-left font-bold"
               />
             </div>
-            <div className="space-y-2">
-              <Label>مصدر الرصيد *</Label>
-              <Input
-                value={depositForm.source}
-                onChange={(e) => setDepositForm({ ...depositForm, source: e.target.value })}
-                placeholder="اكتب أو اختر مصدر الرصيد"
-                list="source-suggestions"
-              />
-              <datalist id="source-suggestions">
-                {sourceSuggestions.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </div>
-            <div className="space-y-2">
-              <Label>تفاصيل المصدر</Label>
-              <Input
-                value={depositForm.source_details}
-                onChange={(e) => setDepositForm({ ...depositForm, source_details: e.target.value })}
-                placeholder="مثال: اسم الزبون أو رقم الحوالة"
-              />
-            </div>
+            {!isNewTreasury && (
+              <>
+                <div className="space-y-2">
+                  <Label>مصدر الرصيد *</Label>
+                  <Input
+                    value={depositForm.source}
+                    onChange={(e) => setDepositForm({ ...depositForm, source: e.target.value })}
+                    placeholder="اكتب أو اختر مصدر الرصيد"
+                    list="source-suggestions"
+                  />
+                  <datalist id="source-suggestions">
+                    {sourceSuggestions.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="space-y-2">
+                  <Label>تفاصيل المصدر</Label>
+                  <Input
+                    value={depositForm.source_details}
+                    onChange={(e) => setDepositForm({ ...depositForm, source_details: e.target.value })}
+                    placeholder="مثال: اسم الزبون أو رقم الحوالة"
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label>التاريخ</Label>
               <Input
@@ -938,6 +952,7 @@ const TreasuryDetail = () => {
               <Textarea
                 value={depositForm.notes}
                 onChange={(e) => setDepositForm({ ...depositForm, notes: e.target.value })}
+                placeholder={isNewTreasury ? "ملاحظات إضافية على الرصيد الافتتاحي..." : "أي ملاحظات إضافية..."}
                 rows={2}
               />
             </div>

@@ -29,8 +29,8 @@ export const OperationTypeSelector: React.FC<OperationTypeSelectorProps> = ({
     },
     {
       type: "service",
-      title: "خدمة / مقاولة باطن",
-      description: "تسجيل خدمات خارجية أو مقاول باطن مع الموردين",
+      title: "خدمة مورد خارجية",
+      description: "تسجيل خدمات الموردين الخارجيين وفواتير الخدمات المتعددة",
       icon: <Wrench className="h-6 w-6 text-purple-600 dark:text-purple-400" />,
     },
     {

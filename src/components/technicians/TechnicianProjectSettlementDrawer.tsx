@@ -8,12 +8,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { TreasurySelector } from "@/components/treasury/TreasurySelector";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { supabase } from "@/integrations/supabase/client";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { invalidateFinancialQueries } from "@/lib/financialMutations";
+import { invalidateProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { 
   Building2, User, Wallet, Calendar, FileText, CheckCircle2, 
-  AlertCircle, ArrowRight, Loader2, Sparkles, Wrench, Layers
+  AlertCircle, ArrowRight, Loader2, Sparkles, Wrench, Layers, Printer
 } from "lucide-react";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 interface TechnicianProjectSettlementDrawerProps {
   isOpen: boolean;
@@ -47,6 +51,15 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
   onSuccess,
 }) => {
   const queryClient = useQueryClient();
+  const paymentOperation = useOperationKey();
+
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+      return data;
+    },
+  });
 
   // Form states
   const [treasuryId, setTreasuryId] = useState<string>("");
@@ -73,45 +86,67 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
     setPayAmount(totalDue.toString());
   };
 
-  // Settlement mutation
+  // Settlement mutation using canonical atomic payment RPC
   const settleMutation = useMutation({
     mutationFn: async () => {
       if (!treasuryId) {
         throw new Error("يرجى تحديد الخزينة أو الحساب المصرفي المخصوم منه");
       }
-      if (numPayAmount <= 0) {
+      if (!Number.isFinite(numPayAmount) || numPayAmount <= 0) {
         throw new Error("يرجى إدخال مبلغ صحيح للصرف");
       }
-      if (numPayAmount > totalDue + 0.001) {
-        throw new Error("المبلغ المراد صرفه يتجاوز إجمالي المستحق للفني على هذا المشروع");
-      }
-
-      const { error } = await supabase.from("expenses").insert({
-        technician_id: technicianId,
-        project_id: projectId,
-        treasury_id: treasuryId,
-        type: "labor",
-        amount: numPayAmount,
-        date: paymentDate,
-        description: `صرف مستحقات فني - ${technicianName} عن مشروع ${projectName}`,
-        notes: notes || null,
-        payment_method: paymentMethod,
+      const idempotencyKey = paymentOperation.getKey({ technicianId, projectId, treasuryId, numPayAmount, paymentMethod, paymentDate, notes });
+      const { data, error } = await supabase.rpc("pay_technician_on_account_atomic", {
+        p_technician_id: technicianId,
+        p_treasury_id: treasuryId,
+        p_amount: numPayAmount,
+        p_payment_method: paymentMethod,
+        p_date: paymentDate,
+        p_notes: notes || `دفعة على الحساب - ${technicianName}`,
+        p_reference: `PROJ-${projectName}`,
+        p_idempotency_key: idempotencyKey,
+        p_context_project_id: projectId,
       });
 
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      paymentOperation.reset();
+      invalidateFinancialQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["technician-direct-payments", technicianId] });
       queryClient.invalidateQueries({ queryKey: ["technician-expenses", technicianId] });
       queryClient.invalidateQueries({ queryKey: ["technician-progress-records", technicianId] });
+      queryClient.invalidateQueries({ queryKey: ["all-technicians-direct-payments"] });
       queryClient.invalidateQueries({ queryKey: ["all-technicians-progress"] });
       queryClient.invalidateQueries({ queryKey: ["all-technicians-expenses"] });
       queryClient.invalidateQueries({ queryKey: ["technicians-stats"] });
       queryClient.invalidateQueries({ queryKey: ["technicians"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["project-financial-summary"] });
+      invalidateProjectFinancialSummary(queryClient, projectId);
 
-      toast.success(`تم صرف ${formatCurrencyLYD(numPayAmount)} بنجاح وحفظ سند الصرف.`);
+      toast.success(`تم صرف ${formatCurrencyLYD(numPayAmount)} بنجاح وحفظ سند الصرف.`, {
+        action: {
+          label: "طباعة سند الصرف",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `PAY-${data?.payment_id ? data.payment_id.slice(0, 8) : Date.now().toString().slice(-6)}`,
+                date: paymentDate,
+                type: "salary",
+                amount: numPayAmount,
+                paidToOrBy: technicianName,
+                description: `صرف مستحقات فني - ${technicianName} عن مشروع ${projectName}`,
+                projectName,
+                paymentMethod,
+                notes: notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       if (onSuccess) onSuccess();
       onClose();
     },
@@ -121,7 +156,7 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
   });
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={isOpen} onOpenChange={(open) => !open && !settleMutation.isPending && onClose()}>
       <SheetContent side="left" className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-background" dir="rtl">
         <SheetHeader className="p-5 border-b border-border/40 bg-muted/20">
           <div className="flex items-center justify-between gap-2">
@@ -131,10 +166,10 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
               </div>
               <div>
                 <SheetTitle className="text-base font-bold flex items-center gap-2">
-                  <span>صرف مستحقات الفني بالمشروع</span>
+                  <span>دفعة لحساب الفني</span>
                 </SheetTitle>
                 <SheetDescription className="text-xs text-muted-foreground mt-0.5">
-                  تسوية استحقاقات إنجاز الفني للمشروع المختار
+                  دفعة على حساب الفني العام؛ المشروع مرجع فقط ولا يخصص الدفعة لبنوده
                 </SheetDescription>
               </div>
             </div>
@@ -220,7 +255,6 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
             <Input
               type="number"
               min="0"
-              max={totalDue}
               step="0.01"
               value={payAmount}
               onChange={(e) => setPayAmount(e.target.value)}
@@ -291,8 +325,8 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
               <span>المتبقي بعد الصرف:</span>
               <span className="font-bold text-foreground" dir="ltr">{formatCurrencyLYD(remainingAfterPayment)}</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1 pt-1 border-t border-border/30">
-              * ملاحظة محاسبية: السداد يخفض رصيد الفني المستحق ولا يغيّر تكلفة العمل المعتمدة المسجلة مسبقاً.
+            <p className="text-[10px] text-muted-foreground mt-1 pt-1 border-t border-border/30 leading-relaxed">
+              * ملاحظة محاسبية: السداد يسجل كدفعة على حساب الفني (حركة خروج نقدي من الخزينة) ويخفض رصيده الإجمالي العام في كشف الفني، مع حفظ سياق المشروع مرجعياً.
             </p>
           </div>
         </div>

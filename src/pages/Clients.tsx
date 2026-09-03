@@ -26,6 +26,7 @@ import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { openPrintWindow } from "@/lib/printStyles";
 import { calculateProjectFinancials } from "@/lib/financialCore";
+import { useClientCreditLedger } from "@/hooks/useClientCreditLedger";
 import {
   Dialog,
   DialogContent,
@@ -83,7 +84,7 @@ export default function Clients() {
   };
 
   // Fetch clients metadata
-  const { data: clients, isLoading: loadingClients } = useQuery({
+  const { data: clients, isLoading: loadingClients, error: clientsError } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -105,7 +106,7 @@ export default function Clients() {
   });
 
   // Fetch financial dependencies to calculate totals
-  const { data: projects } = useQuery({
+  const { data: projects, error: projectsError } = useQuery({
     queryKey: ["all-projects-clients-page"],
     queryFn: async () => {
       const { data, error } = await supabase.from("projects").select("*");
@@ -114,7 +115,7 @@ export default function Clients() {
     },
   });
 
-  const { data: phases } = useQuery({
+  const { data: phases, error: phasesError } = useQuery({
     queryKey: ["all-phases-clients-page"],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_phases").select("*");
@@ -123,7 +124,7 @@ export default function Clients() {
     },
   });
 
-  const { data: projectItems } = useQuery({
+  const { data: projectItems, error: projectItemsError } = useQuery({
     queryKey: ["all-items-clients-page"],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price");
@@ -132,7 +133,7 @@ export default function Clients() {
     },
   });
 
-  const { data: purchases } = useQuery({
+  const { data: purchases, error: purchasesError } = useQuery({
     queryKey: ["all-purchases-clients-page"],
     queryFn: async () => {
       const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id");
@@ -141,34 +142,34 @@ export default function Clients() {
     },
   });
 
-  const { data: clientExpenses } = useQuery({
+  const { data: clientExpenses, error: clientExpensesError } = useQuery({
     queryKey: ["all-expenses-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount, type, technician_id");
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: clientTechProgress } = useQuery({
-    queryKey: ["all-tech-progress-clients-page"],
+  const { data: clientItemTechs, error: clientItemTechsError } = useQuery({
+    queryKey: ["all-item-techs-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      const { data, error } = await supabase.from("project_item_technicians").select("id, total_cost, rate, quantity, project_item_id, project_items(project_id)");
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: clientPayments } = useQuery({
+  const { data: clientPayments, error: clientPaymentsError } = useQuery({
     queryKey: ["all-payments-clients-page"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount");
+      const { data, error } = await supabase.from("client_payments").select("id, client_id, project_id, amount").is("reversed_at", null);
       if (error) throw error;
       return data as any;
     },
   });
 
-  const { data: contracts } = useQuery({
+  const { data: contracts, error: contractsError } = useQuery({
     queryKey: ["all-contracts-clients-page"],
     queryFn: async () => {
       const { data, error } = await supabase.from("contracts").select("id, client_id, project_id, amount, status");
@@ -178,40 +179,42 @@ export default function Clients() {
   });
 
   // Map clients to their calculated financial overview using Central Financial Domain
+  const creditLedgerQuery = useClientCreditLedger();
+  const creditLedger = creditLedgerQuery.data;
   const clientsWithFinancials = useMemo(() => {
-    if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments) return [];
+    if (!clients || !projects || !phases || !projectItems || !purchases || !clientPayments || !creditLedger) return [];
 
     return clients.map((client) => {
-      const clientProjList = projects.filter((p) => p.client_id === client.id) || [];
-      const clientContracts = (contracts || []).filter(c => c.client_id === client.id && c.status !== "cancelled");
-      
+      const clientProjList = projects.filter((p) => p.client_id === client.id);
       let totalBilled = 0;
+      let remaining = 0;
+      let totalPaid = 0;
 
       clientProjList.forEach((proj) => {
         const projPurchases = purchases.filter((p: any) => p.project_id === proj.id);
         const projItems = projectItems.filter((item: any) => item.project_id === proj.id);
-        const projContracts = clientContracts.filter(c => c.project_id === proj.id || (!c.project_id && proj.project_type === "contracting"));
+        const projContracts = (contracts || []).filter(
+          (c) => c.status !== "cancelled" && c.project_id === proj.id
+        );
         const projExpenses = (clientExpenses || []).filter((e: any) => e.project_id === proj.id);
-        const projTech = (clientTechProgress || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
-        const projPayments = clientPayments.filter((p: any) => p.project_id === proj.id);
+        const projItemTechs = (clientItemTechs || []).filter((r: any) => r.project_items?.project_id === proj.id);
+        const projPayments = (clientPayments || []).filter((p: any) => p.project_id === proj.id);
 
         const projResult = calculateProjectFinancials({
           project: proj,
           contracts: projContracts,
           projectItems: projItems,
           purchases: projPurchases,
-          techProgressRecords: projTech,
+          projectItemTechnicians: projItemTechs,
           expenses: projExpenses,
           clientPayments: projPayments,
+          creditLedger,
         });
 
         totalBilled += projResult.clientObligation;
+        remaining += projResult.clientRemaining;
+        totalPaid += projResult.totalSettled;
       });
-
-      const clientPaymentsList = clientPayments.filter((cp: any) => cp.client_id === client.id);
-      const totalPaid = clientPaymentsList.reduce((sum: number, cp: any) => sum + Number(cp.amount || 0), 0);
-
-      const remaining = totalBilled - totalPaid;
 
       return {
         ...client,
@@ -221,7 +224,7 @@ export default function Clients() {
         remaining,
       };
     });
-  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts, clientExpenses, clientTechProgress]);
+  }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts, clientExpenses, clientItemTechs, creditLedger]);
 
   // Filter clients by search query
   const filteredClients = useMemo(() => {
@@ -496,6 +499,17 @@ export default function Clients() {
 
     openPrintWindow("كشف العملاء الإجمالي", printHTML, companySettings);
   };
+
+  const financialError = [clientsError, projectsError, phasesError, projectItemsError, purchasesError, clientExpensesError, clientItemTechsError, clientPaymentsError, contractsError, creditLedgerQuery.error].find(Boolean);
+  if (financialError) return (
+    <Card className="p-6 space-y-3" dir="rtl" role="alert">
+      <p>تعذر تحميل الحسابات كاملة. لم نعرض أرصدة جزئية حتى لا تظهر أرقام غير صحيحة.</p>
+      <Button variant="outline" onClick={() => queryClient.invalidateQueries()}>إعادة المحاولة</Button>
+    </Card>
+  );
+  if (!clients || !projects || !phases || !projectItems || !purchases || !clientExpenses || !clientItemTechs || !clientPayments || !contracts || !creditLedger) return (
+    <Card className="p-6 text-muted-foreground" dir="rtl" role="status">جاري تحميل الحسابات ومطابقة الأرصدة…</Card>
+  );
 
   return (
     <div className="space-y-6" dir="rtl">

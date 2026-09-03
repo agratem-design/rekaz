@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -68,6 +70,7 @@ const today = () => new Date().toISOString().split("T")[0];
 
 const ClientPayments = () => {
   const queryClient = useQueryClient();
+  const receiptOperation = useOperationKey();
   const navigate = useNavigate();
 
   // ── form state ──────────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ const ClientPayments = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("*, clients:client_id(name), projects:project_id(name, project_type)")
+        .select("*, clients:client_id(name), projects:project_id(name, project_type)").is("reversed_at", null)
         .order("date", { ascending: false });
       if (error) throw error;
       return data;
@@ -240,7 +243,7 @@ const ClientPayments = () => {
       // 6. Get all client payments already made for this client (whether project_id is null or not!)
       const { data: payments } = await supabase
         .from("client_payments")
-        .select("id, project_id, amount, date, payment_method, notes, treasury_id")
+        .select("id, project_id, amount, date, payment_method, notes, treasury_id").is("reversed_at", null)
         .eq("client_id", selectedClientId)
         .order("date", { ascending: false });
 
@@ -358,50 +361,67 @@ const ClientPayments = () => {
   const subTreasuries = useMemo(() =>
     treasuries?.filter(t => !!t.parent_id) ?? [], [treasuries]);
 
-  // اقتراح الخزينة الرئيسية بناءً على نوع المشروع
-  const suggestedParentTreasuries = useMemo(() => {
+  // تصفية الخزينة الرئيسية بناءً على نوع المشروع المختار
+  const filteredParentTreasuries = useMemo(() => {
     if (!parentTreasuries.length) return [];
-    if (paymentProjectType === "all") return parentTreasuries;
-    const matched = parentTreasuries.filter((t: any) => {
-      if (t.project_category) return t.project_category === paymentProjectType;
-      if (paymentProjectType === "contracting") return t.name.includes("مقاولات");
-      if (paymentProjectType === "finishing") return t.name.includes("تشطيب");
-      return false;
-    });
-    const others = parentTreasuries.filter((t: any) => !matched.some(m => m.id === t.id));
-    return [...matched, ...others];
-  }, [parentTreasuries, paymentProjectType]);
+    if (selectedProjectId && selectedProjectId !== "none") {
+      const proj = projects?.find((p: any) => p.id === selectedProjectId);
+      if (proj?.default_treasury_id) {
+        const direct = parentTreasuries.find(t => t.id === proj.default_treasury_id);
+        if (direct) return [direct];
+        const sub = subTreasuries.find(t => t.id === proj.default_treasury_id);
+        if (sub?.parent_id) {
+          const root = parentTreasuries.find(t => t.id === sub.parent_id);
+          if (root) return [root];
+        }
+      }
+      const pType = proj?.project_type || paymentProjectType;
+      if (pType && pType !== "all") {
+        const matched = parentTreasuries.filter((t: any) => {
+          if (t.project_category) return t.project_category === pType;
+          if (pType === "contracting") return t.name.includes("مقاولات") || t.name.includes("المقاولات");
+          if (pType === "finishing") return t.name.includes("تشطيب") || t.name.includes("التشطيب");
+          return false;
+        });
+        if (matched.length > 0) return matched;
+      }
+    }
+    return parentTreasuries;
+  }, [parentTreasuries, subTreasuries, selectedProjectId, paymentProjectType, projects]);
 
   const filteredChildTreasuries = useMemo(() => {
     if (!selectedParentTreasuryId) return [];
     let list = subTreasuries.filter(t => t.parent_id === selectedParentTreasuryId);
-    if (paymentMethod === "cash") {
-      list = list.filter(t => t.treasury_type === "cash");
-    } else {
-      list = list.filter(t => t.treasury_type === "bank");
+    if (list.length > 0) {
+      if (paymentMethod === "cash") {
+        const cashList = list.filter(t => t.treasury_type === "cash");
+        if (cashList.length > 0) return cashList;
+      } else {
+        const bankList = list.filter(t => t.treasury_type === "bank");
+        if (bankList.length > 0) return bankList;
+      }
+      return list;
     }
-    return list;
-  }, [subTreasuries, selectedParentTreasuryId, paymentMethod]);
+    // Fallback if parent has no children
+    const parent = parentTreasuries.find(t => t.id === selectedParentTreasuryId);
+    return parent ? [parent] : [];
+  }, [subTreasuries, parentTreasuries, selectedParentTreasuryId, paymentMethod]);
 
   // ── اختيار الخزينة الرئيسية تلقائياً عند اختيار الزبون / تغيير المشروع ──
   useEffect(() => {
-    if (!parentTreasuries.length) return;
-
-    let matched: any = null;
-    if (selectedProjectId && selectedProjectId !== "none" && paymentProjectType !== "all") {
-      matched = parentTreasuries.find(
-        (t: any) => t.project_category === paymentProjectType ||
-          (paymentProjectType === "contracting" && t.name.includes("مقاولات")) ||
-          (paymentProjectType === "finishing" && t.name.includes("تشطيب"))
-      );
+    if (!filteredParentTreasuries.length) {
+      setSelectedParentTreasuryId("");
+      return;
     }
 
-    const targetParentId = matched ? matched.id : (selectedParentTreasuryId || parentTreasuries[0]?.id || "");
-    
-    if (targetParentId && targetParentId !== selectedParentTreasuryId) {
-      setSelectedParentTreasuryId(targetParentId);
+    if (selectedProjectId && selectedProjectId !== "none") {
+      setSelectedParentTreasuryId(filteredParentTreasuries[0].id);
+    } else {
+      if (!selectedParentTreasuryId || !filteredParentTreasuries.some(t => t.id === selectedParentTreasuryId)) {
+        setSelectedParentTreasuryId(filteredParentTreasuries[0].id);
+      }
     }
-  }, [selectedProjectId, paymentProjectType, parentTreasuries, selectedParentTreasuryId]);
+  }, [selectedProjectId, paymentProjectType, filteredParentTreasuries]);
 
   // ── اختيار الخزينة الفرعية تلقائياً عند تغير الخزينة الرئيسية أو طريقة الدفع ──
   useEffect(() => {
@@ -412,7 +432,7 @@ const ClientPayments = () => {
     } else {
       setSelectedTreasuryId("");
     }
-  }, [filteredChildTreasuries, selectedTreasuryId]);
+  }, [filteredChildTreasuries, selectedParentTreasuryId]);
 
   // General audit log calculations
   const filteredAllPayments = useMemo(() => {
@@ -441,37 +461,13 @@ const ClientPayments = () => {
 
       const targetProjId = selectedProjectId && selectedProjectId !== "none" ? selectedProjectId : null;
 
-      // 1. Insert Client Payment record
-      const { data: payment, error: payErr } = await supabase
-        .from("client_payments")
-        .insert({
-          client_id: selectedClientId,
-          project_id: targetProjId,
-          amount: amount,
-          date: paymentDate,
-          payment_method: paymentMethod,
-          treasury_id: selectedTreasuryId,
-          notes: notes || null,
-        })
-        .select("id")
-        .single();
-      if (payErr) throw payErr;
-
-      // 2. Log Income record
-      await supabase.from("income").insert({
-        project_id: targetProjId,
-        client_id: selectedClientId,
-        amount: amount,
-        date: paymentDate,
-        type: "service",
-        subtype: "client_payment",
-        payment_method: paymentMethod,
-        notes: notes || (targetProjId ? `تسديد دفعة لمشروع` : `تسديد دفعة عامة (رصيد زبون)`),
-        status: "received",
-        reference_id: payment.id,
-      });
+      const payload = { client_id: selectedClientId, project_id: targetProjId, amount,
+        date: paymentDate, payment_method: paymentMethod, treasury_id: selectedTreasuryId, notes: notes || null };
+      await financialRpc("record_client_receipt_v2", { p_payload: payload, p_request_key: receiptOperation.getKey(payload) });
     },
     onSuccess: () => {
+      receiptOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client-outstanding", selectedClientId] });
       queryClient.invalidateQueries({ queryKey: ["projects-payments-total"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries-active"] });
@@ -492,14 +488,10 @@ const ClientPayments = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (paymentId: string) => {
-      // Delete associated income transaction
-      await (supabase.from("income") as any).delete().eq("reference_id", paymentId);
-
-      // Delete payment (database trigger handles treasury transaction & balance cleanly)
-      const { error } = await supabase.from("client_payments").delete().eq("id", paymentId);
-      if (error) throw error;
+      await financialRpc("reverse_client_receipt_v2", { p_payment_id: paymentId });
     },
     onSuccess: () => {
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client-outstanding", selectedClientId] });
       queryClient.invalidateQueries({ queryKey: ["projects-payments-total"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries-active"] });
@@ -515,6 +507,7 @@ const ClientPayments = () => {
   });
 
   const [editingClientPayment, setEditingClientPayment] = useState<any | null>(null);
+  const correctionOperation = useOperationKey();
   const [editClientPayDialogOpen, setEditClientPayDialogOpen] = useState(false);
   const [editClientPayFormData, setEditClientPayFormData] = useState({
     amount: "",
@@ -532,52 +525,23 @@ const ClientPayments = () => {
         throw new Error("يرجى إدخال مبلغ صحيح");
       }
 
-      // Update client_payments
-      const { error } = await supabase
-        .from("client_payments")
-        .update({
-          amount: amountVal,
-          date: data.date,
-          payment_method: data.payment_method,
-          treasury_id: data.treasury_id,
-          notes: data.notes || null,
-        })
-        .eq("id", editingClientPayment.id);
-
-      if (error) throw error;
-
-      // Update associated income
-      await (supabase.from("income" as any) as any)
-        .update({
-          amount: amountVal,
-          date: data.date,
-          payment_method: data.payment_method,
-          notes: data.notes || null,
-        })
-        .eq("reference_id", editingClientPayment.id);
-
-      // Update associated treasury_transaction
-      if (data.treasury_id) {
-        const { error: txErr } = await (supabase
-          .from("treasury_transactions" as any) as any)
-          .update({
-            treasury_id: data.treasury_id,
-            amount: amountVal,
-            date: data.date,
-            notes: data.notes || null,
-          })
-          .eq("reference_id", editingClientPayment.id);
-        if (txErr) console.error("Error updating treasury tx:", txErr);
-      }
+      const payload = { amount: amountVal, date: data.date, payment_method: data.payment_method,
+        treasury_id: data.treasury_id, notes: data.notes || null };
+      await financialRpc("update_client_receipt_v2", { p_payment_id: editingClientPayment.id,
+        p_payload: payload, p_request_key: correctionOperation.getKey({ id: editingClientPayment.id, ...payload }) });
     },
     onSuccess: () => {
+      correctionOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client-outstanding", selectedClientId] });
       queryClient.invalidateQueries({ queryKey: ["projects-payments-total"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries-active"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["client-payments-all-list"] });
+      invalidateFinancialQueries(queryClient);
       toast({ title: "تم تحديث التسديد بنجاح" });
+      correctionOperation.reset();
       setEditClientPayDialogOpen(false);
       setEditingClientPayment(null);
     },
@@ -855,11 +819,11 @@ const ClientPayments = () => {
                     </Select>
                   </div>
 
-                  {/* القسم / الخزينة العامة */}
+                  {/* القسم / الخزينة الرئيسية */}
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold flex items-center gap-1.5">
                       <Landmark className="h-3.5 w-3.5 text-primary" />
-                      القسم / الخزينة العامة <span className="text-destructive">*</span>
+                      القسم / الخزينة الرئيسية <span className="text-destructive">*</span>
                     </Label>
                     <Select
                       value={selectedParentTreasuryId}
@@ -868,26 +832,17 @@ const ClientPayments = () => {
                         setSelectedTreasuryId("");
                       }}
                       dir="rtl"
-                      disabled={!selectedClientId}
+                      disabled={!selectedClientId || (filteredParentTreasuries.length <= 1 && !!selectedProjectId && selectedProjectId !== "none")}
                     >
                       <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                        <SelectValue placeholder="اختر القسم..." />
+                        <SelectValue placeholder="اختر الخزينة الرئيسية..." />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
-                        {suggestedParentTreasuries.map((parent: any) => {
-                          const isMatched = (parent.project_category === paymentProjectType || 
-                                            (paymentProjectType === "contracting" && parent.name.includes("مقاولات")) || 
-                                            (paymentProjectType === "finishing" && parent.name.includes("تشطيب"))) && paymentProjectType !== "all";
-                          return (
-                            <SelectItem key={parent.id} value={parent.id}>
-                              <span className="flex items-center gap-1.5">
-                                {isMatched && <span className="h-1.5 w-1.5 rounded-full bg-primary inline-block" />}
-                                {parent.name}
-                                {isMatched && <span className="text-[10px] text-primary">(مقترح)</span>}
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
+                        {filteredParentTreasuries.map((parent: any) => (
+                          <SelectItem key={parent.id} value={parent.id}>
+                            {parent.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1001,18 +956,18 @@ const ClientPayments = () => {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5">
                   <Wallet className="h-3.5 w-3.5 text-primary" />
-                  الخزينة أو الحساب المستلم الفرعي <span className="text-destructive">*</span>
+                  الحساب / الفرع المستلم <span className="text-destructive">*</span>
                 </Label>
                 <Select
                   value={selectedTreasuryId}
                   onValueChange={setSelectedTreasuryId}
-                  disabled={!selectedParentTreasuryId}
+                  disabled={!selectedParentTreasuryId || filteredChildTreasuries.length === 0}
                   dir="rtl"
                 >
                   <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                    <SelectValue placeholder={selectedParentTreasuryId ? "اختر الحساب الفرعي..." : "حدد القسم أولاً"} />
+                    <SelectValue placeholder={selectedParentTreasuryId ? "اختر الحساب / الفرع المستلم..." : "حدد الخزينة الرئيسية أولاً"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent dir="rtl">
                     {filteredChildTreasuries.map(child => (
                       <SelectItem key={child.id} value={child.id}>
                         {child.name} ({child.treasury_type === 'cash' ? 'نقدي' : 'بنك'}) - رصيد: {formatCurrencyLYD(child.balance ?? 0)}

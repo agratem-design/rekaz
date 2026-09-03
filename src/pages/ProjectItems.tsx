@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { InvoiceItemForm } from "@/components/project-items/InvoiceItemForm";
 import { safeEvaluate } from "@/lib/safeFormula";
+import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
+import { useOperationKey } from "@/hooks/useOperationKey";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -172,6 +174,7 @@ const ProjectItems = () => {
   const queryPhaseId = searchParams.get("phase");
   const effectivePhaseId = routePhaseId || queryPhaseId || undefined;
   const queryClient = useQueryClient();
+  const itemOperation = useOperationKey();
   const inlineDropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -282,9 +285,8 @@ const ProjectItems = () => {
           *,
           engineers (id, name, engineer_type),
           measurement_configs (id, name, unit_symbol),
-          project_item_technicians (total_cost),
-          purchases (id, total_amount),
-          technician_progress_records (id, quantity_completed, rate, earned_amount)
+          project_item_technicians (total_cost, rate, quantity),
+          purchases (id, total_amount)
         `)
         .eq("project_id", projectId!)
         .order("created_at", { ascending: false });
@@ -299,13 +301,12 @@ const ProjectItems = () => {
       return data.map((item: any) => {
         const rawTotal = item.total_price;
         const effectiveTotal = rawTotal || (item.quantity * item.unit_price);
-        const assignedTechCost = item.project_item_technicians?.reduce((sum: number, t: any) => sum + Number(t.total_cost || 0), 0) || 0;
-        const progressTechCost = item.technician_progress_records?.reduce((sum: number, r: any) => {
-          const earned = Number(r.earned_amount || 0);
-          return sum + (earned > 0 ? earned : (Number(r.quantity_completed || 0) * Number(r.rate || 0)));
+        const assignedTechCost = item.project_item_technicians?.reduce((sum: number, t: any) => {
+          const rawC = Number(t.total_cost);
+          return sum + (rawC > 0 ? rawC : (Number(t.rate || 0) * Number(t.quantity || 1)));
         }, 0) || 0;
 
-        const technicianCost = Math.max(assignedTechCost, progressTechCost);
+        const technicianCost = assignedTechCost;
         const purchasesCost = item.purchases?.reduce((sum: number, p: any) => sum + Number(p.total_amount || 0), 0) || 0;
 
         return {
@@ -503,7 +504,7 @@ const ProjectItems = () => {
 
   // Add/Update mutation
   const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: typeof formData & { technician?: { technician_id: string; rate_type: string; rate: number; quantity: number } }) => {
       // Calculate total based on formula or simple multiplication
       let calculatedTotal = 0;
       const qty = parseFloat(data.quantity) || 0;
@@ -554,19 +555,12 @@ const ProjectItems = () => {
           : null,
       };
 
-      if (editingItem) {
-        const { error } = await supabase
-          .from("project_items")
-          .update(payload)
-          .eq("id", editingItem.id);
-        if (error) throw error;
-      } else {
-        const { data: insertedItem, error } = await supabase.from("project_items").insert(payload).select("id").single();
-        if (error) throw error;
-        return insertedItem;
-      }
+      const args = { p_item_id: editingItem?.id || null, p_payload: payload, p_technician: data.technician || null };
+      return financialRpc("save_project_item_atomic", { ...args, p_request_key: itemOperation.getKey(args) });
     },
     onSuccess: () => {
+      itemOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
       toast({
         title: editingItem ? "تم تحديث العنصر" : "تم إضافة العنصر",
@@ -575,10 +569,10 @@ const ProjectItems = () => {
           : "تم إضافة العنصر بنجاح",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء حفظ العنصر",
+        description: error.message || "حدث خطأ أثناء حفظ العنصر؛ بياناتك ما زالت في النموذج",
         variant: "destructive",
       });
     },
@@ -586,43 +580,7 @@ const ProjectItems = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (itemId: string) => {
-      const { error } = await supabase
-        .from("project_items")
-        .delete()
-        .eq("id", itemId);
-      if (error) throw error;
-
-      // Check remaining items and update project progress
-      const { data: remainingItems, error: itemsError } = await supabase
-        .from("project_items")
-        .select("progress, quantity")
-        .eq("project_id", projectId!);
-      
-      if (itemsError) throw itemsError;
-
-      let projectProgress = 0;
-      if (remainingItems && remainingItems.length > 0) {
-        const totalQuantity = remainingItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-        if (totalQuantity > 0) {
-          const weightedProgress = remainingItems.reduce((sum, item) => {
-            const weight = Number(item.quantity || 0) / totalQuantity;
-            return sum + (Number(item.progress || 0) * weight);
-          }, 0);
-          projectProgress = Math.round(weightedProgress);
-        } else {
-          projectProgress = Math.round(
-            remainingItems.reduce((sum, item) => sum + Number(item.progress || 0), 0) / remainingItems.length
-          );
-        }
-      }
-      // If no items remain, projectProgress stays 0
-
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ progress: projectProgress })
-        .eq("id", projectId!);
-      
-      if (updateError) throw updateError;
+      return financialRpc("delete_project_items_atomic", { p_project_id: projectId, p_item_ids: [itemId] });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
@@ -747,42 +705,7 @@ const ProjectItems = () => {
   // Bulk delete items mutation
   const bulkDeleteItemsMutation = useMutation({
     mutationFn: async (itemIds: string[]) => {
-      // First delete technician assignments
-      const { error: techError } = await supabase
-        .from("project_item_technicians")
-        .delete()
-        .in("project_item_id", itemIds);
-      if (techError) throw techError;
-
-      // Then delete items
-      const { error } = await supabase
-        .from("project_items")
-        .delete()
-        .in("id", itemIds);
-      if (error) throw error;
-
-      // Update project progress
-      const { data: remainingItems } = await supabase
-        .from("project_items")
-        .select("progress, quantity")
-        .eq("project_id", projectId!);
-
-      let projectProgress = 0;
-      if (remainingItems && remainingItems.length > 0) {
-        const totalQuantity = remainingItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-        if (totalQuantity > 0) {
-          const weightedProgress = remainingItems.reduce((sum, item) => {
-            const weight = Number(item.quantity || 0) / totalQuantity;
-            return sum + (Number(item.progress || 0) * weight);
-          }, 0);
-          projectProgress = Math.round(weightedProgress);
-        }
-      }
-
-      await supabase
-        .from("projects")
-        .update({ progress: projectProgress })
-        .eq("id", projectId!);
+      return financialRpc("delete_project_items_atomic", { p_project_id: projectId, p_item_ids: itemIds });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
@@ -1578,6 +1501,10 @@ const ProjectItems = () => {
                       toast({ title: "تم", description: `تم نسخ ${newTechnicians.length} فني بنجاح` });
                       refetchItemTechnicians();
                       setCopyFromItemId("");
+                      queryClient.invalidateQueries({ queryKey: ["technician-assignments"] });
+                      queryClient.invalidateQueries({ queryKey: ["all-technicians-rates"] });
+                      queryClient.invalidateQueries({ queryKey: ["technicians"] });
+                      queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
                     }
                   }}
                 >
@@ -1707,6 +1634,10 @@ const ProjectItems = () => {
                         toast({ title: "تم", description: "تم إضافة الفني بنجاح" });
                         refetchItemTechnicians();
                         setItemTechnicians([]);
+                        queryClient.invalidateQueries({ queryKey: ["technician-assignments"] });
+                        queryClient.invalidateQueries({ queryKey: ["all-technicians-rates"] });
+                        queryClient.invalidateQueries({ queryKey: ["technicians"] });
+                        queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
                       }
                     }}
                   >
@@ -1754,6 +1685,10 @@ const ProjectItems = () => {
                             } else {
                               toast({ title: "تم", description: "تم حذف الفني بنجاح" });
                               refetchItemTechnicians();
+                              queryClient.invalidateQueries({ queryKey: ["technician-assignments"] });
+                              queryClient.invalidateQueries({ queryKey: ["all-technicians-rates"] });
+                              queryClient.invalidateQueries({ queryKey: ["technicians"] });
+                              queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
                             }
                           }}
                         >

@@ -510,7 +510,14 @@ async function runProjectTreasuryDomainTests() {
   assert(true, 'TRD-DB-13: Contracting Project + Contracting CASH account -> Root domain contracting -> ACCEPT');
 
   // TRD-DB-14: Contracting Project + Contracting BANK account -> ACCEPT
-  const liveBankId = 'ff7416dd-5295-4e55-bd52-2196eef9ec37';
+  const { data: contractingBankTreasury } = await supabase
+    .from('treasuries')
+    .select('id')
+    .eq('treasury_type', 'bank')
+    .eq('parent_id', liveContractingId)
+    .limit(1);
+
+  const liveBankId = contractingBankTreasury?.[0]?.id || 'df15e8f6-2856-4c4f-a9cb-b203a3d5f134';
   const { data: bankRootDomain, error: brError } = await supabase
     .rpc('get_treasury_root_domain', { t_id: liveBankId });
 

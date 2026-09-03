@@ -42,13 +42,21 @@ export function calculateProjectFinancials(data) {
   const standaloneRentalsTotal = (data.rentals || []).reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
   const equipmentRentals = rentalPurchasesTotal > 0 ? rentalPurchasesTotal : standaloneRentalsTotal;
 
-  // Technician Earned Work (Accrual): technician_progress_records > 0 ? records : labor purchases
+  // Technician Earned Work (Accrual): projectItemTechnicians > 0 ? assignments : labor purchases / progress
+  const assignedTechCost = (data.projectItemTechnicians || []).reduce(
+    (sum, t) => {
+      const rawC = Number(t.total_cost);
+      return sum + (rawC > 0 ? rawC : (Number(t.rate || 0) * Number(t.quantity || 1)));
+    },
+    0
+  );
   const techProgressEarned = (data.techProgressRecords || []).reduce(
     (sum, r) => sum + Number(r.earned_amount || 0),
     0
   );
   const laborPurchasesTotal = laborPurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
-  const technicianEarned = techProgressEarned > 0 ? techProgressEarned : laborPurchasesTotal;
+  const techEffectiveLabor = techProgressEarned > 0 ? techProgressEarned : laborPurchasesTotal;
+  const technicianEarned = assignedTechCost + techEffectiveLabor;
 
   // Direct Project Expenses: expenses strictly belonging to this project (project_id IS NOT NULL)
   const directProjectExpenses = (data.expenses || [])
@@ -74,9 +82,13 @@ export function calculateProjectFinancials(data) {
   const laborPurchaseIds = new Set(laborPurchasesRows.map(p => p.id));
 
   const allPurchasePayments = data.purchasePayments || [];
-  const supplierPaid = allPurchasePayments
+  const directSupplierCashPaid = allPurchasePayments
     .filter(pp => supplierPurchaseIds.has(pp.purchase_id || ""))
     .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
+  const supplierAllocations = (data.supplierPaymentAllocations || [])
+    .filter(a => supplierPurchaseIds.has(a.purchase_id))
+    .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+  const supplierPaid = directSupplierCashPaid + supplierAllocations;
 
   const totalSupplierPurchases = materials + supplierServices + rentalPurchasesTotal;
   const supplierRemaining = totalSupplierPurchases - supplierPaid;
@@ -90,7 +102,7 @@ export function calculateProjectFinancials(data) {
 
   // Pure Cash Flow: actual Cash In is strictly actual cash payments (credit applied does not enter cash flow)
   const actualCashIn = cashReceived;
-  const actualCashOut = supplierPaid + technicianPaid + paidExpenses;
+  const actualCashOut = directSupplierCashPaid + technicianPaid + paidExpenses;
   const netCashFlow = actualCashIn - actualCashOut;
 
   const cashFlow = {
@@ -99,6 +111,8 @@ export function calculateProjectFinancials(data) {
     netCashFlow,
     supplierPaid,
     supplierRemaining,
+    supplierCashPaid: directSupplierCashPaid,
+    supplierAllocated: supplierAllocations,
     technicianPaid,
     technicianRemaining,
     paidExpenses,
@@ -339,7 +353,10 @@ export function calculateContractingItemProfitability(input) {
   const approvedCompletionRatio = approvedProgressPercent / 100;
   const earnedCommercialValueToDate = commercialValue * approvedCompletionRatio;
 
-  // 3. Labor Incurred: SUM(technician_progress_records.earned_amount WHERE project_item_id = item.id)
+  // 3. Labor Incurred: SUM(project_item_technicians.total_cost WHERE project_item_id = item.id)
+  const itemTechs = (input.projectItemTechnicians || []).filter(
+    t => t.project_item_id === itemId
+  );
   const itemTechRecords = (input.techProgressRecords || []).filter(
     r => r.project_item_id === itemId
   );
@@ -347,13 +364,22 @@ export function calculateContractingItemProfitability(input) {
   const techMap = new Map();
   let laborIncurred = 0;
 
-  for (const r of itemTechRecords) {
-    const rawEarned = Number(r.earned_amount || 0);
-    const earned = rawEarned > 0 ? rawEarned : Number(r.quantity_completed || 0) * Number(r.rate || 0);
-    laborIncurred += earned;
-
-    const techId = r.technician_id || "unknown";
-    techMap.set(techId, (techMap.get(techId) || 0) + earned);
+  if (itemTechs.length > 0) {
+    for (const t of itemTechs) {
+      const rawC = Number(t.total_cost);
+      const earned = rawC > 0 ? rawC : (Number(t.rate || 0) * Number(t.quantity || 1));
+      laborIncurred += earned;
+      const techId = t.technician_id || "unknown";
+      techMap.set(techId, (techMap.get(techId) || 0) + earned);
+    }
+  } else {
+    for (const r of itemTechRecords) {
+      const rawEarned = Number(r.earned_amount || 0);
+      const earned = rawEarned > 0 ? rawEarned : Number(r.quantity_completed || 0) * Number(r.rate || 0);
+      laborIncurred += earned;
+      const techId = r.technician_id || "unknown";
+      techMap.set(techId, (techMap.get(techId) || 0) + earned);
+    }
   }
 
   const technicianBreakdown = [];

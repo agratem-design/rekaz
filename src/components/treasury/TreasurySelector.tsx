@@ -144,16 +144,27 @@ export const TreasurySelector: React.FC<TreasurySelectorProps> = ({
         )
       : [];
 
-    const allowedIds = new Set<string>([
-      ...(rootRecord ? [rootRecord.id] : []),
-      ...descendantList.map((d) => d.id),
-    ]);
+    const eligibleList = rootRecord
+      ? (descendantList.length > 0 ? [...descendantList, rootRecord] : [rootRecord])
+      : [];
+
+    const allowedIds = new Set<string>(eligibleList.map((d) => d.id));
+
+    let candidate = "";
+    if (projectDefaultTreasuryId && allowedIds.has(projectDefaultTreasuryId)) {
+      candidate = projectDefaultTreasuryId;
+    } else if (descendantList.length > 0) {
+      candidate = descendantList[0].id;
+    } else if (rootRecord) {
+      candidate = rootRecord.id;
+    }
 
     return {
       authoritativeRoot: rootRecord,
       descendants: descendantList,
+      eligibleOptions: eligibleList,
       allowedTreasuryIds: allowedIds,
-      defaultCandidateId: defaultId || (rootRecord ? rootRecord.id : ""),
+      defaultCandidateId: candidate,
     };
   }, [allTreasuries, companySettings, projectType, projectDefaultTreasuryId]);
 
@@ -210,70 +221,82 @@ export const TreasurySelector: React.FC<TreasurySelectorProps> = ({
     );
   }
 
+  const branchLabel = label.includes("مودع") || label.includes("استلام") || label.includes("قبض")
+    ? "الحساب / الفرع المستلم *"
+    : "الحساب / الفرع المخصوم منه *";
+
   return (
-    <div className="space-y-2 p-3 bg-muted/40 rounded-lg border border-border/80 text-right" dir="rtl">
-      <Label className="text-sm font-semibold flex items-center justify-between">
-        <span className="flex items-center gap-1.5">
-          <Wallet className="h-4 w-4 text-primary" />
-          <span>{label}</span>
-          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal text-muted-foreground">
-            {projectType === "contracting" ? "خزائن المقاولات" : "خزائن التشطيبات"}
-          </Badge>
-          <span className="text-destructive">*</span>
-        </span>
-        {selectedTreasury && (
-          <span className="text-xs text-muted-foreground font-normal">
-            الرصيد المتاح: <span className="font-bold text-foreground">{formatCurrencyLYD(selectedTreasury.balance || 0)}</span>
-          </span>
-        )}
-      </Label>
+    <div className="space-y-3 p-3 bg-muted/40 rounded-xl border border-border/80 text-right" dir="rtl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* 1. القسم / الخزينة الرئيسية */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold flex items-center gap-1.5">
+            <Landmark className="h-3.5 w-3.5 text-primary" />
+            <span>القسم / الخزينة الرئيسية *</span>
+          </Label>
+          <Select
+            value={authoritativeRoot?.id || ""}
+            disabled={true}
+            dir="rtl"
+          >
+            <SelectTrigger className="h-10 rounded-xl bg-background border-border/60" dir="rtl">
+              <SelectValue placeholder="اختر الخزينة الرئيسية..." />
+            </SelectTrigger>
+            <SelectContent dir="rtl">
+              {authoritativeRoot && (
+                <SelectItem value={authoritativeRoot.id} className="font-semibold text-primary">
+                  {authoritativeRoot.name}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger className="w-full text-right" dir="rtl">
-          <SelectValue placeholder="اختر الخزينة أو الفرع..." />
-        </SelectTrigger>
-        <SelectContent dir="rtl" className="max-h-64">
-          {authoritativeRoot && (
-            <SelectGroup>
-              {/* Authoritative Main Root Treasury Item */}
-              <SelectItem value={authoritativeRoot.id} className="font-semibold text-primary py-2 pr-4">
-                <span className="flex items-center gap-2">
-                  {authoritativeRoot.treasury_type === "bank" ? (
-                    <Landmark className="h-4 w-4 text-primary" />
-                  ) : (
-                    <Wallet className="h-4 w-4 text-primary" />
-                  )}
-                  <span>{authoritativeRoot.name} (رئيسية)</span>
-                  <span className="text-xs text-muted-foreground mr-auto font-normal">
-                    • {formatCurrencyLYD(authoritativeRoot.balance || 0)}
-                  </span>
-                </span>
-              </SelectItem>
-
-              {/* Sub-branches and bank accounts strictly descending from this authoritative root */}
-              {descendants.map((desc) => (
-                <SelectItem key={desc.id} value={desc.id} className="pr-8 text-sm">
+        {/* 2. الحساب / الفرع المستلم أو المخصوم منه */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold flex items-center gap-1.5">
+              <Wallet className="h-3.5 w-3.5 text-primary" />
+              <span>{branchLabel}</span>
+            </Label>
+            {selectedTreasury && (
+              <span className="text-[11px] text-muted-foreground font-normal">
+                المتاح: <span className="font-bold text-foreground font-mono">{formatCurrencyLYD(selectedTreasury.balance || 0)}</span>
+              </span>
+            )}
+          </div>
+          <Select
+            value={value}
+            onValueChange={onValueChange}
+            disabled={disabled || !authoritativeRoot || eligibleOptions.length === 0}
+            dir="rtl"
+          >
+            <SelectTrigger className="h-10 rounded-xl bg-background border-border/60" dir="rtl">
+              <SelectValue placeholder={authoritativeRoot ? "اختر الحساب أو الفرع..." : "حدد الخزينة الرئيسية أولاً"} />
+            </SelectTrigger>
+            <SelectContent dir="rtl" className="max-h-64">
+              {eligibleOptions.map((item) => (
+                <SelectItem key={item.id} value={item.id} className="py-2 text-xs">
                   <span className="flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs">└─</span>
-                    {desc.treasury_type === "bank" ? (
+                    {item.treasury_type === "bank" ? (
                       <Landmark className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                     ) : (
                       <Wallet className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     )}
-                    <span>{desc.name}</span>
-                    <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded font-normal">
-                      {desc.treasury_type === "bank" ? "مصرفي" : "فرع"}
+                    <span>{item.name}</span>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-normal">
+                      {item.treasury_type === "bank" ? "مصرفي" : (item.parent_id ? "فرع" : "رئيسية")}
                     </span>
-                    <span className="text-xs text-muted-foreground mr-auto font-normal">
-                      • {formatCurrencyLYD(desc.balance || 0)}
+                    <span className="text-xs text-muted-foreground mr-auto font-normal font-mono">
+                      • {formatCurrencyLYD(item.balance || 0)}
                     </span>
                   </span>
                 </SelectItem>
               ))}
-            </SelectGroup>
-          )}
-        </SelectContent>
-      </Select>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {/* Warning if authoritative Main Treasury cannot be resolved from settings */}
       {!defaultCandidateId && (

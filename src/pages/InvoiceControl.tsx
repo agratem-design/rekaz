@@ -103,12 +103,30 @@ export default function InvoiceControl() {
   const { data: purchases = [], isLoading } = useQuery({
     queryKey: ["invoice-control-purchases"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("purchases")
-        .select("*, suppliers(id, name), projects(id, name), treasuries(id, name)")
-        .order("date", { ascending: false });
-      if (error) throw error;
-      return data;
+      const [purchasesRes, paymentsRes, allocationsRes] = await Promise.all([
+        supabase
+          .from("purchases")
+          .select("*, suppliers(id, name), projects(id, name), treasuries(id, name)")
+          .order("date", { ascending: false }),
+        supabase.from("purchase_payments").select("purchase_id, amount"),
+        supabase.from("supplier_payment_allocations").select("purchase_id, amount"),
+      ]);
+      if (purchasesRes.error) throw purchasesRes.error;
+      if (paymentsRes.error) throw paymentsRes.error;
+      if (allocationsRes.error) throw allocationsRes.error;
+
+      const paidMap = new Map<string, number>();
+      paymentsRes.data?.forEach((p) => {
+        if (p.purchase_id) paidMap.set(p.purchase_id, (paidMap.get(p.purchase_id) || 0) + Number(p.amount || 0));
+      });
+      allocationsRes.data?.forEach((a) => {
+        if (a.purchase_id) paidMap.set(a.purchase_id, (paidMap.get(a.purchase_id) || 0) + Number(a.amount || 0));
+      });
+
+      return (purchasesRes.data || []).map((p) => ({
+        ...p,
+        paid_amount: paidMap.get(p.id) || 0,
+      }));
     },
   });
 
@@ -219,7 +237,6 @@ export default function InvoiceControl() {
       project_id: form.project_id && form.project_id !== "none" ? form.project_id : null,
       treasury_id: form.treasury_id && form.treasury_id !== "none" ? form.treasury_id : null,
       total_amount: form.total_amount,
-      paid_amount: form.paid_amount,
       commission: form.commission,
       invoice_number: form.invoice_number || null,
       date: form.date,
@@ -495,18 +512,9 @@ export default function InvoiceControl() {
               <Input type="number" min={0} step="0.01" value={form.commission} onChange={(e) => setForm(f => ({ ...f, commission: Number(e.target.value) }))} />
             </div>
             <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label>المبلغ المدفوع (د.ل)</Label>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="h-auto p-0 text-xs text-primary" 
-                  onClick={() => setForm(f => ({ ...f, paid_amount: f.total_amount, status: "paid" }))}
-                >
-                  سدد بالكامل
-                </Button>
-              </div>
-              <Input type="number" min={0} step="0.01" value={form.paid_amount} onChange={(e) => setForm(f => ({ ...f, paid_amount: Number(e.target.value) }))} />
+              <Label>المبلغ المسدد (من واقع السندات والتوزيعات)</Label>
+              <Input type="number" value={form.paid_amount} disabled className="bg-muted text-muted-foreground font-mono" />
+              <p className="text-[10px] text-muted-foreground">السداد المالي يتم عبر سندات الصرف أو تسوية المقدمات المعتمدة.</p>
             </div>
             <div className="space-y-1.5">
               <Label>حالة الدفع</Label>

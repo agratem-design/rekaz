@@ -19,6 +19,7 @@ const testSuites = [
   { name: 'Project Workspace IA Invariants', cmd: 'node', args: ['scripts/navigation-tests/project-workspace-ia-invariants.mjs'] },
   { name: 'Project Treasury Domains & Lifecycle', cmd: 'node', args: ['scripts/financial-tests/project-treasury-domains-invariants.mjs'] },
   { name: 'Supplier & Technician Settlement Invariants', cmd: 'node', args: ['scripts/financial-tests/supplier-technician-project-settlement-invariants.mjs'] },
+  { name: 'Party Advance Invariants', cmd: 'node', args: ['scripts/financial-tests/party-advance-invariants.mjs'] },
   { name: 'Canonical Navigation Invariants', cmd: 'node', args: ['scripts/navigation-tests/canonical-navigation-invariants.mjs'] },
   { name: 'Sidebar UI Invariants', cmd: 'node', args: ['scripts/navigation-tests/sidebar-ui-invariants.mjs'] },
 ];
@@ -198,4 +199,3 @@ main().catch((err) => {
   console.error('Fatal error in master test runner:', err);
   process.exit(1);
 });
-

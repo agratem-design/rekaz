@@ -88,17 +88,13 @@ export function TechnicianDuesDialog({
     },
   });
 
-  // Fetch progress records for this item
   const { data: progressRecords = [] } = useQuery({
     queryKey: ["progress-records-dues", item?.id],
     queryFn: async () => {
       if (!item?.id) return [];
       const { data, error } = await supabase
         .from("technician_progress_records")
-        .select(`
-          *,
-          technicians (id, name)
-        `)
+        .select(`*, technicians (id, name)`)
         .eq("project_item_id", item.id)
         .order("date", { ascending: false });
       if (error) throw error;
@@ -107,7 +103,6 @@ export function TechnicianDuesDialog({
     enabled: !!item?.id,
   });
 
-  // Fetch engineer for this item
   const { data: engineer } = useQuery({
     queryKey: ["item-engineer", item?.id],
     queryFn: async () => {
@@ -126,13 +121,11 @@ export function TechnicianDuesDialog({
   // Calculate technician summaries with dues
   const technicianSummaries = item?.project_item_technicians?.map((tech) => {
     const completed = progressRecords
-      .filter((r) => r.technician_id === tech.technician_id)
-      .reduce((sum, r) => sum + Number(r.quantity_completed), 0);
+      .filter((record) => record.technician_id === tech.technician_id)
+      .reduce((sum, record) => sum + Number(record.quantity_completed || 0), 0);
     const assigned = tech.quantity || 0;
-    // Calculate percent based on assigned quantity (what the technician should complete)
-    // Cap at 100% to avoid showing more than complete
     const percent = assigned > 0 ? Math.min(100, Math.round((completed / assigned) * 100)) : 0;
-    const dues = completed * Number(tech.rate);
+    const dues = completed * Number(tech.rate || 0);
     return {
       ...tech,
       completed,
@@ -154,7 +147,7 @@ export function TechnicianDuesDialog({
       : technicianSummaries;
 
     const techRecords = technicianId
-      ? progressRecords.filter((r) => r.technician_id === technicianId)
+      ? progressRecords.filter((record) => record.technician_id === technicianId)
       : progressRecords;
 
     const techTotalDues = techToPrint.reduce((sum, t) => sum + t.dues, 0);
@@ -249,33 +242,14 @@ export function TechnicianDuesDialog({
             </table>
           </div>
 
-          <!-- Progress Records -->
           ${techRecords.length > 0 && pl.show_records ? `
           <div class="print-section">
             <h3 class="print-section-title">${pl.records_section}</h3>
             <table class="print-table">
-              <thead>
-                <tr>
-                  <th>${pl.col_date}</th>
-                  <th>${pl.col_technician}</th>
-                  <th>${pl.col_completed}</th>
-                  <th>${pl.col_notes}</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${techRecords.map((record) => `
-                  <tr>
-                    <td style="text-align: center">
-                      ${format(new Date(record.date), "yyyy/MM/dd", { locale: ar })}
-                    </td>
-                    <td style="text-align: center">${record.technicians?.name || "-"}</td>
-                    <td style="text-align: center">
-                      ${record.quantity_completed.toLocaleString()} ${measurementUnits[item?.measurement_type || "linear"]}
-                    </td>
-                    <td style="text-align: center">${record.notes || "-"}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
+              <thead><tr><th>${pl.col_date}</th><th>${pl.col_technician}</th><th>${pl.col_completed}</th><th>${pl.col_notes}</th></tr></thead>
+              <tbody>${techRecords.map((record) => `
+                <tr><td style="text-align: center">${format(new Date(record.date), "yyyy/MM/dd", { locale: ar })}</td><td style="text-align: center">${record.technicians?.name || "-"}</td><td style="text-align: center">${Number(record.quantity_completed || 0).toLocaleString()} ${measurementUnits[item?.measurement_type || "linear"]}</td><td style="text-align: center">${record.notes || "-"}</td></tr>
+              `).join("")}</tbody>
             </table>
           </div>
           ` : ""}

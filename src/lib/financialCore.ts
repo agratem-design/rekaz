@@ -37,6 +37,8 @@ export interface CashFlowSummary {
   netCashFlow: number;
   supplierPaid: number;
   supplierRemaining: number;
+  supplierCashPaid?: number;
+  supplierAllocated?: number;
   technicianPaid: number;
   technicianRemaining: number;
   paidExpenses: number;
@@ -97,6 +99,19 @@ export interface CreditApplicationRecord {
   notes?: string | null;
 }
 
+export interface CreditLedgerEntry {
+  client_id?: string | null;
+  source_payment_id?: string | null;
+  target_project_id?: string | null;
+  entry_type: string;
+  amount: number;
+}
+
+export function availableClientCredit(entries: CreditLedgerEntry[]): number {
+  return entries.reduce((sum, entry) => sum +
+    (['CREDIT_CREATED', 'CREDIT_APPLICATION_REVERSED'].includes(entry.entry_type) ? 1 : -1) * Number(entry.amount || 0), 0);
+}
+
 export interface RawFinancialData {
   project: {
     id: string;
@@ -107,6 +122,14 @@ export interface RawFinancialData {
   };
   contracts?: Array<{ amount?: number | null; status?: string | null; project_id?: string | null }>;
   projectItems?: Array<{ total_price?: number | null; progress?: number | null }>;
+  projectItemTechnicians?: Array<{
+    id?: string | null;
+    project_item_id?: string | null;
+    rate?: number | null;
+    quantity?: number | null;
+    total_cost?: number | null;
+    technician_id?: string | null;
+  }>;
   purchases?: Array<{
     id: string;
     total_amount?: number | null;
@@ -122,6 +145,8 @@ export interface RawFinancialData {
     purchase_id?: string | null;
     amount?: number | null;
   }>;
+  supplierPaymentAllocations?: Array<{ purchase_id: string; amount: number }>;
+  creditLedger?: CreditLedgerEntry[];
   techProgressRecords?: Array<{
     id: string;
     earned_amount?: number | null;
@@ -134,6 +159,8 @@ export interface RawFinancialData {
     id: string;
     amount?: number | null;
     project_id?: string | null;
+    type?: string | null;
+    technician_id?: string | null;
   }>;
   clientPayments?: Array<{
     id: string;
@@ -150,6 +177,7 @@ export interface RawFinancialData {
 }
 
 export interface RawClientData {
+  creditLedger?: CreditLedgerEntry[];
   client: { id: string; name?: string | null };
   projects: Array<{
     id: string;
@@ -206,11 +234,14 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
 
   // 1. Client Receipts (Authoritative: client_payments where project_id = projectId)
   const cashReceived = (data.clientPayments || [])
-    .filter(cp => cp.project_id === projectId || (!cp.project_id && (data.clientPayments?.length === 1)))
+    .filter(cp => cp.project_id === projectId)
     .reduce((sum, cp) => sum + Number(cp.amount || 0), 0);
 
   // Credit Applied: client_credit_applications where target_project_id = projectId and status !== 'reversed'
-  const creditApplied = (data.creditApplications || [])
+  const creditApplied = data.creditLedger !== undefined
+    ? data.creditLedger.filter(e => e.target_project_id === projectId).reduce((sum, e) => sum +
+      (e.entry_type === 'CREDIT_APPLIED' ? Number(e.amount) : e.entry_type === 'CREDIT_APPLICATION_REVERSED' ? -Number(e.amount) : 0), 0)
+    : (data.creditApplications || [])
     .filter(ca => ca.target_project_id === projectId && ca.status !== "reversed")
     .reduce((sum, ca) => sum + Number(ca.amount || 0), 0);
 
@@ -221,7 +252,7 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
     p => p.purchase_type === "rental" || Boolean(p.rental_id)
   );
   const laborPurchasesRows = allPurchases.filter(
-    p => (p.purchase_type === "labor" || Boolean(p.technician_id)) && !p.rental_id
+    p => (p.purchase_type === "labor" || Boolean(p.technician_id)) && !p.rental_id && p.purchase_type !== "rental"
   );
   const servicePurchasesRows = allPurchases.filter(
     p => p.purchase_type === "service" && !p.rental_id && !p.technician_id
@@ -238,17 +269,22 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
   const standaloneRentalsTotal = (data.rentals || []).reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
   const equipmentRentals = rentalPurchasesTotal > 0 ? rentalPurchasesTotal : standaloneRentalsTotal;
 
-  // Technician Earned Work (Accrual): technician_progress_records > 0 ? records : labor purchases
+  // Technician Work (Accrual): projectItemTechnicians (contracting) AND/OR labor purchases (finishing)
+  const itemTechAssigned = (data.projectItemTechnicians || []).reduce(
+    (sum, t) => sum + (Number(t.total_cost) > 0 ? Number(t.total_cost) : (Number(t.rate || 0) * Number(t.quantity ?? 1))),
+    0
+  );
   const techProgressEarned = (data.techProgressRecords || []).reduce(
     (sum, r) => sum + Number(r.earned_amount || 0),
     0
   );
   const laborPurchasesTotal = laborPurchasesRows.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
-  const technicianEarned = techProgressEarned > 0 ? techProgressEarned : laborPurchasesTotal;
+  const techEffectiveLabor = techProgressEarned > 0 ? techProgressEarned : laborPurchasesTotal;
+  const technicianEarned = itemTechAssigned + techEffectiveLabor;
 
-  // Direct Project Expenses: expenses strictly belonging to this project (project_id IS NOT NULL)
+  // Direct Project Expenses: project expenses strictly belonging to this project (excluding technician settlements)
   const directProjectExpenses = (data.expenses || [])
-    .filter(e => e.project_id === projectId || (Boolean(e.project_id) && !projectId))
+    .filter(e => (e.project_id === projectId || (Boolean(e.project_id) && !projectId)) && !(e.type === "labor" && Boolean(e.technician_id)))
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
   const otherEligibleDirectCosts = 0;
@@ -270,23 +306,35 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
   const laborPurchaseIds = new Set(laborPurchasesRows.map(p => p.id));
 
   const allPurchasePayments = data.purchasePayments || [];
-  const supplierPaid = allPurchasePayments
+  const directSupplierCashPaid = allPurchasePayments
     .filter(pp => supplierPurchaseIds.has(pp.purchase_id || ""))
     .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
+  const supplierAllocations = (data.supplierPaymentAllocations || [])
+    .filter(a => supplierPurchaseIds.has(a.purchase_id))
+    .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+  const supplierPaid = directSupplierCashPaid + supplierAllocations;
 
   const totalSupplierPurchases = materials + supplierServices + rentalPurchasesTotal;
   const supplierRemaining = totalSupplierPurchases - supplierPaid;
 
-  const technicianPaid = allPurchasePayments
+  const techExpensesPaid = (data.expenses || [])
+    .filter(e => (e.project_id === projectId || (Boolean(e.project_id) && !projectId)) && e.type === "labor" && Boolean(e.technician_id))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  const techPurchasePaymentsPaid = allPurchasePayments
     .filter(pp => laborPurchaseIds.has(pp.purchase_id || ""))
     .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
 
+  const technicianPaid = techExpensesPaid + techPurchasePaymentsPaid;
   const technicianRemaining = technicianEarned - technicianPaid;
-  const paidExpenses = directProjectExpenses;
+  const paidExpenses = (data.expenses || [])
+    .filter(e => e.project_id === projectId || (Boolean(e.project_id) && !projectId))
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
   // Pure Cash Flow: actual Cash In is strictly actual cash payments (credit applied does not enter cash flow)
+  // Actual Cash Out is strictly cash disbursements (allocations of advance payments do not draw treasury cash again)
   const actualCashIn = cashReceived;
-  const actualCashOut = supplierPaid + technicianPaid + paidExpenses;
+  const actualCashOut = directSupplierCashPaid + techExpensesPaid + techPurchasePaymentsPaid + directProjectExpenses;
   const netCashFlow = actualCashIn - actualCashOut;
 
   const cashFlow: CashFlowSummary = {
@@ -295,6 +343,8 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
     netCashFlow,
     supplierPaid,
     supplierRemaining,
+    supplierCashPaid: directSupplierCashPaid,
+    supplierAllocated: supplierAllocations,
     technicianPaid,
     technicianRemaining,
     paidExpenses,
@@ -346,10 +396,14 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
   }
 
   // 5. Settlement & Remaining (FC-02 Canonical Model)
-  const cashApplicable = Math.min(cashReceived, clientObligation);
+  const paymentIds = new Set((data.clientPayments || []).filter(p => p.project_id === projectId).map(p => p.id));
+  const recordedExcess = data.creditLedger?.filter(e => paymentIds.has(e.source_payment_id || '')).reduce((sum, e) => sum +
+    (e.entry_type === 'CREDIT_CREATED' ? Number(e.amount) : e.entry_type === 'CREDIT_CREATION_REVERSED' ? -Number(e.amount) : 0), 0);
+  // Once cash has become client credit it cannot settle its original project again.
+  const cashApplicable = Math.min(Math.max(0, cashReceived - (recordedExcess || 0)), clientObligation);
   const totalSettled = cashApplicable + creditApplied;
   const clientRemaining = Math.max(0, clientObligation - totalSettled);
-  const excessCashGenerated = Math.max(0, cashReceived - clientObligation);
+  const excessCashGenerated = recordedExcess ?? Math.max(0, cashReceived - clientObligation);
 
   return {
     projectId,
@@ -405,6 +459,7 @@ export function calculateClientFinancials(clientData: RawClientData): ClientFina
       expenses: projExpenses,
       clientPayments: projClientPayments,
       creditApplications: projCreditApps,
+      creditLedger: clientData.creditLedger,
     });
   });
 
@@ -417,17 +472,20 @@ export function calculateClientFinancials(clientData: RawClientData): ClientFina
   const totalCashReceived = directClientCash + totalProjectCashReceived;
 
   const totalOverpaymentCredit = projectSummaries.reduce((sum, ps) => sum + ps.excessCashGenerated, 0);
-  const totalCreditCreated = directClientCash + totalOverpaymentCredit;
+  const clientLedger = clientData.creditLedger?.filter(e => !e.client_id || e.client_id === clientId);
+  const totalCreditCreated = clientLedger ? clientLedger.reduce((sum, e) => sum +
+    (e.entry_type === 'CREDIT_CREATED' ? Number(e.amount) : e.entry_type === 'CREDIT_CREATION_REVERSED' ? -Number(e.amount) : 0), 0) : directClientCash + totalOverpaymentCredit;
 
-  const totalCreditApplied = (clientData.creditApplications || [])
+  const totalCreditApplied = clientLedger ? clientLedger.reduce((sum, e) => sum +
+    (e.entry_type === 'CREDIT_APPLIED' ? Number(e.amount) : e.entry_type === 'CREDIT_APPLICATION_REVERSED' ? -Number(e.amount) : 0), 0) : (clientData.creditApplications || [])
     .filter(ca => ca.client_id === clientId && ca.status !== "reversed")
     .reduce((sum, ca) => sum + Number(ca.amount || 0), 0);
 
-  const clientAvailableCredit = Math.max(0, totalCreditCreated - totalCreditApplied);
+  const clientAvailableCredit = clientLedger ? availableClientCredit(clientLedger) : Math.max(0, totalCreditCreated - totalCreditApplied);
 
   const totalObligations = projectSummaries.reduce((sum, ps) => sum + ps.clientObligation, 0);
   const totalSettled = projectSummaries.reduce((sum, ps) => sum + ps.totalSettled, 0);
-  const netClientRemaining = Math.max(0, totalObligations - totalSettled);
+  const netClientRemaining = projectSummaries.reduce((sum, project) => sum + project.clientRemaining, 0);
 
   return {
     clientId,
@@ -541,11 +599,20 @@ export interface ContractingItemProfitabilityInput {
     progress?: number | null; // Approved progress percentage (0 - 100)
   };
   techProgressRecords?: Array<{
-    project_item_id: string;
-    technician_id?: string | null;
-    earned_amount?: number | null;
+    id: string;
+    project_item_id?: string | null;
     quantity_completed?: number | null;
     rate?: number | null;
+    earned_amount?: number | null;
+    technician_id?: string | null;
+  }>;
+  projectItemTechnicians?: Array<{
+    id?: string;
+    project_item_id?: string | null;
+    rate?: number | null;
+    quantity?: number | null;
+    total_cost?: number | null;
+    technician_id?: string | null;
   }>;
   purchases?: Array<{
     id: string;
@@ -589,7 +656,7 @@ export interface ContractingItemProfitabilityResult {
   // 5. Unearned Contract Value (Commercial balance remaining)
   unearnedContractValue: number;
 
-  // 6. Labor Breakdown by Worker (Cost basis: Earned Amount only)
+  // 6. Labor Breakdown by Worker (Cost basis: Work value)
   technicianBreakdown: Array<{
     technicianId: string;
     earnedAmount: number;
@@ -614,7 +681,10 @@ export function calculateContractingItemProfitability(
   const approvedCompletionRatio = approvedProgressPercent / 100;
   const earnedCommercialValueToDate = commercialValue * approvedCompletionRatio;
 
-  // 3. Labor Incurred: SUM(technician_progress_records.earned_amount WHERE project_item_id = item.id)
+  // 3. Labor Incurred: project_item_technicians.total_cost (or fallback to techProgressRecords)
+  const itemAssignedTechs = (input.projectItemTechnicians || []).filter(
+    t => t.project_item_id === itemId
+  );
   const itemTechRecords = (input.techProgressRecords || []).filter(
     r => r.project_item_id === itemId
   );
@@ -622,13 +692,21 @@ export function calculateContractingItemProfitability(
   const techMap = new Map<string, number>();
   let laborIncurred = 0;
 
-  for (const r of itemTechRecords) {
-    const rawEarned = Number(r.earned_amount || 0);
-    const earned = rawEarned > 0 ? rawEarned : Number(r.quantity_completed || 0) * Number(r.rate || 0);
-    laborIncurred += earned;
-
-    const techId = r.technician_id || "unknown";
-    techMap.set(techId, (techMap.get(techId) || 0) + earned);
+  if (itemAssignedTechs.length > 0) {
+    for (const t of itemAssignedTechs) {
+      const cost = Number(t.total_cost) > 0 ? Number(t.total_cost) : (Number(t.rate || 0) * Number(t.quantity || 1));
+      laborIncurred += cost;
+      const techId = t.technician_id || "unknown";
+      techMap.set(techId, (techMap.get(techId) || 0) + cost);
+    }
+  } else {
+    for (const r of itemTechRecords) {
+      const rawEarned = Number(r.earned_amount || 0);
+      const earned = rawEarned > 0 ? rawEarned : Number(r.quantity_completed || 0) * Number(r.rate || 0);
+      laborIncurred += earned;
+      const techId = r.technician_id || "unknown";
+      techMap.set(techId, (techMap.get(techId) || 0) + earned);
+    }
   }
 
   const technicianBreakdown: Array<{ technicianId: string; earnedAmount: number }> = [];
@@ -708,4 +786,3 @@ export function calculateContractingItemProfitability(
     technicianBreakdown,
   };
 }
-

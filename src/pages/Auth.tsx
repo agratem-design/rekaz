@@ -12,7 +12,7 @@ import { Building2, Lock, User } from "lucide-react";
 import { z } from "zod";
 
 const loginSchema = z.object({
-  identifier: z.string().min(3, "يرجى إدخال بريد إلكتروني أو اسم مستخدم صالح"),
+  identifier: z.string().trim().min(3, "يرجى إدخال بريد إلكتروني أو اسم مستخدم صالح"),
   password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
 });
 
@@ -42,6 +42,7 @@ const Auth = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrors({});
     
     // Validate inputs
@@ -59,12 +60,14 @@ const Auth = () => {
     setLoading(true);
 
     // Determine if identifier is email or username
-    let email = identifier;
+    try {
+    const normalizedIdentifier = result.data.identifier;
+    let email = normalizedIdentifier;
     
     // If it doesn't contain @, resolve via secure server-side edge function
-    if (!identifier.includes('@')) {
+    if (!normalizedIdentifier.includes('@')) {
       const { data, error: resolveError } = await supabase.functions.invoke("resolve-username", {
-        body: { identifier },
+        body: { identifier: normalizedIdentifier },
       });
 
       if (resolveError || !data?.email) {
@@ -99,10 +102,14 @@ const Auth = () => {
         title: "مرحباً",
         description: "تم تسجيل الدخول بنجاح",
       });
-      navigate("/");
+      navigate("/", { replace: true });
     }
 
-    setLoading(false);
+    } catch {
+      toast({ title: "تعذر الاتصال", description: "لم يكتمل تسجيل الدخول. تحقق من الاتصال ثم أعد المحاولة.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -139,16 +146,22 @@ const Auth = () => {
                 <User className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="identifier"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  disabled={loading}
+                  aria-invalid={!!errors.identifier}
+                  aria-describedby={errors.identifier ? "identifier-error" : undefined}
                   type="text"
                   placeholder="example@email.com أو اسم المستخدم"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="pr-10"
-                  dir="ltr"
+                  dir="auto"
                 />
               </div>
               {errors.identifier && (
-                <p className="text-sm text-destructive">{errors.identifier}</p>
+                <p id="identifier-error" role="alert" className="text-sm text-destructive">{errors.identifier}</p>
               )}
             </div>
 
@@ -158,6 +171,10 @@ const Auth = () => {
                 <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
+                  autoComplete="current-password"
+                  disabled={loading}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? "password-error" : undefined}
                   type="password"
                   placeholder="••••••••"
                   value={password}
@@ -167,7 +184,7 @@ const Auth = () => {
                 />
               </div>
               {errors.password && (
-                <p className="text-sm text-destructive">{errors.password}</p>
+                <p id="password-error" role="alert" className="text-sm text-destructive">{errors.password}</p>
               )}
             </div>
 

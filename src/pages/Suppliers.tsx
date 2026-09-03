@@ -87,24 +87,43 @@ export default function Suppliers() {
     },
   });
 
-  // Fetch purchases to calculate stats per supplier
+  // Fetch purchases and authoritative payments to calculate stats per supplier
   const { data: purchaseStats } = useQuery({
     queryKey: ["supplier-purchase-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("purchases")
-        .select(`
-          supplier_id,
-          total_amount,
-          paid_amount,
-          project_id,
-          projects (
-            client_id,
-            project_type
-          )
-        `);
+      const [purchasesRes, paymentsRes, allocationsRes] = await Promise.all([
+        supabase
+          .from("purchases")
+          .select(`
+            id,
+            supplier_id,
+            total_amount,
+            project_id,
+            projects (
+              client_id,
+              project_type
+            )
+          `),
+        supabase.from("purchase_payments").select("purchase_id, amount"),
+        supabase.from("supplier_payment_allocations").select("purchase_id, amount"),
+      ]);
       
-      if (error) throw error;
+      if (purchasesRes.error) throw purchasesRes.error;
+      if (paymentsRes.error) throw paymentsRes.error;
+      if (allocationsRes.error) throw allocationsRes.error;
+
+      // Build payment map by purchase_id from authoritative payment & allocation tables
+      const paidByPurchase = new Map<string, number>();
+      paymentsRes.data?.forEach((pp) => {
+        if (pp.purchase_id) {
+          paidByPurchase.set(pp.purchase_id, (paidByPurchase.get(pp.purchase_id) || 0) + Number(pp.amount || 0));
+        }
+      });
+      allocationsRes.data?.forEach((spa) => {
+        if (spa.purchase_id) {
+          paidByPurchase.set(spa.purchase_id, (paidByPurchase.get(spa.purchase_id) || 0) + Number(spa.amount || 0));
+        }
+      });
       
       // Group by supplier
       const stats: Record<string, { 
@@ -121,7 +140,7 @@ export default function Suppliers() {
         projects: Set<string>;
       }> = {};
       
-      data?.forEach((purchase) => {
+      purchasesRes.data?.forEach((purchase) => {
         if (purchase.supplier_id) {
           if (!stats[purchase.supplier_id]) {
             stats[purchase.supplier_id] = {
@@ -139,7 +158,7 @@ export default function Suppliers() {
             };
           }
           const amt = Number(purchase.total_amount) || 0;
-          const paid = Number(purchase.paid_amount) || 0;
+          const paid = paidByPurchase.get(purchase.id) || 0;
           stats[purchase.supplier_id].purchaseCount++;
           stats[purchase.supplier_id].totalAmount += amt;
           stats[purchase.supplier_id].paidAmount += paid;
@@ -292,11 +311,18 @@ export default function Suppliers() {
 
   const categories = Array.from(new Set(suppliers?.map((s) => s.category).filter(Boolean) || []));
 
-  const filtered = suppliers?.filter((s) => {
-    if (query && !s.name.includes(query)) return false;
-    if (categoryFilter !== "all" && s.category !== categoryFilter) return false;
-    return true;
-  }) || [];
+  const filtered = React.useMemo(() => {
+    if (!suppliers) return [];
+    const q = query.toLowerCase().trim();
+    return suppliers.filter((s) => {
+      if (categoryFilter !== "all" && s.category !== categoryFilter) return false;
+      if (!q) return true;
+      const nameMatch = s.name?.toLowerCase().includes(q) ?? false;
+      const phoneMatch = s.phone?.toLowerCase().includes(q) ?? false;
+      const categoryMatch = s.category?.toLowerCase().includes(q) ?? false;
+      return nameMatch || phoneMatch || categoryMatch;
+    });
+  }, [suppliers, query, categoryFilter]);
 
   if (isLoading) {
     return (

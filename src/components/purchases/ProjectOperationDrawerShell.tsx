@@ -140,7 +140,7 @@ export const ProjectOperationDrawerShell: React.FC<ProjectOperationDrawerShellPr
                           : selectedOperation === "material"
                           ? "إضافة شراء مواد ومستلزمات"
                           : selectedOperation === "service"
-                          ? "إضافة خدمة / مقاولة باطن"
+                          ? "إضافة خدمة مورد خارجية"
                           : selectedOperation === "labor"
                           ? "تسجيل عمل فني / عمالة يومية"
                           : selectedOperation === "expense"
@@ -157,7 +157,7 @@ export const ProjectOperationDrawerShell: React.FC<ProjectOperationDrawerShellPr
                         : selectedOperation === "material"
                         ? "تسجيل فواتير ومشتريات المواد والمستلزمات وتحديد طرق السداد."
                         : selectedOperation === "service"
-                        ? "تسجيل خدمات مقاولي الباطن والموردين ومتابعة المستحقات."
+                        ? "تسجيل خدمات الموردين الخارجيين ومتابعة المستحقات."
                         : selectedOperation === "expense"
                         ? "تسجيل المصاريف التشغيلية المباشرة المخصومة نقداً من الخزينة."
                         : "اختر نوع العملية وأدخل بياناتها للمشروع والمرحلة الحالية."}

@@ -17,6 +17,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { safeEvaluate } from "@/lib/safeFormula";
+import { QuickAddTechnicianDialog } from "@/components/technicians/QuickAddTechnicianDialog";
+import { QuickAddMeasurementDialog } from "@/components/project-items/QuickAddMeasurementDialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "@/components/dialogs/UnsavedChangesDialog";
 
 // Local labels and units
 const rateTypeLabels: Record<string, string> = {
@@ -89,6 +93,9 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
   inlineDropdownRef,
 }) => {
   const queryClient = useQueryClient();
+  const [addTechnicianOpen, setAddTechnicianOpen] = React.useState(false);
+  const [addUnitOpen, setAddUnitOpen] = React.useState(false);
+  const guard = useUnsavedChangesGuard({ isDirty: Boolean(inlineItem.name || inlineItem.description || inlineItem.quantity || inlineItem.unit_price || inlineItem.technician_id), isSubmitting: saveMutation.isPending });
 
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [contractItems, setContractItems] = React.useState<{ name: string; unit_price: number }[]>([]);
@@ -198,6 +205,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
       } rounded-2xl p-6 transition-all duration-300 mt-6`}
       dir="rtl"
     >
+      <fieldset disabled={saveMutation.isPending} className="min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/50">
         <div className="flex items-center gap-3">
@@ -217,7 +225,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={handleCancelEdit}
+            onClick={() => guard.requestAction(handleCancelEdit)}
             className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors border-dashed text-xs cursor-pointer rounded-lg"
           >
             <X className="h-4 w-4 ml-1" />
@@ -227,6 +235,10 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
       </div>
 
       {/* Grid Layout: Column 1 (2/3) and Column 2 (1/3) */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={() => setAddUnitOpen(true)} className="gap-2"><Ruler className="h-4 w-4" />إضافة وحدة قياس</Button>
+        <Button type="button" variant="outline" onClick={() => setAddTechnicianOpen(true)} className="gap-2"><Users className="h-4 w-4" />إضافة فني واختياره</Button>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Column 1: Basic Info & Quantity calculations (ColSpan 2) */}
@@ -949,6 +961,9 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                                 } else {
                                   setEditingItemTechnicians(prev => prev.filter((t: any) => t.id !== et.id));
                                   queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
+                                  queryClient.invalidateQueries({ queryKey: ["technician-assignments"] });
+                                  queryClient.invalidateQueries({ queryKey: ["all-technicians-rates"] });
+                                  queryClient.invalidateQueries({ queryKey: ["technicians"] });
                                   toast({ title: "تم الحذف", description: "تم إلغاء تعيين الفني بنجاح" });
                                 }
                               }}
@@ -1049,7 +1064,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
             <Button 
               type="button" 
               variant="outline" 
-              onClick={handleCancelEdit} 
+              onClick={() => guard.requestAction(handleCancelEdit)}
               className="h-12 px-5 border-dashed cursor-pointer rounded-xl transition-all"
             >
               إلغاء التعديل
@@ -1086,95 +1101,24 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                 measurement_factor: inlineItem.measurement_factor,
                 measurement_config_id: inlineItem.measurement_config_id || null,
                 component_values: inlineItem.component_values,
+                technician: techId ? { technician_id: techId,
+                  rate_type: inlineItem.technician_rate_type === "unit" ? "meter" : inlineItem.technician_rate_type,
+                  rate: parseFloat(inlineItem.technician_rate) || 0,
+                  quantity: inlineItem.technician_rate_type === "fixed" ? 1 : inlineItem.technician_rate_type === "piece"
+                    ? (parseFloat(inlineItem.technician_piece_qty) || 1) : finalQty } : null,
               }, {
-                onSuccess: async (insertedItem: any) => {
-                  const techRateType = inlineItem.technician_rate_type;
-                  const techRate = parseFloat(inlineItem.technician_rate) || 0;
-                  
-                  let dbRateType = "meter";
-                  let dbRate = techRate;
-                  let dbQuantity = finalQty;
-                  let dbTotalCost = 0;
-                  
-                  if (techRateType === "unit") {
-                    dbRateType = "meter";
-                    dbRate = techRate;
-                    dbQuantity = finalQty;
-                    dbTotalCost = techRate * finalQty;
-                  } else if (techRateType === "piece") {
-                    const pieceQty = parseFloat(inlineItem.technician_piece_qty) || 1;
-                    dbRateType = "piece";
-                    dbRate = techRate;
-                    dbQuantity = pieceQty;
-                    dbTotalCost = techRate * pieceQty;
-                  } else if (techRateType === "fixed") {
-                    dbRateType = "fixed";
-                    dbRate = techRate;
-                    dbQuantity = 1;
-                    dbTotalCost = techRate;
-                  }
-
-                  if (editingItem && techId) {
-                    const { data: existingTechs } = await supabase
-                      .from("project_item_technicians")
-                      .select("id, technician_id")
-                      .eq("project_item_id", editingItem.id);
-                    
-                    const existingForTech = existingTechs?.find(t => t.technician_id === techId);
-                    
-                    if (!existingForTech) {
-                      await supabase.from("project_item_technicians").insert({
-                        project_item_id: editingItem.id,
-                        technician_id: techId,
-                        rate_type: dbRateType,
-                        rate: dbRate,
-                        quantity: dbQuantity,
-                        total_cost: dbTotalCost,
-                      });
-                    }
-                    queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
-                  } else if (!editingItem && techId && insertedItem?.id) {
-                    await supabase.from("project_item_technicians").insert({
-                        project_item_id: insertedItem.id,
-                        technician_id: techId,
-                        rate_type: dbRateType,
-                        rate: dbRate,
-                        quantity: dbQuantity,
-                        total_cost: dbTotalCost,
-                    });
-                    queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
-                  }
+                onSuccess: () => {
                   setEditingItem(null);
                   setEditingItemTechnicians([]);
+                  setInlineItem({ generalItemId: "", name: "", description: "", measurement_type: "linear",
+                    quantity: "", unit_price: "", notes: "", engineer_id: "", technician_id: "",
+                    technician_rate_type: "unit", technician_rate: "", technician_piece_qty: "1",
+                    measurement_config_id: "", component_values: {}, measurement_factor: "1", item_count: "1", formula: "" });
+                  setInlineSearch("");
                   setCalculationMethod("manual");
+                  setTimeout(() => nameInputRef.current?.focus(), 0);
                 }
               });
-              if (!editingItem) {
-                setInlineItem({
-                  generalItemId: "",
-                  name: "",
-                  description: "",
-                  measurement_type: "linear",
-                  quantity: "",
-                  unit_price: "",
-                  notes: "",
-                  engineer_id: "",
-                  technician_id: "",
-                  technician_rate_type: "unit",
-                  technician_rate: "",
-                  technician_piece_qty: "1",
-                  measurement_config_id: "",
-                  component_values: {},
-                  measurement_factor: "1",
-                  item_count: "1",
-                  formula: "",
-                });
-                setInlineSearch("");
-                setCalculationMethod("manual");
-                setTimeout(() => {
-                  nameInputRef.current?.focus();
-                }, 50);
-              }
             }}
             className="h-12 px-6 gap-2 bg-primary hover:bg-primary/95 hover:scale-[1.01] active:scale-[0.99] text-primary-foreground font-bold shadow-lg shadow-primary/25 transition-all duration-200 cursor-pointer border-none rounded-xl"
           >
@@ -1183,6 +1127,17 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
           </Button>
         </div>
       </div>
+      </fieldset>
+      <QuickAddTechnicianDialog open={addTechnicianOpen} onOpenChange={setAddTechnicianOpen} onSuccess={technician => {
+        setInlineItem(prev => ({ ...prev, technician_id: technician.id }));
+        setShowTechAssignment(true);
+        queryClient.invalidateQueries({ queryKey: ["technicians"] });
+      }} />
+      <QuickAddMeasurementDialog open={addUnitOpen} onOpenChange={setAddUnitOpen} onCreated={unit => {
+        setInlineItem(prev => ({ ...prev, measurement_config_id: unit.id, formula: "Q", component_values: { Q: prev.quantity || "1" } }));
+        setCalculationMethod("config");
+      }} />
+      <UnsavedChangesDialog open={guard.showConfirmDialog} onOpenChange={guard.setShowConfirmDialog} onStay={guard.cancelDiscard} onConfirmDiscard={guard.confirmDiscard} />
     </div>
   );
 };

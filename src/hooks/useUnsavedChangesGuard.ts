@@ -18,7 +18,7 @@ export function useUnsavedChangesGuard({
 
   // Browser beforeunload protection (active only when dirty)
   useEffect(() => {
-    if (!isDirty || isSubmitting) return;
+    if (!isDirty && !isSubmitting) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -35,7 +35,8 @@ export function useUnsavedChangesGuard({
   // Request an action (close dialog, navigate away, etc.)
   const requestAction = useCallback(
     (action: () => void) => {
-      if (!isDirty || isSubmitting) {
+      if (isSubmitting) return;
+      if (!isDirty) {
         action();
         return;
       }
@@ -59,8 +60,27 @@ export function useUnsavedChangesGuard({
     [requestAction, navigate]
   );
 
+  // Sidebar and breadcrumb links must honor the same draft guard as Cancel.
+  useEffect(() => {
+    if (!isDirty && !isSubmitting) return;
+    const handleLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin || url.href === window.location.href) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash && !url.hash.startsWith('#/')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      requestNavigate(url.hash.startsWith('#/') ? url.hash.slice(1) : url.pathname + url.search + url.hash);
+    };
+    document.addEventListener('click', handleLink, true);
+    return () => document.removeEventListener('click', handleLink, true);
+  }, [isDirty, isSubmitting, requestNavigate]);
+
   // Dialog Discard: Proceed with pending action
   const confirmDiscard = useCallback(() => {
+    if (isSubmitting) return;
     setShowConfirmDialog(false);
     if (onDiscard) {
       onDiscard();
@@ -69,7 +89,7 @@ export function useUnsavedChangesGuard({
       pendingAction();
       setPendingAction(null);
     }
-  }, [onDiscard, pendingAction]);
+  }, [onDiscard, pendingAction, isSubmitting]);
 
   // Dialog Stay: Cancel pending action and keep editing
   const cancelDiscard = useCallback(() => {

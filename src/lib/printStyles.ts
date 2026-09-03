@@ -940,13 +940,17 @@ export function openPrintWindow(
 export interface ReceiptPrintData {
   receiptNumber: string;
   date: string;
-  type: "payment" | "deposit" | "withdrawal" | "salary" | "expense" | "transfer";
+  type: "payment" | "deposit" | "withdrawal" | "salary" | "expense" | "transfer" | "client_receipt";
   amount: number;
   paidToOrBy: string; // Name of person paid to/by
   description: string;
+  paymentMethod?: string;
   treasuryName?: string;
   projectName?: string;
   notes?: string;
+  isCancelled?: boolean;
+  reversalReason?: string;
+  reversedAt?: string;
 }
 
 export function openReceiptPrintWindow(
@@ -957,19 +961,28 @@ export function openReceiptPrintWindow(
   if (!printWindow) return null;
 
   const v = getPrintValues(settings);
-  const typeLabelMap = {
-    payment: "إيصال قبض دفعة",
-    deposit: "إيصال إيداع نقدي",
-    withdrawal: "إيصال سحب نقدي",
-    salary: "إيصال صرف راتب/مستحقات",
-    expense: "إيصال صرف مصروف",
-    transfer: "إيصال تحويل مالي"
+  const typeLabelMap: Record<string, string> = {
+    payment: "سند صرف دفعة مورد",
+    deposit: "إشعار إيداع نقدي",
+    withdrawal: "سند صرف نقدي",
+    salary: "سند صرف مستحقات فني",
+    expense: "سند صرف مصروف",
+    transfer: "إشعار تحويل مالي",
+    client_receipt: "سند قبض مالي",
   };
   
-  const typeLabel = typeLabelMap[receipt.type] || "إيصال مالي";
+  let typeLabel = typeLabelMap[receipt.type] || "سند مالي";
+  if (receipt.isCancelled) {
+    typeLabel = `${typeLabel} (ملغي)`;
+  }
   
   // Format currency
   const amountFormatted = new Intl.NumberFormat('ar-LY', { style: 'currency', currency: 'LYD' }).format(receipt.amount);
+  const paymentMethodLabel = receipt.paymentMethod === "transfer" 
+    ? "تحويل مصرفي" 
+    : receipt.paymentMethod === "check" 
+    ? "شيك مصرفي" 
+    : "نقدي";
   
   const receiptHTML = `
     <!DOCTYPE html>
@@ -989,18 +1002,45 @@ export function openReceiptPrintWindow(
           direction: rtl;
         }
         .receipt-container {
-          border: 2px solid ${v.tableBorderColor || '#B4A078'};
+          border: 2px solid ${receipt.isCancelled ? '#ef4444' : (v.tableBorderColor || '#B4A078')};
           border-radius: 8px;
           padding: 6mm;
           max-width: 148mm; /* A5 size landscape-ish */
           margin: 0 auto;
           position: relative;
+          background: ${receipt.isCancelled ? '#fffafb' : '#fff'};
+        }
+        .cancelled-watermark {
+          position: absolute;
+          top: 40%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-25deg);
+          font-size: 42pt;
+          font-weight: 900;
+          color: rgba(239, 68, 68, 0.18);
+          border: 4px dashed rgba(239, 68, 68, 0.25);
+          padding: 10px 40px;
+          border-radius: 12px;
+          pointer-events: none;
+          z-index: 10;
+          text-transform: uppercase;
+        }
+        .cancelled-banner {
+          background: #fee2e2;
+          color: #b91c1c;
+          border: 1px solid #f87171;
+          border-radius: 6px;
+          padding: 6px 12px;
+          margin-bottom: 6mm;
+          font-size: 10pt;
+          font-weight: 700;
+          text-align: center;
         }
         .receipt-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          border-bottom: 2px solid ${v.sectionTitleColor || '#7A5A10'};
+          border-bottom: 2px solid ${receipt.isCancelled ? '#ef4444' : (v.sectionTitleColor || '#7A5A10')};
           padding-bottom: 4px;
           margin-bottom: 6px;
         }
@@ -1017,15 +1057,15 @@ export function openReceiptPrintWindow(
         .company-name {
           font-weight: 800;
           font-size: 14pt;
-          color: ${v.sectionTitleColor || '#7A5A10'};
+          color: ${receipt.isCancelled ? '#b91c1c' : (v.sectionTitleColor || '#7A5A10')};
         }
         .receipt-title-box {
           text-align: left;
         }
         .receipt-title {
-          font-size: 16pt;
+          font-size: 15pt;
           font-weight: 700;
-          color: ${v.sectionTitleColor || '#7A5A10'};
+          color: ${receipt.isCancelled ? '#dc2626' : (v.sectionTitleColor || '#7A5A10')};
           margin: 0;
         }
         .receipt-meta {
@@ -1056,8 +1096,8 @@ export function openReceiptPrintWindow(
         }
         .amount-highlight {
           grid-column: span 2;
-          background: #fdfbf7;
-          border: 1.5px solid ${v.tableBorderColor || '#B4A078'};
+          background: ${receipt.isCancelled ? '#fee2e2' : '#fdfbf7'};
+          border: 1.5px solid ${receipt.isCancelled ? '#f87171' : (v.tableBorderColor || '#B4A078')};
           border-radius: 6px;
           padding: 8px 12px;
           display: flex;
@@ -1065,11 +1105,11 @@ export function openReceiptPrintWindow(
           align-items: center;
           font-size: 13pt;
           font-weight: 700;
-          color: ${v.sectionTitleColor || '#7A5A10'};
+          color: ${receipt.isCancelled ? '#991b1b' : (v.sectionTitleColor || '#7A5A10')};
         }
         .amount-val {
           font-size: 16pt;
-          color: #16a34a;
+          color: ${receipt.isCancelled ? '#dc2626; text-decoration: line-through;' : '#16a34a;'};
         }
         .full-width-detail {
           grid-column: span 2;
@@ -1131,11 +1171,19 @@ export function openReceiptPrintWindow(
     </head>
     <body>
       <div class="print-btn-container">
-        <button class="print-btn" onclick="window.print()">طباعة الإيصال</button>
+        <button class="print-btn" onclick="window.print()">طباعة السند</button>
         <button class="print-btn close-btn" onclick="window.close()">إغلاق</button>
       </div>
       
       <div class="receipt-container">
+        ${receipt.isCancelled ? `
+        <div class="cancelled-watermark">سند ملغي</div>
+        <div class="cancelled-banner">
+          <span>هذا السند ملغي وغير صالح للصرف أو التسوية المحاسبية</span>
+          ${receipt.reversalReason ? `<br><small>سبب الإلغاء: ${receipt.reversalReason}</small>` : ''}
+          ${receipt.reversedAt ? `<br><small>تاريخ الإلغاء: ${receipt.reversedAt}</small>` : ''}
+        </div>
+        ` : ''}
         <div class="receipt-header">
           <div class="company-info">
             ${v.companyLogo ? `<img class="company-logo" src="${v.companyLogo}" />` : ''}
@@ -1143,18 +1191,18 @@ export function openReceiptPrintWindow(
           </div>
           <div class="receipt-title-box">
             <h1 class="receipt-title">${typeLabel}</h1>
-            <div class="receipt-meta">رقم: ${receipt.receiptNumber} | التاريخ: ${receipt.date}</div>
+            <div class="receipt-meta">رقم السند: ${receipt.receiptNumber} | التاريخ: ${receipt.date}</div>
           </div>
         </div>
         
         <div class="receipt-details-grid">
           <div class="amount-highlight">
-            <span>المبلغ المدفوع:</span>
+            <span>المبلغ:</span>
             <span class="amount-val">${amountFormatted}</span>
           </div>
           
           <div class="detail-item full-width-detail">
-            <span class="detail-label">${receipt.type === 'payment' || receipt.type === 'deposit' ? 'استلمنا من:' : 'صرفنا إلى:'}</span>
+            <span class="detail-label">${receipt.type === 'payment' || receipt.type === 'salary' || receipt.type === 'expense' || receipt.type === 'withdrawal' ? 'صرفنا إلى السيد/ة:' : 'استلمنا من السيد/ة:'}</span>
             <span class="detail-value" style="font-weight: 700; font-size: 12pt;">${receipt.paidToOrBy}</span>
           </div>
           
@@ -1172,10 +1220,15 @@ export function openReceiptPrintWindow(
           
           ${receipt.treasuryName ? `
           <div class="detail-item">
-            <span class="detail-label">حساب الخزينة:</span>
+            <span class="detail-label">الخزينة/الحساب:</span>
             <span class="detail-value">${receipt.treasuryName}</span>
           </div>
           ` : ''}
+
+          <div class="detail-item">
+            <span class="detail-label">طريقة الدفع:</span>
+            <span class="detail-value">${paymentMethodLabel}</span>
+          </div>
           
           ${receipt.notes ? `
           <div class="detail-item full-width-detail">

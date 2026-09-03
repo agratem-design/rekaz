@@ -66,7 +66,7 @@ const AccountantDashboard = () => {
       const [incomeRes, clientPaymentsRes, expensesRes, purchasesRes, purchasePaymentsRes, treasuryRes, transfersRes, recentPurchasesRes] =
         await Promise.all([
           supabase.from("income").select("amount, date, type, subtype").order("date", { ascending: false }),
-          supabase.from("client_payments").select("amount, date").order("date", { ascending: false }),
+          supabase.from("client_payments").select("amount, date").is("reversed_at", null).order("date", { ascending: false }),
           supabase.from("expenses").select("amount, date, type").order("date", { ascending: false }),
           supabase.from("purchases").select("total_amount, paid_amount, status, date, invoice_number, suppliers(name)").order("date", { ascending: false }),
           supabase.from("purchase_payments").select("amount, date"),

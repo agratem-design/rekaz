@@ -1,4 +1,7 @@
 import { useParams, Link } from "react-router-dom";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { ClientCreditPanel } from "@/components/clients/ClientCreditPanel";
+import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DeterministicBreadcrumb } from "@/components/navigation/DeterministicBreadcrumb";
@@ -176,6 +179,7 @@ const methodLabels: Record<string, string> = {
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const receiptOperation = useOperationKey();
 
   // Add payment states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -185,7 +189,8 @@ export default function ClientDetail() {
   const [selectedParentTreasuryId, setSelectedParentTreasuryId] = useState("");
   const [selectedTreasuryId, setSelectedTreasuryId] = useState("");
   const [paymentProjectType, setPaymentProjectType] = useState<"all" | "contracting" | "finishing">("all");
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  // "none" represents a general client advance/credit not tied to a project.
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("none");
   const [notes, setNotes] = useState("");
 
   // Fetch company settings for printing
@@ -202,7 +207,7 @@ export default function ClientDetail() {
   });
 
   // Fetch client details
-  const { data: client, isLoading: clientLoading } = useQuery<Client | null>({
+  const { data: client, isLoading: clientLoading, error: clientError } = useQuery<Client | null>({
     queryKey: ["client", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -217,7 +222,7 @@ export default function ClientDetail() {
   });
 
   // Fetch client projects
-  const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({
+  const { data: projects, isLoading: projectsLoading, error: projectsError } = useQuery<Project[]>({
     queryKey: ["client-projects", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -232,7 +237,7 @@ export default function ClientDetail() {
   });
 
   // Fetch client contracts
-  const { data: contracts } = useQuery<Contract[]>({
+  const { data: contracts, isLoading: contractsLoading, error: contractsError } = useQuery<Contract[]>({
     queryKey: ["client-contracts", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -247,12 +252,12 @@ export default function ClientDetail() {
   });
 
   // Fetch client payments with treasury and project names
-  const { data: payments } = useQuery<ClientPayment[]>({
+  const { data: payments, isLoading: paymentsLoading, error: paymentsError } = useQuery<ClientPayment[]>({
     queryKey: ["client-payments-list", id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("id, amount, date, payment_method, notes, project_id, treasuries(name), projects(name, project_type)")
+        .select("id, amount, date, payment_method, notes, project_id, treasuries(name), projects(name, project_type)").is("reversed_at", null)
         .eq("client_id", id!)
         .order("date", { ascending: false });
       if (error) throw error;
@@ -283,47 +288,77 @@ export default function ClientDetail() {
   });
 
   // Split parent and child treasuries
-  const parentTreasuries = useMemo(() => {
+  const allParentTreasuries = useMemo(() => {
     return treasuries?.filter((t) => t.parent_id === null) || [];
   }, [treasuries]);
 
-  const filteredChildTreasuries = useMemo(() => {
-    if (!selectedParentTreasuryId || !treasuries) return [];
-    let list = treasuries.filter((t) => t.parent_id === selectedParentTreasuryId);
-    if (paymentMethod === "cash") {
-      list = list.filter((t) => t.treasury_type === "cash");
-    } else {
-      list = list.filter((t) => t.treasury_type === "bank");
-    }
-    return list;
-  }, [treasuries, selectedParentTreasuryId, paymentMethod]);
-
-  // ── Auto-select parent treasury based on selected project ──
-  useEffect(() => {
-    if (!parentTreasuries || parentTreasuries.length === 0) return;
-
+  // Restrict parent treasuries: If a project is selected, ONLY show the treasury associated with that project!
+  const parentTreasuries = useMemo(() => {
+    if (!allParentTreasuries.length) return [];
     if (selectedProjectId && selectedProjectId !== "none") {
       const proj = projects?.find((p) => p.id === selectedProjectId);
       if (proj) {
+        // 1. Check if project has an explicit default_treasury_id
+        if ((proj as any).default_treasury_id) {
+          const defId = (proj as any).default_treasury_id;
+          const directParent = allParentTreasuries.find((t) => t.id === defId);
+          if (directParent) return [directParent];
+          const child = treasuries?.find((t) => t.id === defId);
+          if (child?.parent_id) {
+            const rootParent = allParentTreasuries.find((t) => t.id === child.parent_id);
+            if (rootParent) return [rootParent];
+          }
+        }
+
+        // 2. Otherwise match by project_type
         const pType = proj.project_type;
-        const matchedParent = parentTreasuries.find(
+        const matched = allParentTreasuries.filter(
           (t: any) =>
             t.project_category === pType ||
             (pType === "contracting" && (t.name.includes("مقاولات") || t.name.includes("المقاولات"))) ||
             (pType === "finishing" && (t.name.includes("تشطيب") || t.name.includes("التشطيب")))
         );
-        if (matchedParent) {
-          setSelectedParentTreasuryId(matchedParent.id);
-          return;
-        }
+        if (matched.length > 0) return matched;
       }
     }
+    return allParentTreasuries;
+  }, [allParentTreasuries, selectedProjectId, projects, treasuries]);
 
-    // Default to first parent treasury if none selected yet
-    if (!selectedParentTreasuryId && parentTreasuries.length > 0) {
-      setSelectedParentTreasuryId(parentTreasuries[0].id);
+  const filteredChildTreasuries = useMemo(() => {
+    if (!selectedParentTreasuryId || !treasuries) return [];
+    let list = treasuries.filter((t) => t.parent_id === selectedParentTreasuryId);
+    if (list.length > 0) {
+      if (paymentMethod === "cash") {
+        const cashList = list.filter((t) => t.treasury_type === "cash");
+        if (cashList.length > 0) return cashList;
+      } else {
+        const bankList = list.filter((t) => t.treasury_type === "bank");
+        if (bankList.length > 0) return bankList;
+      }
+      return list;
     }
-  }, [selectedProjectId, parentTreasuries, projects, paymentDialogOpen]);
+    // Fallback if parent has no sub-branches
+    const parent = treasuries.find((t) => t.id === selectedParentTreasuryId);
+    return parent ? [parent] : [];
+  }, [treasuries, selectedParentTreasuryId, paymentMethod]);
+
+  // ── Auto-select parent treasury based on selected project ──
+  useEffect(() => {
+    if (!parentTreasuries || parentTreasuries.length === 0) {
+      setSelectedParentTreasuryId("");
+      return;
+    }
+
+    if (selectedProjectId && selectedProjectId !== "none") {
+      // Strictly set to the project's single associated parent treasury
+      setSelectedParentTreasuryId(parentTreasuries[0].id);
+    } else {
+      // General payment: maintain current or default to first if invalid
+      if (!selectedParentTreasuryId || !parentTreasuries.some((pt) => pt.id === selectedParentTreasuryId)) {
+        setSelectedParentTreasuryId(parentTreasuries[0].id);
+      }
+    }
+  }, [selectedProjectId, parentTreasuries]);
 
   // ── Auto-select child treasury based on parent treasury and payment method ──
   useEffect(() => {
@@ -334,10 +369,10 @@ export default function ClientDetail() {
     } else {
       setSelectedTreasuryId("");
     }
-  }, [filteredChildTreasuries, selectedParentTreasuryId, paymentMethod]);
+  }, [filteredChildTreasuries, selectedParentTreasuryId]);
 
   // Fetch other related data for billing calculations
-  const { data: phases } = useQuery<Phase[]>({
+  const { data: phases, isLoading: phasesLoading, error: phasesError } = useQuery<Phase[]>({
     queryKey: ["client-phases", id],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_phases").select("*");
@@ -347,7 +382,7 @@ export default function ClientDetail() {
     enabled: !!id,
   });
 
-  const { data: projectItems } = useQuery<ProjectItem[]>({
+  const { data: projectItems, isLoading: itemsLoading, error: itemsError } = useQuery<ProjectItem[]>({
     queryKey: ["client-items", id],
     queryFn: async () => {
       const { data, error } = await supabase.from("project_items").select("id, project_id, phase_id, total_price");
@@ -357,7 +392,7 @@ export default function ClientDetail() {
     enabled: !!id,
   });
 
-  const { data: purchases } = useQuery<Purchase[]>({
+  const { data: purchases, isLoading: purchasesLoading, error: purchasesError } = useQuery<Purchase[]>({
     queryKey: ["client-purchases", id],
     queryFn: async () => {
       const { data, error } = await supabase.from("purchases").select("id, project_id, phase_id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id");
@@ -367,20 +402,20 @@ export default function ClientDetail() {
     enabled: !!id,
   });
 
-  const { data: clientExpenses } = useQuery({
+  const { data: clientExpenses, isLoading: expensesLoading, error: expensesError } = useQuery({
     queryKey: ["client-expenses", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("expenses").select("id, project_id, amount");
+      const { data, error } = await supabase.from("expenses").select("id, project_id, amount, type, technician_id");
       if (error) throw error;
       return data || [];
     },
     enabled: !!id,
   });
 
-  const { data: clientTechProgress } = useQuery({
-    queryKey: ["client-tech-progress", id],
+  const { data: clientItemTechs, isLoading: techsLoading, error: techsError } = useQuery({
+    queryKey: ["client-item-techs", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id");
+      const { data, error } = await supabase.from("project_item_technicians").select("id, total_cost, rate, quantity, project_item_id, project_items(project_id)");
       if (error) throw error;
       return data || [];
     },
@@ -400,40 +435,16 @@ export default function ClientDetail() {
 
       const targetProjId = selectedProjectId && selectedProjectId !== "none" ? selectedProjectId : null;
 
-      // 1. Insert Client Payment
-      const { data: payment, error: payErr } = await supabase
-        .from("client_payments")
-        .insert({
-          client_id: id!,
-          project_id: targetProjId,
-          amount: amt,
-          date: paymentDate,
-          payment_method: paymentMethod,
-          treasury_id: selectedTreasuryId,
-          notes: notes || null,
-        })
-        .select("id")
-        .single();
-      if (payErr) throw payErr;
-
-      // 2. Insert Income Log
-      const { error: incErr } = await supabase
-        .from("income")
-        .insert({
-          project_id: targetProjId,
-          client_id: id!,
-          amount: amt,
-          date: paymentDate,
-          type: "service",
-          subtype: "client_payment",
-          payment_method: paymentMethod,
-          notes: notes || (targetProjId ? `تسديد دفعة لمشروع` : `تسديد دفعة عامة (رصيد زبون)`),
-          status: "received",
-          reference_id: payment.id,
-        });
-      if (incErr) throw incErr;
+      // The server RPC records the payment, treasury deposit, income journal,
+      // and any client-credit event atomically. This also supports a general
+      // advance when no project is selected.
+      const payload = { project_id: targetProjId, client_id: id!, treasury_id: selectedTreasuryId,
+        amount: amt, payment_method: paymentMethod, date: paymentDate, notes: notes || null };
+      await financialRpc("record_client_receipt_v2", { p_payload: payload, p_request_key: receiptOperation.getKey(payload) });
     },
     onSuccess: () => {
+      receiptOperation.reset();
+      invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["client", id] });
       queryClient.invalidateQueries({ queryKey: ["client-projects", id] });
       queryClient.invalidateQueries({ queryKey: ["client-payments-list", id] });
@@ -450,7 +461,7 @@ export default function ClientDetail() {
       setSelectedParentTreasuryId("");
       setSelectedTreasuryId("");
       setPaymentProjectType("all");
-      setSelectedProjectId("");
+      setSelectedProjectId("none");
     },
     onError: (err: any) => {
       toast.error(err.message || "حدث خطأ أثناء تسجيل الدفعة");
@@ -461,6 +472,17 @@ export default function ClientDetail() {
     e.preventDefault();
     addPaymentMutation.mutate();
   };
+
+  const { data: clientCreditLedger = [], isLoading: creditLoading, error: creditError } = useQuery({
+    queryKey: ["client-credit-ledger", id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("client_credit_ledger")
+        .select("entry_type, amount, target_project_id, source_payment_id").eq("client_id", id!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
 
   // Calculate detailed financial totals using Central Financial Domain
   const clientFinancials = useMemo(() => {
@@ -478,6 +500,7 @@ export default function ClientDetail() {
         contractingRemaining: 0,
         finishingRemaining: 0,
         projectBills: {} as Record<string, number>,
+        projectRemainders: {} as Record<string, number>,
       };
     }
 
@@ -486,16 +509,21 @@ export default function ClientDetail() {
     let finishingBilled = 0;
     let contractingCount = 0;
     let finishingCount = 0;
+    let projectRemainingTotal = 0;
+    let contractingRemainingTotal = 0;
+    let finishingRemainingTotal = 0;
+    let totalProjectSettled = 0;
     const projectBills: Record<string, number> = {};
+    const projectRemainders: Record<string, number> = {};
 
     projects.forEach((proj) => {
       const projPurchases = purchases.filter((p) => p.project_id === proj.id);
       const projItems = projectItems.filter((item) => item.project_id === proj.id);
       const projContracts = (contracts || []).filter(
-        (c) => c.status !== "cancelled" && (c.project_id === proj.id || (!c.project_id && c.client_id === proj.client_id && proj.project_type === "contracting"))
+        (c) => c.status !== "cancelled" && c.project_id === proj.id
       );
       const projExpenses = (clientExpenses || []).filter((e: any) => e.project_id === proj.id);
-      const projTech = (clientTechProgress || []).filter((r: any) => (r.project_id || r.project_items?.project_id) === proj.id);
+      const projItemTechs = (clientItemTechs || []).filter((r: any) => r.project_items?.project_id === proj.id);
       const projPayments = (payments || []).filter((p: any) => p.project_id === proj.id);
 
       const projResult = calculateProjectFinancials({
@@ -503,21 +531,27 @@ export default function ClientDetail() {
         contracts: projContracts,
         projectItems: projItems,
         purchases: projPurchases,
-        techProgressRecords: projTech,
+        projectItemTechnicians: projItemTechs,
         expenses: projExpenses,
         clientPayments: projPayments,
+        creditLedger: clientCreditLedger,
       });
 
       const projectTotal = projResult.clientObligation;
       projectBills[proj.id] = projectTotal;
+      projectRemainders[proj.id] = projResult.clientRemaining;
       totalBilled += projectTotal;
+      projectRemainingTotal += projResult.clientRemaining;
+      totalProjectSettled += projResult.totalSettled;
 
       if (proj.project_type === "contracting") {
         contractingBilled += projectTotal;
         contractingCount++;
+        contractingRemainingTotal += projResult.clientRemaining;
       } else {
         finishingBilled += projectTotal;
         finishingCount++;
+        finishingRemainingTotal += projResult.clientRemaining;
       }
     });
 
@@ -534,11 +568,13 @@ export default function ClientDetail() {
       }
     });
 
-    const contractingRemaining = contractingBilled - contractingPaid;
-    const finishingRemaining = finishingBilled - finishingPaid;
+    const contractingRemaining = contractingRemainingTotal;
+    const finishingRemaining = finishingRemainingTotal;
 
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const remaining = totalBilled - totalPaid;
+    // General payments with project_id = null are client credit/advances and
+    // must not reduce project obligations until explicitly applied.
+    const totalPaid = totalProjectSettled;
+    const remaining = projectRemainingTotal;
 
     return {
       totalBilled,
@@ -553,8 +589,9 @@ export default function ClientDetail() {
       contractingRemaining,
       finishingRemaining,
       projectBills,
+      projectRemainders,
     };
-  }, [projects, phases, projectItems, purchases, payments, contracts, clientExpenses, clientTechProgress]);
+  }, [projects, phases, projectItems, purchases, payments, contracts, clientExpenses, clientItemTechs, clientCreditLedger]);
 
   const totalContractsAmount = useMemo(() => {
     if (!contracts) return 0;
@@ -639,7 +676,7 @@ export default function ClientDetail() {
     return projectPaymentsMap[selectedProjectId] || 0;
   }, [selectedProjectId, projectPaymentsMap]);
 
-  const selectedProjectRemaining = Math.max(0, selectedProjectBill - selectedProjectPaid);
+  const selectedProjectRemaining = clientFinancials.projectRemainders[selectedProjectId] || 0;
 
   const contractingProjectsForSelect = useMemo(() => {
     return projects?.filter((p) => p.project_type === "contracting") || [];
@@ -986,7 +1023,7 @@ export default function ClientDetail() {
     openPrintWindow(`كشف حساب - ${client.name}`, contentHtml, printSettings);
   };
 
-  if (clientLoading || projectsLoading) {
+  if (clientLoading || projectsLoading || contractsLoading || paymentsLoading || phasesLoading || itemsLoading || purchasesLoading || expensesLoading || techsLoading || creditLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -994,6 +1031,14 @@ export default function ClientDetail() {
     );
   }
 
+  if (clientError || projectsError || contractsError || paymentsError || phasesError || itemsError || purchasesError || expensesError || techsError || creditError) {
+    return <Card className="space-y-3 p-6" dir="rtl" role="alert">
+      <h1 className="font-bold">تعذر تحميل بيانات الحساب كاملة</h1>
+      <p className="text-sm text-muted-foreground">لم نعرض أرصدة جزئية. تحقق من الاتصال وتطبيق تحديث قاعدة البيانات ثم أعد المحاولة.</p>
+      <Button onClick={() => invalidateFinancialQueries(queryClient)}>إعادة المحاولة</Button>
+      <Button asChild variant="outline"><Link to="/clients">العودة للزبائن</Link></Button>
+    </Card>;
+  }
   if (!client) {
     return (
       <div className="text-center py-12" dir="rtl">
@@ -1021,7 +1066,7 @@ export default function ClientDetail() {
             <DialogTrigger asChild>
               <Button className="gap-2 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 rounded-xl px-5 h-11">
                 <Plus className="h-4 w-4" />
-                <span>إضافة دفعة سداد للزبون</span>
+                <span>إضافة دفعة أو رصيد مقدم للزبون</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-xl bg-background p-6 rounded-2xl border border-border shadow-2xl overflow-y-auto max-h-[90vh]" dir="rtl">
@@ -1030,10 +1075,10 @@ export default function ClientDetail() {
                   <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
                     <Wallet className="h-5 w-5" />
                   </div>
-                  <span>تسجيل دفعة سداد للزبون: {client.name}</span>
+                  <span>تسجيل دفعة أو رصيد مقدم للزبون: {client.name}</span>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-1">
-                  إدخال الدفعة المالية المستلمة وتوجيهها للمشروع الخزينة المناسبة مع احتساب المتبقي تلقائياً.
+                  إدخال الدفعة المالية وتوجيهها للمشروع أو حفظها كرصد دائن عام، مع تحديث الخزينة تلقائياً.
                 </DialogDescription>
               </DialogHeader>
 
@@ -1115,12 +1160,16 @@ export default function ClientDetail() {
                   {Number(paymentAmount) > 0 && (
                     <div className="mt-3 p-3 rounded-xl bg-muted/40 border border-border/50 text-xs space-y-1.5">
                       <div className="flex items-center justify-between font-bold">
-                        <span className="text-muted-foreground flex items-center gap-1">
-                          <Receipt className="h-3.5 w-3.5 text-primary" />
-                          <span>المتبقي المستحق الجديد للزبون بعد السداد:</span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Receipt className="h-3.5 w-3.5 text-primary" />
+                            <span>{selectedProjectId === "none" ? "المتبقي المستحق (لا يتغير قبل تطبيق الرصيد):" : "المتبقي المستحق الجديد للزبون بعد السداد:"}</span>
                         </span>
                         <span className="text-sm font-extrabold font-mono text-emerald-700 dark:text-emerald-400">
-                          {formatCurrencyLYD(Math.max(0, clientFinancials.remaining - Number(paymentAmount)))}
+                          {formatCurrencyLYD(
+                            selectedProjectId === "none"
+                              ? clientFinancials.remaining
+                              : Math.max(0, clientFinancials.remaining - Number(paymentAmount))
+                          )}
                         </span>
                       </div>
 
@@ -1137,7 +1186,12 @@ export default function ClientDetail() {
                       )}
 
                       <div className="pt-1 flex items-center gap-1 text-[11px]">
-                        {Number(paymentAmount) > (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining : clientFinancials.remaining) && (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining > 0 : clientFinancials.remaining > 0) ? (
+                        {selectedProjectId === "none" ? (
+                          <Badge variant="outline" className="border-blue-500/40 text-blue-700 bg-blue-500/10 gap-1">
+                            <Wallet className="h-3 w-3" />
+                            <span>ستُحفظ الدفعة كرصد دائن عام للزبون ويمكن استخدامها لاحقاً</span>
+                          </Badge>
+                        ) : Number(paymentAmount) > (selectedProjectId ? selectedProjectRemaining : clientFinancials.remaining) && (selectedProjectId ? selectedProjectRemaining > 0 : clientFinancials.remaining > 0) ? (
                           <Badge variant="outline" className="border-amber-500/40 text-amber-700 bg-amber-500/10 gap-1">
                             <AlertTriangle className="h-3 w-3" />
                             <span>يوجد رصيد فائض بقيمة {formatCurrencyLYD(Number(paymentAmount) - (selectedProjectId && selectedProjectId !== "none" ? selectedProjectRemaining : clientFinancials.remaining))} سيُحسب لصالح رصيد العميل العام</span>
@@ -1178,7 +1232,7 @@ export default function ClientDetail() {
                             مشاريع المقاولات ({contractingProjectsForSelect.length})
                           </SelectLabel>
                           {contractingProjectsForSelect.map((p) => {
-                            const rem = Math.max(0, (clientFinancials.projectBills[p.id] || 0) - (projectPaymentsMap[p.id] || 0));
+                            const rem = clientFinancials.projectRemainders[p.id] || 0;
                             return (
                               <SelectItem key={p.id} value={p.id}>
                                 <div className="flex items-center justify-between w-full gap-2">
@@ -1199,7 +1253,7 @@ export default function ClientDetail() {
                             مشاريع التشطيبات ({finishingProjectsForSelect.length})
                           </SelectLabel>
                           {finishingProjectsForSelect.map((p) => {
-                            const rem = Math.max(0, (clientFinancials.projectBills[p.id] || 0) - (projectPaymentsMap[p.id] || 0));
+                            const rem = clientFinancials.projectRemainders[p.id] || 0;
                             return (
                               <SelectItem key={p.id} value={p.id}>
                                 <div className="flex items-center justify-between w-full gap-2">
@@ -1215,6 +1269,12 @@ export default function ClientDetail() {
                       )}
                     </SelectContent>
                   </Select>
+                  {selectedProjectId === "none" && (
+                    <p className="text-[11px] text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                      <Wallet className="h-3.5 w-3.5" />
+                      لا توجد مطالبة مرتبطة بمشروع؛ سيتم حفظ كامل المبلغ كرصد دائن للزبون.
+                    </p>
+                  )}
                 </div>
 
                 {/* 3. تاريخ السداد وطريقة الدفع */}
@@ -1266,11 +1326,15 @@ export default function ClientDetail() {
                     </Label>
                     <Select
                       value={selectedParentTreasuryId}
-                      onValueChange={(val) => setSelectedParentTreasuryId(val)}
+                      onValueChange={(val) => {
+                        setSelectedParentTreasuryId(val);
+                        setSelectedTreasuryId("");
+                      }}
+                      disabled={parentTreasuries.length <= 1 && !!selectedProjectId && selectedProjectId !== "none"}
                       dir="rtl"
                     >
                       <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue placeholder="اختر القسم..." />
+                        <SelectValue placeholder="اختر الخزينة الرئيسية..." />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
                         {parentTreasuries.map((pt) => (
@@ -1290,11 +1354,11 @@ export default function ClientDetail() {
                     <Select
                       value={selectedTreasuryId}
                       onValueChange={setSelectedTreasuryId}
-                      disabled={!selectedParentTreasuryId}
+                      disabled={!selectedParentTreasuryId || filteredChildTreasuries.length === 0}
                       dir="rtl"
                     >
                       <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue placeholder={selectedParentTreasuryId ? "اختر الفرع..." : "حدد القسم أولاً"} />
+                        <SelectValue placeholder={selectedParentTreasuryId ? "اختر الحساب / الفرع المستلم..." : "حدد الخزينة الرئيسية أولاً"} />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
                         {filteredChildTreasuries.map((ct) => (
@@ -1392,6 +1456,7 @@ export default function ClientDetail() {
       </div>
 
       {/* Financial Overview Row (3 Summary Cards) */}
+      <ClientCreditPanel clientId={id!} projects={(projects || []).map(p => ({ id: p.id, name: p.name, remaining: clientFinancials.projectRemainders[p.id] || 0 }))} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border-border bg-card/60">
           <CardHeader className="pb-2">
@@ -1765,13 +1830,13 @@ export default function ClientDetail() {
           {/* Dedicated Payments Summary Bar Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 p-3.5 rounded-xl bg-green-500/5 border border-green-500/20 text-xs">
             <div>
-              <span className="text-muted-foreground block text-[10px]">إجمالي المقبوضات المسددة</span>
+              <span className="text-muted-foreground block text-[10px]">إجمالي المقبوضات</span>
               <span className="font-black text-sm text-green-600 font-mono">{paymentsSummary.totalPaid.toLocaleString()} د.ل</span>
             </div>
             <div>
               <span className="text-muted-foreground block text-[10px]">توزيع المقبوضات حسب نوع العمل</span>
               <span className="font-semibold text-foreground font-mono">
-                مقاولات: {paymentsSummary.contractingPaid.toLocaleString()} | تشطيب: {paymentsSummary.finishingPaid.toLocaleString()}
+                مقاولات: {paymentsSummary.contractingPaid.toLocaleString()} | تشطيب: {paymentsSummary.finishingPaid.toLocaleString()} | رصيد مقدم: {paymentsSummary.generalPaid.toLocaleString()}
               </span>
             </div>
             <div>

@@ -1,12 +1,24 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useOperationKey } from "@/hooks/useOperationKey";
+import { invalidateFinancialQueries } from "@/lib/financialMutations";
+import { SupplierAdvancePanel } from "@/components/suppliers/SupplierAdvancePanel";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DeterministicBreadcrumb } from "@/components/navigation/DeterministicBreadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -22,9 +34,16 @@ import {
 } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { openReceiptPrintWindow, openPrintWindow } from "@/lib/printStyles";
-import { SupplierProjectSettlementDrawer } from "@/components/suppliers/SupplierProjectSettlementDrawer";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 interface ProjectGroup {
   projectId: string;
@@ -50,11 +69,21 @@ export default function SupplierDetail() {
   const { id, projectId } = useParams<{ id: string; projectId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const paymentOperation = useOperationKey();
 
   const [activeTab, setActiveTab] = useState<"projects" | "statement">("projects");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
   const [expandedProjectInvoices, setExpandedProjectInvoices] = useState<Record<string, boolean>>({});
+
+  // On-Account Payment States
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payTreasuryId, setPayTreasuryId] = useState("");
+  const [payPaymentMethod, setPayPaymentMethod] = useState("cash");
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payReference, setPayReference] = useState("");
+  const [payNotes, setPayNotes] = useState("");
 
   // Auto expand project if projectId route param is present
   useEffect(() => {
@@ -63,8 +92,48 @@ export default function SupplierDetail() {
     }
   }, [projectId]);
 
-  // Drawer state
-  const [selectedDrawerProject, setSelectedDrawerProject] = useState<ProjectGroup | null>(null);
+  // Fetch active treasuries for payment with category domain
+  const { data: treasuriesList = [], isLoading: loadingTreasuries } = useQuery<any[]>({
+    queryKey: ["parent-treasuries-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treasuries")
+        .select("id, name, treasury_type, project_category, parent_id, balance, is_active")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const [paySelectedParentTreasuryId, setPaySelectedParentTreasuryId] = useState("");
+
+  const parentTreasuries = useMemo(() => {
+    return treasuriesList.filter((t: any) => !t.parent_id);
+  }, [treasuriesList]);
+
+  const eligibleBranches = useMemo(() => {
+    if (!paySelectedParentTreasuryId) return [];
+    const children = treasuriesList.filter((t: any) => t.parent_id === paySelectedParentTreasuryId);
+    if (children.length > 0) return children;
+    const parent = treasuriesList.find((t: any) => t.id === paySelectedParentTreasuryId);
+    return parent ? [parent] : [];
+  }, [treasuriesList, paySelectedParentTreasuryId]);
+
+  // Keep the payment form actionable by selecting the first active treasury as soon as it is available
+  useEffect(() => {
+    if (!paySelectedParentTreasuryId && parentTreasuries.length > 0) {
+      setPaySelectedParentTreasuryId(parentTreasuries[0].id);
+    }
+  }, [paySelectedParentTreasuryId, parentTreasuries]);
+
+  useEffect(() => {
+    if (eligibleBranches.length > 0) {
+      if (!payTreasuryId || !eligibleBranches.some((b: any) => b.id === payTreasuryId)) {
+        setPayTreasuryId(eligibleBranches[0].id);
+      }
+    }
+  }, [eligibleBranches, payTreasuryId]);
 
   // Fetch supplier base data
   const { data: supplier, isLoading: loadingSupplier, error: supplierError } = useQuery({
@@ -92,6 +161,7 @@ export default function SupplierDetail() {
           invoice_number,
           title,
           date,
+          created_at,
           total_amount,
           paid_amount,
           status,
@@ -116,9 +186,54 @@ export default function SupplierDetail() {
     enabled: !!id,
   });
 
-  // Fetch all payments for this supplier's purchases
-  const { data: payments = [], isLoading: loadingPayments } = useQuery({
-    queryKey: ["supplier-payments-list", id],
+  // Fetch on-account supplier payment headers
+  const { data: supplierPayments = [], isLoading: loadingSupplierPayments } = useQuery({
+    queryKey: ["supplier-direct-payments", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("supplier_payments")
+        .select(`
+          id,
+          amount,
+          date,
+          created_at,
+          payment_method,
+          reference,
+          notes,
+          treasuries (
+            id,
+            name,
+            treasury_type,
+            project_category
+          )
+        `)
+        .eq("supplier_id", id!)
+        .order("date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  // Allocation rows distinguish supplier advances from amounts actually
+  // settled against invoices. Unallocated header amounts remain supplier
+  // credit and must not reduce invoice dues.
+  const { data: supplierPaymentAllocations = [] } = useQuery({
+    queryKey: ["supplier-payment-allocations", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("supplier_payment_allocations")
+        .select("payment_id, purchase_id, amount, supplier_payments!inner(supplier_id)")
+        .eq("supplier_payments.supplier_id", id!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  // Fetch standalone purchase payments for this supplier's purchases
+  const { data: directPurchasePayments = [], isLoading: loadingDirectPayments } = useQuery({
+    queryKey: ["supplier-purchase-payments-list", id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("purchase_payments")
@@ -127,6 +242,7 @@ export default function SupplierDetail() {
           purchase_id,
           amount,
           date,
+          created_at,
           payment_method,
           notes,
           treasuries (
@@ -175,10 +291,9 @@ export default function SupplierDetail() {
     },
   });
 
-  // Compute Client -> Project Hierarchy
-  const { clientGroups, globalPurchases, globalPaid, globalDue } = useMemo(() => {
+  // Compute Client -> Project Hierarchy & Global Authoritative Balances
+  const { clientGroups, globalPurchases, globalPaid, globalDue, signedBalance } = useMemo(() => {
     let gPurchases = 0;
-    let gPaid = 0;
 
     const projectMap = new Map<string, ProjectGroup>();
 
@@ -210,18 +325,15 @@ export default function SupplierDetail() {
 
       const group = projectMap.get(projId)!;
       group.totalPurchases += pAmt;
+      group.totalPaid += Number(p.paid_amount || 0);
       group.purchases.push(p);
     });
 
-    // 2. Attach Payments to Projects
-    payments.forEach((pay: any) => {
-      const payAmt = Number(pay.amount || 0);
-      gPaid += payAmt;
-
+    // 2. Attach Direct Payments to Projects
+    directPurchasePayments.forEach((pay: any) => {
       const projId = pay.purchases?.project_id || "unassigned";
       if (projectMap.has(projId)) {
         const group = projectMap.get(projId)!;
-        group.totalPaid += payAmt;
         group.payments.push(pay);
       }
     });
@@ -248,16 +360,254 @@ export default function SupplierDetail() {
       cGrp.totalDue += projGrp.totalDue;
     });
 
-    const cList = Array.from(clientMap.values());
-    const gDue = Math.max(0, gPurchases - gPaid);
+    // Authoritative Paid = Sum of supplier_payments + Sum of direct purchase_payments
+    const sPaid = supplierPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    const dPaid = directPurchasePayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    const gPaid = sPaid + dPaid;
+    // Invoice dues and unallocated advances are separate until explicitly allocated.
+    const allocated = supplierPaymentAllocations.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    const gDue = Math.max(0, gPurchases - allocated - dPaid);
+    const signedBalance = gPurchases - gPaid;
 
     return {
-      clientGroups: cList,
+      clientGroups: Array.from(clientMap.values()),
       globalPurchases: gPurchases,
       globalPaid: gPaid,
       globalDue: gDue,
+      signedBalance,
     };
-  }, [purchases, payments]);
+  }, [purchases, supplierPayments, supplierPaymentAllocations, directPurchasePayments]);
+
+  const supplierBalanceInfo = useMemo(() => {
+    if (signedBalance < 0) {
+      return {
+        label: "رصيد مقدم للمورد",
+        amount: Math.abs(signedBalance),
+        color: "text-blue-600 dark:text-blue-400",
+        description: "دفعة مقدمة محفوظة لحساب المورد وتُسوّى مع الفواتير القادمة",
+      };
+    }
+    if (signedBalance === 0) {
+      return {
+        label: "الرصيد",
+        amount: 0,
+        color: "text-foreground",
+        description: "الحساب متوازن بالكامل",
+      };
+    }
+    return {
+      label: "المتبقي للمورد",
+      amount: signedBalance,
+      color: "text-amber-600 dark:text-amber-400",
+      description: "صافي الرصيد المستحق في ذمة المؤسسة",
+    };
+  }, [signedBalance]);
+
+  // Selected Treasury Domain Dues calculation
+  const selectedTreasury = useMemo(() => {
+    return treasuriesList.find((t: any) => t.id === payTreasuryId) || null;
+  }, [treasuriesList, payTreasuryId]);
+
+  const selectedTreasuryDomain = useMemo(() => {
+    if (!selectedTreasury) return null;
+    if (selectedTreasury.project_category) return selectedTreasury.project_category;
+    if (selectedTreasury.name?.includes("تشطيب")) return "finishing";
+    if (selectedTreasury.name?.includes("مقاولات")) return "contracting";
+    return null;
+  }, [selectedTreasury]);
+
+  const treasuryEligibleDue = useMemo(() => {
+    if (!selectedTreasuryDomain) {
+      return globalDue;
+    }
+    const domainPurchases = purchases.filter((p: any) => p.projects?.project_type === selectedTreasuryDomain);
+    const totalDomainInvoices = domainPurchases.reduce((sum: number, p: any) => sum + Number(p.total_amount || 0), 0);
+    const totalDomainPaid = domainPurchases.reduce((sum: number, p: any) => sum + Number(p.paid_amount || 0), 0);
+    return Math.max(0, totalDomainInvoices - totalDomainPaid);
+  }, [selectedTreasuryDomain, purchases, globalDue]);
+
+  // When opening pay modal, set default treasury & amount
+  const handleOpenPayModal = () => {
+    if (treasuriesList.length > 0 && !payTreasuryId) {
+      setPayTreasuryId(treasuriesList[0].id);
+    }
+    if (globalDue > 0) {
+      setPayAmount(globalDue.toString());
+    } else {
+      setPayAmount("");
+    }
+    setIsPayModalOpen(true);
+  };
+
+  // When treasury changes in modal, auto-update payAmount to domain due if full payment desired
+  const handleTreasuryChange = (newTreasuryId: string) => {
+    setPayTreasuryId(newTreasuryId);
+    const tr = treasuriesList.find((t: any) => t.id === newTreasuryId);
+    const dom = tr?.project_category || (tr?.name?.includes("تشطيب") ? "finishing" : tr?.name?.includes("مقاولات") ? "contracting" : null);
+    if (dom) {
+      const dPurchases = purchases.filter((p: any) => p.projects?.project_type === dom);
+      const dInvoices = dPurchases.reduce((sum: number, p: any) => sum + Number(p.total_amount || 0), 0);
+      const dPaid = dPurchases.reduce((sum: number, p: any) => sum + Number(p.paid_amount || 0), 0);
+      const dDue = Math.max(0, dInvoices - dPaid);
+      if (dDue > 0) {
+        setPayAmount(dDue.toString());
+      }
+    } else if (globalDue > 0) {
+      setPayAmount(globalDue.toString());
+    }
+  };
+
+  const payOnAccountMutation = useMutation({
+    mutationFn: async () => {
+      const amt = parseFloat(payAmount);
+      if (!amt || amt <= 0) {
+        throw new Error("يرجى إدخال مبلغ دفع صحيح أكبر من صفر");
+      }
+      if (!payTreasuryId) {
+        throw new Error("يرجى اختيار الخزينة المخصوم منها");
+      }
+
+      const idempotencyKey = paymentOperation.getKey([id, payTreasuryId, amt, payPaymentMethod, payDate, payNotes, payReference]);
+
+      const { data, error } = await (supabase.rpc as any)("pay_supplier_on_account_atomic", {
+        p_supplier_id: id,
+        p_treasury_id: payTreasuryId,
+        p_amount: amt,
+        p_payment_method: payPaymentMethod,
+        p_date: payDate,
+        p_notes: payNotes || null,
+        p_reference: payReference || null,
+        p_idempotency_key: idempotencyKey,
+      });
+
+      if (error) {
+        throw new Error(error.message || "فشلت عملية الدفع على الحساب");
+      }
+      return data;
+    },
+    onSuccess: (data: any) => {
+      paymentOperation.reset();
+      invalidateFinancialQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["supplier-direct-payments", id] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-payment-allocations", id] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-purchase-payments-list", id] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-purchases-detail", id] });
+      queryClient.invalidateQueries({ queryKey: ["supplier-purchase-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["treasuries"] });
+      queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["parent-treasuries-list"] });
+
+      const paidAmt = parseFloat(payAmount);
+
+      toast.success(`تم تسجيل دفعة بقيمة ${formatCurrencyLYD(paidAmt)} على حساب المورد بنجاح`, {
+        action: {
+          label: "طباعة سند الصرف",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `PAY-${data?.payment_id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                date: payDate,
+                type: "payment",
+                amount: paidAmt,
+                paidToOrBy: supplier?.name || "المورد",
+                description: `سداد دفعة على الحساب للمورد: ${supplier?.name || ""}`,
+                paymentMethod: payPaymentMethod,
+                treasuryName: selectedTreasury?.name,
+                notes: payNotes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
+
+      setIsPayModalOpen(false);
+      setPayAmount("");
+      setPayNotes("");
+      setPayReference("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "حدث خطأ أثناء حفظ الدفعة");
+    },
+  });
+
+  // Chronological running balance ledger for supplier account statement
+  const chronologicalStatement = useMemo(() => {
+    const items: Array<{
+      id: string;
+      date: string;
+      createdAt: string;
+      type: "invoice" | "payment";
+      description: string;
+      projectName?: string;
+      invoiceAmount: number;
+      paymentAmount: number;
+      runningBalance: number;
+      paymentRecord?: any;
+    }> = [];
+
+    for (const pur of purchases) {
+      items.push({
+        id: `pur-${pur.id}`,
+        date: pur.date || pur.created_at?.slice(0, 10) || "",
+        createdAt: pur.created_at || "",
+        type: "invoice",
+        description: `فاتورة رقم ${pur.invoice_number || "—"} (${pur.title || "توريد مواد"})`,
+        projectName: pur.projects?.name,
+        invoiceAmount: Number(pur.total_amount || 0),
+        paymentAmount: 0,
+        runningBalance: 0,
+      });
+    }
+
+    for (const sp of supplierPayments) {
+      items.push({
+        id: `sp-${sp.id}`,
+        date: sp.date || sp.created_at?.slice(0, 10) || "",
+        createdAt: sp.created_at || "",
+        type: "payment",
+        description: sp.notes || `دفعة على الحساب - ${sp.treasuries?.name || "الخزينة"}`,
+        projectName: "دفعة على الحساب (تسوية عامة)",
+        invoiceAmount: 0,
+        paymentAmount: Number(sp.amount || 0),
+        runningBalance: 0,
+        paymentRecord: sp,
+      });
+    }
+
+    for (const dp of directPurchasePayments) {
+      items.push({
+        id: `dp-${dp.id}`,
+        date: dp.date || dp.created_at?.slice(0, 10) || "",
+        createdAt: dp.created_at || "",
+        type: "payment",
+        description: dp.notes || `سداد دفعة فاتورة ${dp.purchases?.invoice_number || ""}`,
+        projectName: dp.purchases?.projects?.name,
+        invoiceAmount: 0,
+        paymentAmount: Number(dp.amount || 0),
+        runningBalance: 0,
+        paymentRecord: dp,
+      });
+    }
+
+    items.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+
+    let running = 0;
+    for (const item of items) {
+      if (item.type === "invoice") {
+        running += item.invoiceAmount;
+      } else {
+        running -= item.paymentAmount;
+      }
+      item.runningBalance = running;
+    }
+
+    return items;
+  }, [purchases, supplierPayments, directPurchasePayments]);
 
   // Filter Client/Project by Search Query
   const filteredClientGroups = useMemo(() => {
@@ -394,52 +744,76 @@ export default function SupplierDetail() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handlePrintStatement} className="gap-1.5 text-xs">
-            <Printer className="h-4 w-4" />
+          <Button
+            onClick={handleOpenPayModal}
+            className="gap-1.5 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer"
+            title="تسجيل دفعة على الحساب للمورد"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>دفع على الحساب</span>
+            <Badge variant="secondary" className="mr-1 text-[10px] bg-primary-foreground/20 text-primary-foreground font-black px-1.5 py-0">
+              {globalDue > 0 ? formatCurrencyLYD(globalDue) : "مقدم"}
+            </Badge>
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handlePrintStatement} className="gap-1.5 text-xs font-bold bg-card border-border/80 hover:bg-muted cursor-pointer shadow-2xs">
+            <Printer className="h-4 w-4 text-primary" />
             <span>طباعة كشف الحساب</span>
           </Button>
         </div>
       </div>
 
       {/* Top Reconciled Summary KPIs */}
+      <SupplierAdvancePanel supplierId={id!} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-medium">إجمالي المشتريات</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+            <span className="text-xs text-muted-foreground font-bold">إجمالي الفواتير</span>
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
               <ShoppingCart className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-xl font-extrabold text-foreground mt-2" dir="ltr">
+          <p className="text-2xl font-black text-foreground mt-2" dir="ltr">
             {formatCurrencyLYD(globalPurchases)}
           </p>
-          <span className="text-[11px] text-muted-foreground">مجموع الفواتير بكافة المشاريع</span>
+          <span className="text-[11px] text-muted-foreground font-medium">مجموع الفواتير المسجلة للمورد</span>
         </Card>
 
-        <Card className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-medium">إجمالي المسدد</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
+            <span className="text-xs text-muted-foreground font-bold">إجمالي المدفوعات</span>
+            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <Wallet className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2" dir="ltr">
+          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2" dir="ltr">
             {formatCurrencyLYD(globalPaid)}
           </p>
-          <span className="text-[11px] text-muted-foreground">سندات الصرف المسجلة</span>
+          <span className="text-[11px] text-muted-foreground font-medium">سندات الصرف والدفعات المسددة</span>
         </Card>
 
-        <Card className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-700 dark:text-amber-300 font-bold">صافي المتبقي للمورد</span>
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-700">
-              <Receipt className="h-4 w-4" />
+        <Card className="rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-primary/[0.03] to-card p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-bold ${supplierBalanceInfo.color}`}>{supplierBalanceInfo.label}</span>
+              <div className="p-2 rounded-xl bg-primary/20 text-primary">
+                <Receipt className="h-4 w-4" />
+              </div>
             </div>
+            <p className={`text-2xl font-black ${supplierBalanceInfo.color} mt-2`} dir="ltr">
+              {formatCurrencyLYD(supplierBalanceInfo.amount)}
+            </p>
+            <span className="text-[11px] text-foreground/80 font-medium">{supplierBalanceInfo.description}</span>
           </div>
-          <p className="text-xl font-extrabold text-amber-700 dark:text-amber-400 mt-2" dir="ltr">
-            {formatCurrencyLYD(globalDue)}
-          </p>
-          <span className="text-[11px] text-amber-700/80">المستحق واجب التسوية</span>
+
+          <Button
+            size="sm"
+            onClick={handleOpenPayModal}
+            className="mt-3 w-full h-8 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer gap-1"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>{globalDue > 0 ? `دفع على الحساب (${formatCurrencyLYD(globalDue)})` : "تسجيل دفعة مقدمة"}</span>
+          </Button>
         </Card>
       </div>
 
@@ -458,7 +832,7 @@ export default function SupplierDetail() {
               <FileText className="h-3.5 w-3.5" />
               <span>سجل السندات والعمليات</span>
               <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0">
-                {payments.length}
+                {supplierPayments.length + directPurchasePayments.length}
               </Badge>
             </TabsTrigger>
           </TabsList>
@@ -605,7 +979,7 @@ export default function SupplierDetail() {
                                 <Button
                                   size="sm"
                                   className="h-8 bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1 text-xs px-3 shadow-sm"
-                                  onClick={() => setSelectedDrawerProject(proj)}
+                                  onClick={handleOpenPayModal}
                                   disabled={proj.totalDue <= 0}
                                 >
                                   <Sparkles className="h-3.5 w-3.5" />
@@ -663,79 +1037,95 @@ export default function SupplierDetail() {
           )}
         </TabsContent>
 
-        {/* TAB 2: FULL CHRONOLOGICAL STATEMENT */}
+        {/* TAB 2: FULL CHRONOLOGICAL RUNNING BALANCE STATEMENT */}
         <TabsContent value="statement" className="mt-2">
-          <Card className="rounded-2xl border border-border/60 overflow-hidden shadow-sm">
-            <CardHeader className="p-4 bg-muted/20 border-b border-border/40 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-amber-600" />
-                <span>سجل سندات الصرف والدفعات المباشرة</span>
+          <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-xs bg-card">
+            <CardHeader className="p-4 bg-muted/20 border-b border-border/60 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                <Receipt className="h-4 w-4 text-primary" />
+                <span>كشف الحساب التراكمي وسجل الحركات المالية</span>
               </CardTitle>
-              <Badge variant="outline" className="text-xs">
-                {payments.length} سندات سداد
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs font-bold border-border/80">
+                  {chronologicalStatement.length} حركة مسجلة
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handlePrintStatement}
+                  className="h-7 text-xs gap-1 font-bold cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5 text-primary" />
+                  <span>طباعة الكشف</span>
+                </Button>
+              </div>
             </CardHeader>
             <div className="overflow-x-auto">
-              <Table className="text-xs">
-                <TableHeader>
+              <Table className="text-xs" dir="rtl">
+                <TableHeader className="bg-muted/40">
                   <TableRow>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">المشروع</TableHead>
-                    <TableHead className="text-right">الفاتورة / المرجع</TableHead>
-                    <TableHead className="text-right">الخزينة المخصوم منها</TableHead>
-                    <TableHead className="text-right">طريقة الدفع</TableHead>
-                    <TableHead className="text-right">المبلغ المسدد</TableHead>
-                    <TableHead className="text-center">إيصال</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">التاريخ</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">البيان / المشروع</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">قيمة الفاتورة (+)</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">الدفعة المسددة (-)</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">الرصيد التراكمي</TableHead>
+                    <TableHead className="text-center font-bold text-foreground">سند الصرف</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments.length === 0 ? (
+                  {chronologicalStatement.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                        لا توجد سندات سداد مسجلة لهذا المورد.
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground font-medium">
+                        لا توجد حركات مسجلة في كشف حساب المورد حتى الآن.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    payments.map((pay: any) => (
-                      <TableRow key={pay.id}>
-                        <TableCell className="font-medium">{pay.date}</TableCell>
-                        <TableCell>{pay.purchases?.projects?.name || "—"}</TableCell>
+                    chronologicalStatement.map((st) => (
+                      <TableRow key={st.id} className="hover:bg-muted/30">
+                        <TableCell className="font-semibold">{st.date}</TableCell>
                         <TableCell>
-                          {pay.purchases?.title || (pay.purchases?.invoice_number ? `فاتورة: ${pay.purchases.invoice_number}` : "فاتورة شراء")}
+                          <div className="font-bold text-foreground">{st.description}</div>
+                          {st.projectName && (
+                            <div className="text-[11px] text-muted-foreground">مشروع: {st.projectName}</div>
+                          )}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {pay.treasuries?.name || "خزينة المشروع"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {pay.payment_method === "cash" ? "نقدي" : pay.payment_method === "transfer" ? "تحويل مصرفي" : "شيك"}
+                        <TableCell className="font-bold text-blue-600 dark:text-blue-400" dir="ltr">
+                          {st.invoiceAmount > 0 ? `+${formatCurrencyLYD(st.invoiceAmount)}` : "—"}
                         </TableCell>
                         <TableCell className="font-bold text-emerald-600 dark:text-emerald-400" dir="ltr">
-                          {formatCurrencyLYD(pay.amount)}
+                          {st.paymentAmount > 0 ? `-${formatCurrencyLYD(st.paymentAmount)}` : "—"}
+                        </TableCell>
+                        <TableCell className="font-black text-foreground" dir="ltr">
+                          {formatCurrencyLYD(st.runningBalance)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                            onClick={() =>
-                              openReceiptPrintWindow(
-                                {
-                                  receiptNumber: `PAY-${pay.id.slice(0, 8)}`,
-                                  date: pay.date,
-                                  type: "payment",
-                                  amount: Number(pay.amount || 0),
-                                  paidToOrBy: supplier.name,
-                                  description: pay.notes || `سداد مستحقات توريد مواد`,
-                                  projectName: pay.purchases?.projects?.name,
-                                },
-                                companySettings
-                              )
-                            }
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
+                          {st.type === "payment" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                              title="طباعة سند الصرف"
+                              onClick={() =>
+                                openReceiptPrintWindow(
+                                  {
+                                    receiptNumber: `PAY-${st.paymentRecord?.id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                                    date: st.date,
+                                    type: "payment",
+                                    amount: st.paymentAmount,
+                                    paidToOrBy: supplier.name,
+                                    description: st.description || `سداد مستحقات توريد مواد`,
+                                    projectName: st.projectName,
+                                    paymentMethod: st.paymentRecord?.payment_method || "cash",
+                                    treasuryName: st.paymentRecord?.treasuries?.name,
+                                    notes: st.paymentRecord?.notes || undefined,
+                                  },
+                                  companySettings
+                                )
+                              }
+                            >
+                              <Printer className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -747,26 +1137,228 @@ export default function SupplierDetail() {
         </TabsContent>
       </Tabs>
 
-      {/* FAST PROJECT SETTLEMENT DRAWER */}
-      {selectedDrawerProject && (
-        <SupplierProjectSettlementDrawer
-          isOpen={!!selectedDrawerProject}
-          onClose={() => setSelectedDrawerProject(null)}
-          supplierId={supplier.id}
-          supplierName={supplier.name}
-          projectId={selectedDrawerProject.projectId}
-          projectName={selectedDrawerProject.projectName}
-          projectType={selectedDrawerProject.projectType}
-          clientName={selectedDrawerProject.clientName}
-          totalPurchases={selectedDrawerProject.totalPurchases}
-          totalPaid={selectedDrawerProject.totalPaid}
-          totalDue={selectedDrawerProject.totalDue}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["supplier-purchases-detail", id] });
-            queryClient.invalidateQueries({ queryKey: ["supplier-payments-list", id] });
-          }}
-        />
-      )}
+      {/* DIALOG: SIMPLE ON-ACCOUNT PAYMENT FOR SUPPLIER */}
+      <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <span>دفع على حساب المورد</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              تسجيل دفعة مالية للمورد؛ تُسوّى تلقائياً مع الفواتير القائمة، وأي فائض يُحفظ كرصد مقدم للفواتير القادمة.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Party Summary Box */}
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/80 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-bold">المورد:</span>
+              <span className="font-black text-foreground">{supplier.name}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/60 text-center">
+              <div>
+                <span className="text-[10px] text-muted-foreground font-bold block">إجمالي الفواتير</span>
+                <span className="text-xs font-black text-foreground" dir="ltr">
+                  {formatCurrencyLYD(globalPurchases)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground font-bold block">المدفوع سابقاً</span>
+                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400" dir="ltr">
+                  {formatCurrencyLYD(globalPaid)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground font-bold block">{supplierBalanceInfo.label}</span>
+                <span className={`text-xs font-black ${supplierBalanceInfo.color}`} dir="ltr">
+                  {formatCurrencyLYD(supplierBalanceInfo.amount)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              payOnAccountMutation.mutate();
+            }}
+            className="space-y-3.5 py-1"
+          >
+            <div className="space-y-3 p-3 bg-muted/40 rounded-xl border border-border/80">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">القسم / الخزينة الرئيسية *</Label>
+                <Select
+                  value={paySelectedParentTreasuryId}
+                  onValueChange={(pId) => {
+                    setPaySelectedParentTreasuryId(pId);
+                    const children = treasuriesList.filter((t: any) => t.parent_id === pId);
+                    const chosen = children.length > 0 ? children[0].id : pId;
+                    handleTreasuryChange(chosen);
+                  }}
+                  required
+                  dir="rtl"
+                  disabled={loadingTreasuries || payOnAccountMutation.isPending}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="اختر الخزينة الرئيسية..." />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    {parentTreasuries.map((pt: any) => (
+                      <SelectItem key={pt.id} value={pt.id} className="text-xs">
+                        {pt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">الحساب / الفرع المخصوم منه *</Label>
+                <Select
+                  value={payTreasuryId}
+                  onValueChange={handleTreasuryChange}
+                  required
+                  dir="rtl"
+                  disabled={!paySelectedParentTreasuryId || loadingTreasuries || payOnAccountMutation.isPending}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder={paySelectedParentTreasuryId ? "اختر الحساب أو الفرع..." : "حدد الخزينة الرئيسية أولاً"} />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    {eligibleBranches.map((tr: any) => (
+                      <SelectItem key={tr.id} value={tr.id} className="text-xs">
+                        {tr.name} ({tr.treasury_type === 'bank' ? 'مصرفي' : 'نقدي'}) - رصيد: {formatCurrencyLYD(tr.balance || 0)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {loadingTreasuries && (
+                  <p className="text-[11px] text-muted-foreground">جاري تحميل الخزائن المتاحة...</p>
+                )}
+                {!loadingTreasuries && treasuriesList.length === 0 && (
+                  <p className="text-[11px] text-destructive">لا توجد خزينة نشطة متاحة للصرف. فعّل خزينة من الإعدادات أولاً.</p>
+                )}
+              </div>
+            </div>
+
+              {/* Dynamic Domain Due Calculation Indicator */}
+              {payTreasuryId && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-muted/60 text-[11px] mt-1">
+                  <span className="text-muted-foreground font-medium">المستحق من هذه الخزينة:</span>
+                  <span className={`font-black ${treasuryEligibleDue > 0 ? "text-primary" : "text-blue-600 dark:text-blue-400"}`} dir="ltr">
+                    {formatCurrencyLYD(treasuryEligibleDue)}
+                  </span>
+                </div>
+              )}
+              {payTreasuryId && treasuryEligibleDue <= 0 && (
+                <p className="text-[11px] text-primary font-bold flex items-center gap-1 mt-0.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>لا توجد فواتير مستحقة حالياً؛ ستُسجّل الدفعة كرصد مقدم للمورد</span>
+                </p>
+              )}
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold">المبلغ المدفوع الآن (د.ل) *</Label>
+                {treasuryEligibleDue > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPayAmount(treasuryEligibleDue.toString())}
+                    className="text-[10px] text-primary hover:underline font-bold cursor-pointer"
+                  >
+                    سداد كامل الرصيد المتاح
+                  </button>
+                )}
+              </div>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                placeholder="أدخل المبلغ المراد سداده"
+                className="text-left font-black text-sm h-9"
+                dir="ltr"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">طريقة الدفع *</Label>
+                <Select value={payPaymentMethod} onValueChange={setPayPaymentMethod} dir="rtl">
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="cash">نقداً (كاش)</SelectItem>
+                    <SelectItem value="transfer">تحويل مصرفي</SelectItem>
+                    <SelectItem value="check">صك مصدق</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">التاريخ *</Label>
+                <Input
+                  type="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  className="text-xs h-9"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">رقم المرجع / الشيك (اختياري)</Label>
+              <Input
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                placeholder="رقم الحوالة أو الصك أو الإيصال اليدوي"
+                className="text-xs h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">ملاحظات (اختياري)</Label>
+              <Textarea
+                value={payNotes}
+                onChange={(e) => setPayNotes(e.target.value)}
+                placeholder="أي ملاحظات حول هذه الدفعة..."
+                rows={2}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="submit"
+                className="flex-1 text-xs h-9 font-bold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer shadow-xs gap-1.5"
+                disabled={
+                  payOnAccountMutation.isPending || 
+                  !payAmount || 
+                  parseFloat(payAmount) <= 0 || 
+                  !payTreasuryId ||
+                  loadingTreasuries
+                }
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>{payOnAccountMutation.isPending ? "جاري حفظ الدفعة..." : "حفظ الدفعة وصرف السند"}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-xs h-9 cursor-pointer"
+                onClick={() => setIsPayModalOpen(false)}
+              >
+                إلغاء
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

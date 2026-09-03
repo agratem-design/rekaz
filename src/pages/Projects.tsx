@@ -202,7 +202,7 @@ const Projects = ({ type }: ProjectsProps = {}) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_payments")
-        .select("project_id, amount");
+        .select("project_id, amount").is("reversed_at", null);
       if (error) throw error;
       const map: Record<string, number> = {};
       data?.forEach((p) => {
@@ -225,6 +225,23 @@ const Projects = ({ type }: ProjectsProps = {}) => {
       data?.forEach((item) => {
         if (!item.project_id) return;
         map[item.project_id] = (map[item.project_id] || 0) + Number(item.total_price || 0);
+      });
+      return map;
+    },
+  });
+
+  // Fetch total active contracts value per project
+  const { data: projectContractsMap } = useQuery({
+    queryKey: ["projects-contracts-total"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("project_id, amount, status");
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      data?.forEach((c) => {
+        if (!c.project_id || c.status === "cancelled") return;
+        map[c.project_id] = (map[c.project_id] || 0) + Number(c.amount || 0);
       });
       return map;
     },
@@ -453,17 +470,19 @@ const Projects = ({ type }: ProjectsProps = {}) => {
             const phases = phasesMap?.[project.id] || [];
             const isOverBudget = !isEngineer && project.budget > 0 && (project.spent || 0) > project.budget;
 
-            const totalWorkValue = projectItemsTotalMap?.[project.id] || 0;
+            const contractsVal = projectContractsMap?.[project.id] || 0;
+            const itemsVal = projectItemsTotalMap?.[project.id] || 0;
+            const contractingObligation = contractsVal > 0 ? contractsVal : (itemsVal > 0 ? itemsVal : Number(project.budget || 0));
             const receivedAmount = projectPaymentsMap?.[project.id] || 0;
-            const remainingDue = totalWorkValue - receivedAmount;
-            const paymentRatio = totalWorkValue > 0 ? Math.round((receivedAmount / totalWorkValue) * 100) : 0;
+            const contractingRemaining = Math.max(0, contractingObligation - receivedAmount);
+            const paymentRatio = contractingObligation > 0 ? Math.round((receivedAmount / contractingObligation) * 100) : 0;
 
             const spentBeforeCommission = project.spent || 0;
             const finishingPercentage = Number((project as any).finishing_percentage || 0);
             const commissionValue = (spentBeforeCommission * finishingPercentage) / 100;
             const totalFinishingDue = spentBeforeCommission + commissionValue;
             const receivedFromClient = projectPaymentsMap?.[project.id] || 0;
-            const remainingFromClient = totalFinishingDue - receivedFromClient;
+            const remainingFromClient = Math.max(0, totalFinishingDue - receivedFromClient);
 
             return (
               <Card
@@ -523,25 +542,25 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                 {/* Card Content */}
                 <CardContent className="p-4 flex-1 flex flex-col justify-between space-y-4">
                   {/* Title & Metadata */}
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-1">
+                  <div className="space-y-1.5">
+                    <h3 className="font-extrabold text-lg text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-1">
                       {project.name}
                     </h3>
-                    <div className="grid grid-cols-1 gap-1.5 text-xs text-muted-foreground mt-2">
+                    <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground mt-1">
                       {project.clients?.name && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <Building className="h-3.5 w-3.5 text-muted-foreground/75 shrink-0" />
                           <span className="truncate">{project.clients.name}</span>
                         </div>
                       )}
                       {project.location && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-muted-foreground/75 shrink-0" />
                           <span className="truncate">{project.location}</span>
                         </div>
                       )}
                       {project.supervising_engineer?.name && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <HardHat className="h-3.5 w-3.5 text-muted-foreground/75 shrink-0" />
                           <span className="truncate">{project.supervising_engineer.name}</span>
                         </div>
@@ -564,21 +583,21 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                       <div className="space-y-2.5 pt-3 border-t border-border/60">
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div>
-                            <p className="text-muted-foreground mb-0.5">قيمة الأعمال</p>
+                            <p className="text-muted-foreground mb-0.5">قيمة المشروع</p>
                             <p className="font-bold text-foreground">
-                              {formatCurrencyLYD(totalWorkValue)}
+                              {formatCurrencyLYD(contractingObligation)}
                             </p>
                           </div>
                           <div className="text-center">
-                            <p className="text-muted-foreground mb-0.5">المقبوض</p>
+                            <p className="text-muted-foreground mb-0.5">المسدد</p>
                             <p className="font-bold text-green-600">
                               {formatCurrencyLYD(receivedAmount)}
                             </p>
                           </div>
                           <div className="text-left">
-                            <p className="text-muted-foreground mb-0.5">المستحق</p>
-                            <p className={`font-bold ${remainingDue > 0 ? "text-amber-600" : "text-foreground"}`}>
-                              {formatCurrencyLYD(remainingDue)}
+                            <p className="text-muted-foreground mb-0.5">المتبقي على العميل</p>
+                            <p className={`font-bold ${contractingRemaining > 0 ? "text-amber-600 font-black" : "text-foreground"}`}>
+                              {formatCurrencyLYD(contractingRemaining)}
                             </p>
                           </div>
                         </div>
@@ -595,30 +614,36 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                         <div className="space-y-2.5 pt-3 border-t border-border/60">
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <div>
-                              <p className="text-muted-foreground mb-0.5">المصروفات ({finishingPercentage}%)</p>
-                              <div className="font-bold text-foreground">
+                              <p className="text-muted-foreground mb-0.5">التكلفة المباشرة</p>
+                              <p className="font-bold text-foreground">
                                 {formatCurrencyLYD(spentBeforeCommission)}
-                                <span className="text-[10px] text-muted-foreground block font-normal mt-0.5" title="أتعاب الشركة">أتعاب: {formatCurrencyLYD(commissionValue)}</span>
-                              </div>
+                              </p>
                             </div>
                             <div className="text-center">
-                              <p className="text-muted-foreground mb-0.5">المستحق</p>
+                              <p className="text-muted-foreground mb-0.5">أتعاب الشركة ({finishingPercentage}%)</p>
                               <p className="font-bold text-primary">
-                                {formatCurrencyLYD(totalFinishingDue)}
+                                {formatCurrencyLYD(commissionValue)}
                               </p>
                             </div>
                             <div className="text-left">
-                              <p className="text-muted-foreground mb-0.5">المقبوض</p>
-                              <p className="font-bold text-green-600">
-                                {formatCurrencyLYD(receivedFromClient)}
+                              <p className="text-muted-foreground mb-0.5">إجمالي المستحق</p>
+                              <p className="font-bold text-foreground">
+                                {formatCurrencyLYD(totalFinishingDue)}
                               </p>
                             </div>
                           </div>
-                          {remainingFromClient > 0 && (
-                            <div className="text-[10.5px] text-amber-600 font-bold text-center bg-amber-500/10 rounded py-0.5">
-                              المتبقي على الزبون: {formatCurrencyLYD(remainingFromClient)}
+                          <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-border/40">
+                            <div>
+                              <span className="text-muted-foreground">المسدد: </span>
+                              <span className="font-bold text-green-600">{formatCurrencyLYD(receivedFromClient)}</span>
                             </div>
-                          )}
+                            <div className="text-left">
+                              <span className="text-muted-foreground">المتبقي على العميل: </span>
+                              <span className={`font-bold ${remainingFromClient > 0 ? "text-amber-600 font-black" : "text-foreground"}`}>
+                                {formatCurrencyLYD(remainingFromClient)}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-3 gap-2 text-xs pt-3 border-t border-border/60">
@@ -761,17 +786,19 @@ const Projects = ({ type }: ProjectsProps = {}) => {
               <TableBody>
                 {filteredProjects?.map((project) => {
                   const isOverBudget = !isEngineer && project.budget > 0 && (project.spent || 0) > project.budget;
-                  const totalWorkValue = projectItemsTotalMap?.[project.id] || 0;
+                  const contractsVal = projectContractsMap?.[project.id] || 0;
+                  const itemsVal = projectItemsTotalMap?.[project.id] || 0;
+                  const contractingObligation = contractsVal > 0 ? contractsVal : (itemsVal > 0 ? itemsVal : Number(project.budget || 0));
                   const receivedAmount = projectPaymentsMap?.[project.id] || 0;
-                  const remainingDue = totalWorkValue - receivedAmount;
-                  const paymentRatio = totalWorkValue > 0 ? Math.round((receivedAmount / totalWorkValue) * 100) : 0;
+                  const contractingRemaining = Math.max(0, contractingObligation - receivedAmount);
+                  const paymentRatio = contractingObligation > 0 ? Math.round((receivedAmount / contractingObligation) * 100) : 0;
 
                   const spentBeforeCommission = project.spent || 0;
                   const finishingPercentage = Number((project as any).finishing_percentage || 0);
                   const commissionValue = (spentBeforeCommission * finishingPercentage) / 100;
                   const totalFinishingDue = spentBeforeCommission + commissionValue;
                   const receivedFromClient = projectPaymentsMap?.[project.id] || 0;
-                  const remainingFromClient = totalFinishingDue - receivedFromClient;
+                  const remainingFromClient = Math.max(0, totalFinishingDue - receivedFromClient);
 
                   return (
                     <TableRow
@@ -832,27 +859,27 @@ const Projects = ({ type }: ProjectsProps = {}) => {
                         project.project_type === "contracting" ? (
                           <>
                             <TableCell className="text-xs font-semibold">
-                              {formatCurrencyLYD(totalWorkValue)}
-                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">قيمة الأعمال</span>
+                              {formatCurrencyLYD(contractingObligation)}
+                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">قيمة المشروع</span>
                             </TableCell>
                             <TableCell className="text-xs font-semibold">
-                              <span className={remainingDue > 0 ? "text-amber-600 font-bold" : "text-foreground font-semibold"}>
-                                {formatCurrencyLYD(remainingDue)}
+                              <span className={contractingRemaining > 0 ? "text-amber-600 font-bold" : "text-foreground font-semibold"}>
+                                {formatCurrencyLYD(contractingRemaining)}
                               </span>
-                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">المستحق (سداد: {paymentRatio}%)</span>
+                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">المتبقي على العميل (سداد: {paymentRatio}%)</span>
                             </TableCell>
                           </>
                         ) : project.project_type === "finishing" ? (
                           <>
                             <TableCell className="text-xs font-semibold">
                               {formatCurrencyLYD(spentBeforeCommission)}
-                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">المصروفات ({finishingPercentage}%)</span>
+                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5">التكلفة المباشرة</span>
                             </TableCell>
                             <TableCell className="text-xs font-semibold">
                               <span className="text-primary font-bold">
                                 {formatCurrencyLYD(totalFinishingDue)}
                               </span>
-                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5" title={`المقبوض: ${formatCurrencyLYD(receivedFromClient)}`}>المستحق (متبقي: {formatCurrencyLYD(remainingFromClient)})</span>
+                              <span className="text-[10px] text-muted-foreground block font-normal mt-0.5" title={`المقبوض: ${formatCurrencyLYD(receivedFromClient)}`}>المستحق (المتبقي على العميل: {formatCurrencyLYD(remainingFromClient)})</span>
                             </TableCell>
                           </>
                         ) : (

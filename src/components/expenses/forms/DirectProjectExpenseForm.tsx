@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
+import { invalidateProjectFinancialSummary } from "@/hooks/useProjectFinancialSummary";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -187,10 +188,7 @@ export const DirectProjectExpenseForm: React.FC<DirectProjectExpenseFormProps> =
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["project-financial-summary", projectId] });
-      queryClient.invalidateQueries({
-        queryKey: ["project-financial-summary-authoritative-v4", projectId],
-      });
+      invalidateProjectFinancialSummary(queryClient, projectId);
 
       toast({
         title: editingExpense ? "تم تحديث المصروف بنجاح" : "تم حفظ المصروف بنجاح",
@@ -320,11 +318,11 @@ export const DirectProjectExpenseForm: React.FC<DirectProjectExpenseFormProps> =
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5" />
-                بند المقايسة المرتبط (اختياري)
+                بند المشروع المرتبط (اختياري)
               </Label>
               <Select value={projectItemId} onValueChange={setProjectItemId} disabled={saveMutation.isPending}>
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="اختر بند المقايسة المرتبط..." />
+                  <SelectValue placeholder="اختر بند المشروع المرتبط..." />
                 </SelectTrigger>
                 <SelectContent dir="rtl">
                   <SelectItem value="__none__">غير مرتبط ببند محدد (عام للمشروع)</SelectItem>
@@ -335,6 +333,9 @@ export const DirectProjectExpenseForm: React.FC<DirectProjectExpenseFormProps> =
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground">
+                اختياري — اختر البند الذي ترتبط به هذه العملية داخل المشروع.
+              </p>
             </div>
           )}
         </div>

@@ -11,6 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Building2,
   Image as ImageIcon,
@@ -37,7 +46,13 @@ import {
   Wallet,
   Landmark,
   Coins,
-  TrendingUp
+  TrendingUp,
+  Wrench,
+  Plus,
+  Edit,
+  Power,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 const Settings = () => {
@@ -74,6 +89,80 @@ const Settings = () => {
   const [showFreeimageKey, setShowFreeimageKey] = useState(false);
   const [showPostimagesKey, setShowPostimagesKey] = useState(false);
   const [showCloudinaryKey, setShowCloudinaryKey] = useState(false);
+
+  // Technician Specialties Master Data States
+  const [isSpecialtyModalOpen, setIsSpecialtyModalOpen] = useState(false);
+  const [editingSpecialty, setEditingSpecialty] = useState<any | null>(null);
+  const [specName, setSpecName] = useState("");
+  const [specDesc, setSpecDesc] = useState("");
+  const [specCode, setSpecCode] = useState("");
+
+  const { data: technicianTypesList = [], isLoading: isLoadingTypes } = useQuery<any[]>({
+    queryKey: ["technician-types-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("technician_types" as any)
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data as any[]) || [];
+    },
+  });
+
+  const saveSpecialtyMutation = useMutation({
+    mutationFn: async () => {
+      if (!specName.trim()) throw new Error("يرجى إدخال اسم التخصص");
+      if (editingSpecialty) {
+        const { error } = await (supabase
+          .from("technician_types" as any)
+          .update({
+            name: specName.trim(),
+            description: specDesc.trim() || null,
+          } as any)
+          .eq("id", editingSpecialty.id));
+        if (error) throw error;
+      } else {
+        const generatedCode = specCode.trim() || `type_${Date.now()}`;
+        const { error } = await (supabase
+          .from("technician_types" as any)
+          .insert({
+            name: specName.trim(),
+            description: specDesc.trim() || null,
+            code: generatedCode,
+            is_active: true,
+          } as any));
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["technician-types-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["technician-types"] });
+      toast.success(editingSpecialty ? "تم تحديث التخصص بنجاح" : "تمت إضافة التخصص بنجاح");
+      setIsSpecialtyModalOpen(false);
+      setEditingSpecialty(null);
+      setSpecName("");
+      setSpecDesc("");
+      setSpecCode("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "حدث خطأ أثناء حفظ التخصص");
+    },
+  });
+
+  const toggleSpecialtyActiveMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await (supabase
+        .from("technician_types" as any)
+        .update({ is_active: !is_active } as any)
+        .eq("id", id));
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["technician-types-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["technician-types"] });
+      toast.success("تم تحديث حالة التخصص");
+    },
+  });
 
   // Fetch settings
   const { data: settings, isLoading } = useQuery({
@@ -289,26 +378,30 @@ const Settings = () => {
 
       {/* Main Tabbed settings */}
       <Tabs defaultValue="company" className="w-full" dir="rtl">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full bg-secondary border border-border p-1 rounded-lg">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 w-full bg-secondary border border-border p-1 rounded-lg">
           <TabsTrigger value="company" className="gap-2 cursor-pointer transition-all">
             <Building2 className="h-4 w-4" />
             بيانات المؤسسة
           </TabsTrigger>
           <TabsTrigger value="image-api" className="gap-2 cursor-pointer transition-all">
             <ImageIcon className="h-4 w-4" />
-            رفع الصور والمستندات
+            رفع الصور
           </TabsTrigger>
           <TabsTrigger value="theme" className="gap-2 cursor-pointer transition-all">
             <Palette className="h-4 w-4" />
-            مظهر وألوان النظام
+            مظهر النظام
           </TabsTrigger>
           <TabsTrigger value="financial-sync" className="gap-2 cursor-pointer transition-all">
             <Wallet className="h-4 w-4" />
-            الربط المالي والخزائن
+            الربط المالي
+          </TabsTrigger>
+          <TabsTrigger value="technician-types" className="gap-2 cursor-pointer transition-all">
+            <Wrench className="h-4 w-4" />
+            تخصصات الفنيين
           </TabsTrigger>
           <TabsTrigger value="admin-tools" className="gap-2 cursor-pointer transition-all">
             <Sliders className="h-4 w-4" />
-            أدوات الإدارة السريعة
+            أدوات الإدارة
           </TabsTrigger>
         </TabsList>
 
@@ -1195,12 +1288,186 @@ const Settings = () => {
                     </div>
                   </div>
                 </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
+        {/* Tab 5: Technician Types Master Data */}
+        <TabsContent value="technician-types" className="mt-6">
+          <Card className="border-border bg-card">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+                  <Wrench className="h-5 w-5 text-primary" />
+                  دليل تخصصات الفنيين المعتمدة
+                </CardTitle>
+                <CardDescription>
+                  إدارة وتخصيص المهن والتخصصات الفنية المعتمدة لإسناد الأعمال ومتابعة نسب الإنجاز.
+                </CardDescription>
+              </div>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingSpecialty(null);
+                    setSpecName("");
+                    setSpecDesc("");
+                    setSpecCode("");
+                    setIsSpecialtyModalOpen(true);
+                  }}
+                  className="gap-1.5 cursor-pointer text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>إضافة تخصص جديد</span>
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-xl border border-border overflow-hidden">
+                <Table dir="rtl">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right font-bold text-xs">اسم التخصص</TableHead>
+                      <TableHead className="text-right font-bold text-xs">الرمز البرمجي</TableHead>
+                      <TableHead className="text-right font-bold text-xs">الوصف</TableHead>
+                      <TableHead className="text-center font-bold text-xs">الحالة</TableHead>
+                      {isAdmin && <TableHead className="text-left font-bold text-xs">الإجراءات</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingTypes ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-6 text-xs text-muted-foreground">
+                          جاري تحميل التخصصات...
+                        </TableCell>
+                      </TableRow>
+                    ) : technicianTypesList.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-6 text-xs text-muted-foreground">
+                          لا توجد تخصصات مسجلة حالياً
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      technicianTypesList.map((item: any) => (
+                        <TableRow key={item.id} className="hover:bg-muted/20">
+                          <TableCell className="font-bold text-sm text-foreground">{item.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground font-mono" dir="ltr">{item.code || "-"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{item.description || "-"}</TableCell>
+                          <TableCell className="text-center">
+                            {item.is_active ? (
+                              <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>نشط</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-muted-foreground/40 bg-muted text-muted-foreground font-bold text-[11px] gap-1">
+                                <XCircle className="h-3 w-3" />
+                                <span>معطل</span>
+                              </Badge>
+                            )}
+                          </TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-left">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                                  onClick={() => {
+                                    setEditingSpecialty(item);
+                                    setSpecName(item.name);
+                                    setSpecDesc(item.description || "");
+                                    setSpecCode(item.code || "");
+                                    setIsSpecialtyModalOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-7 w-7 cursor-pointer ${item.is_active ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
+                                  title={item.is_active ? "تعطيل التخصص" : "تفعيل التخصص"}
+                                  onClick={() => toggleSpecialtyActiveMutation.mutate({ id: item.id, is_active: item.is_active })}
+                                >
+                                  <Power className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* DIALOG FOR ADDING / EDITING SPECIALTY */}
+      <Dialog open={isSpecialtyModalOpen} onOpenChange={setIsSpecialtyModalOpen}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-primary" />
+              <span>{editingSpecialty ? "تعديل التخصص الفني" : "إضافة تخصص فني جديد"}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              تحديد اسم التخصص والوصف لاستخدامه في نماذج الفنيين وبنود المشاريع.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3.5 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">اسم التخصص *</Label>
+              <Input
+                value={specName}
+                onChange={(e) => setSpecName(e.target.value)}
+                placeholder="مثال: فني تكييف وتبريد"
+                className="text-xs h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">الرمز البرمجي (اختياري)</Label>
+              <Input
+                value={specCode}
+                onChange={(e) => setSpecCode(e.target.value)}
+                placeholder="hvac_technician"
+                className="text-xs h-9 font-mono"
+                disabled={!!editingSpecialty}
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">الوصف (اختياري)</Label>
+              <Input
+                value={specDesc}
+                onChange={(e) => setSpecDesc(e.target.value)}
+                placeholder="وصف مختصر للمهام والمسؤوليات"
+                className="text-xs h-9"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                className="flex-1 text-xs h-8 font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={saveSpecialtyMutation.isPending || !specName.trim()}
+                onClick={() => saveSpecialtyMutation.mutate()}
+              >
+                {saveSpecialtyMutation.isPending ? "جاري الحفظ..." : "حفظ التخصص"}
+              </Button>
+              <Button
+                variant="outline"
+                className="text-xs h-8"
+                onClick={() => setIsSpecialtyModalOpen(false)}
+              >
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

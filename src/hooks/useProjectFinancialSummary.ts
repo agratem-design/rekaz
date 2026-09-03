@@ -1,6 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateProjectFinancials, ProjectFinancialResult } from "@/lib/financialCore";
+
+export const PROJECT_FINANCIAL_SUMMARY_KEY = "project-financial-summary-authoritative-v4";
+
+export function invalidateProjectFinancialSummary(queryClient: QueryClient, projectId?: string) {
+  if (projectId) {
+    queryClient.invalidateQueries({ queryKey: [PROJECT_FINANCIAL_SUMMARY_KEY, projectId] });
+    queryClient.invalidateQueries({ queryKey: ["project-financial-summary", projectId] });
+  } else {
+    queryClient.invalidateQueries({ queryKey: [PROJECT_FINANCIAL_SUMMARY_KEY] });
+    queryClient.invalidateQueries({ queryKey: ["project-financial-summary"] });
+  }
+}
 
 export interface ProjectFinancialSummaryData {
   // 1. Client Section (Authoritative: contracts / client_payments / finishing cost-plus)
@@ -46,40 +58,40 @@ export interface ProjectFinancialSummaryData {
   creditApplied: number;
 
   isLoading: boolean;
+  error: Error | null;
   refetch: () => void;
 }
 
 export function useProjectFinancialSummary(projectId?: string): ProjectFinancialSummaryData {
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["project-financial-summary-authoritative-v4", projectId],
     queryFn: async (): Promise<ProjectFinancialResult & { custodyTotal: number } | null> => {
       if (!projectId) return null;
 
-      const [
-        { data: project },
-        { data: contracts },
-        { data: projectItems },
-        { data: clientPayments },
-        { data: purchases },
-        { data: purchasePayments },
-        { data: techProgressRecords },
-        { data: expenses },
-        { data: rentals },
-        { data: custody },
-      ] = await Promise.all([
-        supabase.from("projects").select("id, project_type, finishing_percentage, budget, spent").eq("id", projectId).maybeSingle(),
+      const results = await Promise.all([
+        supabase.from("projects").select("id, client_id, project_type, finishing_percentage, budget, spent").eq("id", projectId).maybeSingle(),
         supabase.from("contracts").select("amount, status, project_id").eq("project_id", projectId),
         supabase.from("project_items").select("total_price, progress").eq("project_id", projectId),
-        supabase.from("client_payments").select("id, amount, project_id").eq("project_id", projectId),
-        supabase.from("purchases").select("id, total_amount, paid_amount, purchase_type, supplier_id, rental_id, phase_id").eq("project_id", projectId),
+        supabase.from("client_payments").select("id, amount, project_id").is("reversed_at", null).eq("project_id", projectId),
+        supabase.from("purchases").select("id, total_amount, paid_amount, purchase_type, supplier_id, technician_id, rental_id, phase_id").eq("project_id", projectId),
         supabase.from("purchase_payments").select("id, purchase_id, amount, purchases!inner(id, project_id, purchase_type, supplier_id)").eq("purchases.project_id", projectId),
-        supabase.from("technician_progress_records").select("id, earned_amount, project_id, phase_id, project_item_id").eq("project_id", projectId),
-        supabase.from("expenses").select("id, amount, project_id").eq("project_id", projectId),
+        supabase.from("project_item_technicians").select("id, project_item_id, rate, quantity, total_cost, technician_id, project_items!inner(project_id)").eq("project_items.project_id", projectId),
+        supabase.from("expenses").select("id, amount, project_id, type, technician_id").eq("project_id", projectId),
         supabase.from("equipment_rentals").select("id, total_amount").eq("project_id", projectId),
         supabase.from("project_custody").select("amount").eq("project_id", projectId),
+        supabase.from("supplier_payment_allocations").select("purchase_id, amount, purchases!inner(project_id)").eq("purchases.project_id", projectId),
       ]);
-
-      if (!project) return null;
+      for (const result of results) {
+        if (result.error) throw result.error;
+      }
+      const [{ data: project }, { data: contracts }, { data: projectItems }, { data: clientPayments },
+        { data: purchases }, { data: purchasePayments }, { data: projectItemTechnicians },
+        { data: expenses }, { data: rentals }, { data: custody }, { data: supplierAllocations }] = results;
+      if (!project) throw new Error("تعذر العثور على المشروع");
+      const { data: creditLedger, error: creditError } = project.client_id
+        ? await supabase.from("client_credit_ledger").select("entry_type, amount, target_project_id, source_payment_id").eq("client_id", project.client_id)
+        : { data: [], error: null };
+      if (creditError) throw creditError;
 
       const result = calculateProjectFinancials({
         project: {
@@ -93,7 +105,9 @@ export function useProjectFinancialSummary(projectId?: string): ProjectFinancial
         clientPayments: clientPayments || [],
         purchases: purchases || [],
         purchasePayments: purchasePayments || [],
-        techProgressRecords: techProgressRecords || [],
+        supplierPaymentAllocations: supplierAllocations || [],
+        creditLedger: creditLedger || [],
+        projectItemTechnicians: (projectItemTechnicians as any) || [],
         rentals: rentals || [],
         expenses: expenses || [],
       });
@@ -136,6 +150,7 @@ export function useProjectFinancialSummary(projectId?: string): ProjectFinancial
     cashReceived: data?.cashReceived || 0,
     creditApplied: data?.creditApplied || 0,
     isLoading,
+    error,
     refetch,
   };
 }

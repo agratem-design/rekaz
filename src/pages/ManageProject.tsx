@@ -381,6 +381,7 @@ const ManageProject = () => {
         supervising_engineer_id: data.supervising_engineer_id || null,
         status: data.status,
         project_type: data.project_type,
+        budget_type: data.budget_type || "open",
         budget: data.budget_type === "open" ? 0 : (data.budget || 0),
         spent: 0,
         progress: 0,
@@ -392,13 +393,14 @@ const ManageProject = () => {
         finishing_percentage: data.project_type === "finishing" ? (data.finishing_percentage || 0) : 0,
         default_treasury_id: data.default_treasury_id || null,
       };
-      const { error } = await supabase.from("projects").insert([insertData as any]);
+      const { data: created, error } = await supabase.from("projects").insert([insertData as any]).select("id").single();
       if (error) throw error;
+      return created;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast({ title: "تم بنجاح", description: "تم إضافة المشروع بنجاح" });
-      navigate(getReturnPath());
+      navigate(`/projects/${created.id}`);
     },
     onError: (error: any) => {
       toast({ title: "خطأ", description: error.message, variant: "destructive" });
@@ -414,6 +416,7 @@ const ManageProject = () => {
         supervising_engineer_id: data.supervising_engineer_id || null,
         status: data.status,
         project_type: data.project_type,
+        budget_type: data.budget_type || "open",
         budget: data.budget_type === "open" ? 0 : (data.budget || 0),
         spent: calculatedSpent,
         start_date: data.start_date || null,
@@ -488,7 +491,7 @@ const ManageProject = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {!isEdit && (
-            <Button variant="ghost" size="icon" onClick={() => navigate(getReturnPath())}>
+            <Button variant="ghost" size="icon" aria-label="الرجوع إلى المشاريع" disabled={isPending} onClick={() => handleSafeClose(() => navigate(getReturnPath()))}>
               <ArrowRight className="h-5 w-5" />
             </Button>
           )}

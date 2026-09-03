@@ -116,7 +116,7 @@ export default function ProjectOverviewHub() {
           .limit(4),
         supabase
           .from("client_payments")
-          .select("id, amount, date, payment_method")
+          .select("id, amount, date, payment_method").is("reversed_at", null)
           .eq("project_id", projectId)
           .order("date", { ascending: false })
           .limit(4),
@@ -243,7 +243,7 @@ export default function ProjectOverviewHub() {
   }
 
   // Financial Query Error State
-  const isFinancialError = !finSummary.isLoading && !finSummary.projectType && Boolean(projectId);
+  const isFinancialError = Boolean(finSummary.error);
 
   return (
     <ProjectWorkspaceLayout activeSectionOverride="overview">
@@ -568,7 +568,7 @@ export default function ProjectOverviewHub() {
                         </span>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        المسدد: {formatCurrencyLYD(finSummary.technicianPaid)} • المتبقي: {formatCurrencyLYD(finSummary.technicianRemaining)}
+                        مسدد الفواتير: {formatCurrencyLYD(finSummary.technicianPaid)} • متبقي المشروع: {formatCurrencyLYD(finSummary.technicianRemaining)}
                       </p>
                     </div>
 
@@ -758,9 +758,12 @@ export default function ProjectOverviewHub() {
 
                 {finSummary.technicianRemaining > 0 && (
                   <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-                    <p className="font-bold">مستحقات فنيين وعمالة معلقة</p>
+                    <p className="font-bold">مستحقات فنيين وعمالة معلقة للمشروع</p>
                     <p className="text-[11px]">
-                      متبقي أجور مستحقة للفنيين: {formatCurrencyLYD(finSummary.technicianRemaining)}.
+                      متبقي استحقاقات المشروع للفنيين: {formatCurrencyLYD(finSummary.technicianRemaining)}.
+                    </p>
+                    <p className="text-[10px] text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                      ملاحظة: السداد على حساب الفني عام ويخفض رصيده الإجمالي الشامل في كشف الفني ولا يسقط آلياً من ذمة هذا المشروع إلا بربطه بفاتورة عمالة.
                     </p>
                   </div>
                 )}
