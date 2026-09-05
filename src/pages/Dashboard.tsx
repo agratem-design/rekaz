@@ -30,7 +30,8 @@ import {
   Landmark,
   Shield,
   FileText,
-  ArrowLeftRight
+  ArrowLeftRight,
+  UserCog
 } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { useAuth } from "@/contexts/AuthContext";
@@ -74,6 +75,7 @@ const Dashboard = () => {
         techsRes,
         engineersRes,
         equipmentRes,
+        employeesRes,
       ] = await Promise.all([
         fetchSafety(supabase.from("projects").select("id, status, progress, budget, spent, name, image_url")),
         fetchSafety(supabase.from("clients").select("id", { count: "exact", head: true })),
@@ -90,6 +92,7 @@ const Dashboard = () => {
         fetchSafety(supabase.from("technicians").select("id", { count: "exact", head: true })),
         fetchSafety(supabase.from("engineers").select("id", { count: "exact", head: true })),
         fetchSafety(supabase.from("equipment").select("id", { count: "exact", head: true })),
+        fetchSafety(supabase.from("employees").select("id", { count: "exact", head: true })),
       ]);
 
       const projects = projectsRes.data || [];
@@ -121,6 +124,7 @@ const Dashboard = () => {
       const totalTechs = techsRes.count || 0;
       const totalEngineers = engineersRes.count || 0;
       const totalEquipment = equipmentRes.count || 0;
+      const totalEmployees = employeesRes.count || 0;
 
       return {
         projects,
@@ -142,6 +146,7 @@ const Dashboard = () => {
         totalTechs,
         totalEngineers,
         totalEquipment,
+        totalEmployees,
       };
     },
   });
@@ -230,7 +235,7 @@ const Dashboard = () => {
       {/* Quick Shortcuts Section */}
       <section className="surface-panel p-4" aria-labelledby="quick-actions-title">
         <p id="quick-actions-title" className="mb-3 text-xs font-bold tracking-wide text-foreground/80">الوصول السريع</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {isAdmin && (
             <Button asChild className="w-full text-xs font-bold gap-2 h-10">
               <Link to="/projects/new">
@@ -263,6 +268,14 @@ const Dashboard = () => {
               سجل العملاء
             </Link>
           </Button>
+          {(isAdmin || isAccountant) && (
+            <Button asChild variant="outline" className="w-full text-xs font-bold gap-2 h-10">
+              <Link to="/employees">
+                <UserCog className="h-4 w-4 text-primary shrink-0" />
+                الموظفون والرواتب
+              </Link>
+            </Button>
+          )}
         </div>
       </section>
 
@@ -574,14 +587,28 @@ const Dashboard = () => {
                     </span>
                     <span className="font-bold text-blue-500">{stats?.totalTechs || 0}</span>
                   </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <UserCog className="h-4 w-4 text-emerald-500" />
+                      الموظفون الإداريون
+                    </span>
+                    <span className="font-bold text-emerald-500">{stats?.totalEmployees || 0}</span>
+                  </div>
                 </div>
               </div>
-              <div className="border-t border-border pt-4 mt-6">
-                <Link to="/technicians">
+              <div className="border-t border-border pt-4 mt-6 flex gap-2">
+                <Link to="/technicians" className="flex-1">
                   <Button variant="outline" size="sm" className="w-full text-xs">
-                    إدارة طاقم الفنيين
+                    طاقم الفنيين
                   </Button>
                 </Link>
+                {(isAdmin || isAccountant) && (
+                  <Link to="/employees" className="flex-1">
+                    <Button variant="outline" size="sm" className="w-full text-xs">
+                      الموظفون والرواتب
+                    </Button>
+                  </Link>
+                )}
               </div>
             </Card>
 

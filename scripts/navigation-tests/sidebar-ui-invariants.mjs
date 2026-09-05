@@ -68,11 +68,11 @@ runTest('SIDEBAR-UI-02', 'No hardcoded duplicate nav arrays in AppSidebar.tsx or
   );
 });
 
-runTest('SIDEBAR-UI-03', 'Admin primary item count = exactly 17 items across 6 groups', () => {
+runTest('SIDEBAR-UI-03', 'Admin primary item count = exactly 18 items across 6 groups', () => {
   const adminGroups = getCanonicalSidebarGroups('admin', true);
   assert.strictEqual(adminGroups.length, 6, 'Admin must see 6 groups');
   const totalItems = adminGroups.reduce((acc, g) => acc + g.items.length, 0);
-  assert.strictEqual(totalItems, 17, `Expected 17 primary items, got ${totalItems}`);
+  assert.strictEqual(totalItems, 18, `Expected 18 primary items, got ${totalItems}`);
 });
 
 runTest('SIDEBAR-UI-04', 'General Items visible in Projects/Contracts group as primary item', () => {
@@ -265,11 +265,11 @@ runTest('SIDEBAR-RUNTIME-03', 'Header + mobile Sidebar trigger renders and opens
   );
 });
 
-runTest('SIDEBAR-RUNTIME-04', 'AppSidebar generates canonical 17-item admin navigation hierarchy', () => {
+runTest('SIDEBAR-RUNTIME-04', 'AppSidebar generates canonical 18-item admin navigation hierarchy', () => {
   const groups = getCanonicalSidebarGroups('admin', true);
   assert.strictEqual(groups.length, 6, 'Must generate 6 groups');
   const total = groups.reduce((sum, g) => sum + g.items.length, 0);
-  assert.strictEqual(total, 17, 'Must generate 17 primary items');
+  assert.strictEqual(total, 18, 'Must generate 18 primary items');
   for (const group of groups) {
     assert(group.id && group.label, 'Group must have valid id and label');
     for (const item of group.items) {

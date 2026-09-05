@@ -22,6 +22,7 @@ import {
   TrendingUp as TrendUp, Filter, Printer, FolderOpen, User, ClipboardList, Handshake
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
@@ -267,7 +268,8 @@ const TreasuryDetail = () => {
         description: isOpening ? "رصيد افتتاحي" : (form.description || "إضافة رصيد"),
         date: form.date,
         notes: form.notes || null,
-        reference_type: isOpening ? "opening_balance" : "manual",
+        reference_type: null,
+        reference_id: null,
       }]);
       if (txError) throw txError;
     },
@@ -986,21 +988,17 @@ const TreasuryDetail = () => {
             <DialogTitle>نقل أموال من {treasury.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>الخزينة المستلمة *</Label>
-              <Select value={transferForm.destinationId} onValueChange={(v) => setTransferForm({ ...transferForm, destinationId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر الخزينة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {otherTreasuries.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({formatCurrencyLYD(t.balance)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <HierarchicalTreasurySelect
+              value={transferForm.destinationId}
+              onValueChange={(v) => setTransferForm({ ...transferForm, destinationId: v })}
+              treasuries={allTreasuries || []}
+              excludeTreasuryId={id}
+              parentLabel="الخزينة الرئيسية المستلمة *"
+              childLabel="الحساب / الفرع المستلم *"
+              parentPlaceholder="اختر الخزينة الرئيسية المستلمة..."
+              childPlaceholder="اختر الحساب أو الفرع المستلم..."
+              required
+            />
             <div className="space-y-2">
               <Label>المبلغ (د.ل) *</Label>
               <Input

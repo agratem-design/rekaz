@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-09-05T09:00:20.138Z",
+  "passed": 15,
+  "failed": 1,
+  "logs": [
+    {
+      "status": "PASS",
+      "msg": "Created employee \"فارس الفرجاني التفاعلي\" (ID: 7f925c3e-f16c-448a-8d47-36275abfc64b, Salary: 5,000 LYD)"
+    },
+    {
+      "status": "PASS",
+      "msg": "Authenticated successfully to system"
+    },
+    {
+      "status": "PASS",
+      "msg": "Successfully loaded /employees hub with employee card and Golden theme KPIs"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Employee Dialog opened with RTL layout and all input fields"
+    },
+    {
+      "status": "PASS",
+      "msg": "Loaded EmployeeDetail page with PartyAccountHeader, Contact Details, and KPI Cards"
+    },
+    {
+      "status": "PASS",
+      "msg": "Disburse Advance dialog opened"
+    },
+    {
+      "status": "PASS",
+      "msg": "Disbursed advance of 1,500.00 LYD with 750.00 LYD monthly deduction (Advance ID: ee86b002-4a18-4bf7-9a4c-571e549b9fd5)"
+    },
+    {
+      "status": "PASS",
+      "msg": "Repay Advance dialog opened with remaining balance preview"
+    },
+    {
+      "status": "PASS",
+      "msg": "Cash Repayment verified: Paid 500 LYD, Remaining balance is strictly 1,000.00 LYD"
+    },
+    {
+      "status": "PASS",
+      "msg": "Issue Custody dialog opened with project and treasury selectors"
+    },
+    {
+      "status": "PASS",
+      "msg": "Employee Custody issued: 800.00 LYD (Custody ID: f3066058-2178-4e6d-8aa9-666f4e5e7f4c)"
+    },
+    {
+      "status": "PASS",
+      "msg": "Return Custody dialog opened with full remaining balance preloaded"
+    },
+    {
+      "status": "PASS",
+      "msg": "Custody settled and closed: Status is now \"closed\", remaining is 0 LYD"
+    },
+    {
+      "status": "PASS",
+      "msg": "Generate Monthly Payroll dialog opened with month/year selector"
+    },
+    {
+      "status": "FAIL",
+      "msg": "Unhandled exception during HR test execution",
+      "err": "[object Object]"
+    },
+    {
+      "status": "PASS",
+      "msg": "Zero test fixtures leaked: Live Database is 100% clean and pristine"
+    }
+  ]
+}

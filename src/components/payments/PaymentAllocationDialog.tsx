@@ -33,6 +33,7 @@ import {
   SelectGroup,
   SelectLabel,
 } from "@/components/ui/select";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import {
   Wallet,
   Landmark,
@@ -367,27 +368,16 @@ export default function PaymentAllocationDialog({
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">خزينة الإيداع</Label>
-              <Select value={formData.treasury_id} onValueChange={v => setFormData({ ...formData, treasury_id: v })}>
-                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
-                <SelectContent>
-                  {parentTreasuries.map(parent => {
-                    const children = subTreasuries.filter(s => s.parent_id === parent.id);
-                    return (
-                      <SelectGroup key={parent.id} className="border-b border-border/10 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
-                        <SelectLabel className="font-bold text-xs text-primary px-2 py-1 flex items-center gap-1 bg-primary/5 rounded-md">
-                          {parent.name}
-                        </SelectLabel>
-                        {children.map(child => (
-                          <SelectItem key={child.id} value={child.id} className="pr-6 cursor-pointer">
-                            {child.name} ({formatCurrencyLYD(child.balance ?? 0)})
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <HierarchicalTreasurySelect
+                value={formData.treasury_id}
+                onValueChange={v => setFormData({ ...formData, treasury_id: v })}
+                treasuries={allTreasuries || []}
+                parentLabel="الخزينة الرئيسية للإيداع *"
+                childLabel="الحساب / الفرع المستلم *"
+                parentPlaceholder="اختر الخزينة الرئيسية..."
+                childPlaceholder="اختر الحساب أو الفرع..."
+                required
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-semibold">ملاحظات</Label>

@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import {
   Dialog,
   DialogContent,
@@ -149,7 +150,7 @@ export default function InvoiceControl() {
   const { data: treasuries = [] } = useQuery({
     queryKey: ["treasuries-dropdown"],
     queryFn: async () => {
-      const { data } = await supabase.from("treasuries").select("id, name").order("name");
+      const { data } = await supabase.from("treasuries").select("id, name, parent_id, balance, treasury_type").eq("is_active", true).order("name");
       return data || [];
     },
   });
@@ -536,15 +537,16 @@ export default function InvoiceControl() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>الخزينة</Label>
-              <Select value={form.treasury_id} onValueChange={(v) => setForm(f => ({ ...f, treasury_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">-- بدون خزينة --</SelectItem>
-                  {treasuries.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="col-span-2">
+              <HierarchicalTreasurySelect
+                value={form.treasury_id}
+                onValueChange={(v) => setForm(f => ({ ...f, treasury_id: v }))}
+                treasuries={treasuries}
+                parentLabel="الخزينة الرئيسية"
+                childLabel="الحساب / الفرع"
+                allowNone={true}
+                noneLabel="-- بدون خزينة --"
+              />
             </div>
             <div className="space-y-1.5 col-span-2">
               <Label>ملاحظات</Label>

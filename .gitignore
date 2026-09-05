@@ -16,6 +16,10 @@ out
 build
 *.local
 
+# Test screenshots
+test-results/*screenshots/
+test-results/screenshots/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

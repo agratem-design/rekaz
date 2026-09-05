@@ -287,6 +287,7 @@ export type Database = {
           payment_method: string | null
           payment_type: string
           project_id: string | null
+          reversed_at: string | null
           treasury_id: string
           updated_at: string
           used_amount: number
@@ -302,6 +303,7 @@ export type Database = {
           payment_method?: string | null
           payment_type?: string
           project_id?: string | null
+          reversed_at?: string | null
           treasury_id: string
           updated_at?: string
           used_amount?: number
@@ -317,6 +319,7 @@ export type Database = {
           payment_method?: string | null
           payment_type?: string
           project_id?: string | null
+          reversed_at?: string | null
           treasury_id?: string
           updated_at?: string
           used_amount?: number
@@ -890,6 +893,319 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      custody_settlements: {
+        Row: {
+          amount: number
+          created_at: string
+          custody_id: string
+          date: string
+          description: string | null
+          expense_id: string | null
+          id: string
+          notes: string | null
+          return_treasury_id: string | null
+          settlement_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          custody_id: string
+          date?: string
+          description?: string | null
+          expense_id?: string | null
+          id?: string
+          notes?: string | null
+          return_treasury_id?: string | null
+          settlement_type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          custody_id?: string
+          date?: string
+          description?: string | null
+          expense_id?: string | null
+          id?: string
+          notes?: string | null
+          return_treasury_id?: string | null
+          settlement_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_settlements_custody_id_fkey"
+            columns: ["custody_id"]
+            isOneToOne: false
+            referencedRelation: "project_custody"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_settlements_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_settlements_return_treasury_id_fkey"
+            columns: ["return_treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_advance_repayments: {
+        Row: {
+          advance_id: string
+          amount: number
+          created_at: string
+          date: string
+          employee_id: string
+          id: string
+          notes: string | null
+          payroll_slip_id: string | null
+          repayment_type: string
+          treasury_id: string | null
+        }
+        Insert: {
+          advance_id: string
+          amount: number
+          created_at?: string
+          date?: string
+          employee_id: string
+          id?: string
+          notes?: string | null
+          payroll_slip_id?: string | null
+          repayment_type: string
+          treasury_id?: string | null
+        }
+        Update: {
+          advance_id?: string
+          amount?: number
+          created_at?: string
+          date?: string
+          employee_id?: string
+          id?: string
+          notes?: string | null
+          payroll_slip_id?: string | null
+          repayment_type?: string
+          treasury_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_advance_repayments_advance_id_fkey"
+            columns: ["advance_id"]
+            isOneToOne: false
+            referencedRelation: "employee_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_advance_repayments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_advance_repayments_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_advances: {
+        Row: {
+          amount: number
+          created_at: string
+          disbursement_date: string
+          employee_id: string
+          id: string
+          monthly_deduction: number | null
+          notes: string | null
+          paid_back_amount: number
+          remaining_amount: number
+          status: string
+          treasury_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          disbursement_date?: string
+          employee_id: string
+          id?: string
+          monthly_deduction?: number | null
+          notes?: string | null
+          paid_back_amount?: number
+          remaining_amount?: number
+          status?: string
+          treasury_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          disbursement_date?: string
+          employee_id?: string
+          id?: string
+          monthly_deduction?: number | null
+          notes?: string | null
+          paid_back_amount?: number
+          remaining_amount?: number
+          status?: string
+          treasury_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_advances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_advances_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_payroll_slips: {
+        Row: {
+          advance_deduction: number
+          advance_id: string | null
+          allowances: number
+          basic_salary: number
+          created_at: string
+          deductions: number
+          disbursement_date: string | null
+          employee_id: string
+          id: string
+          net_salary: number
+          notes: string | null
+          payroll_id: string
+          status: string
+          treasury_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          advance_deduction?: number
+          advance_id?: string | null
+          allowances?: number
+          basic_salary?: number
+          created_at?: string
+          deductions?: number
+          disbursement_date?: string | null
+          employee_id: string
+          id?: string
+          net_salary?: number
+          notes?: string | null
+          payroll_id: string
+          status?: string
+          treasury_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          advance_deduction?: number
+          advance_id?: string | null
+          allowances?: number
+          basic_salary?: number
+          created_at?: string
+          deductions?: number
+          disbursement_date?: string | null
+          employee_id?: string
+          id?: string
+          net_salary?: number
+          notes?: string | null
+          payroll_id?: string
+          status?: string
+          treasury_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_payroll_slips_advance_id_fkey"
+            columns: ["advance_id"]
+            isOneToOne: false
+            referencedRelation: "employee_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_payroll_slips_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_payroll_slips_payroll_id_fkey"
+            columns: ["payroll_id"]
+            isOneToOne: false
+            referencedRelation: "employee_payrolls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_payroll_slips_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_payrolls: {
+        Row: {
+          created_at: string
+          id: string
+          month: number
+          notes: string | null
+          status: string
+          title: string
+          total_advances_deducted: number
+          total_allowances: number
+          total_basic_salaries: number
+          total_deductions: number
+          total_net_salaries: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: number
+          notes?: string | null
+          status?: string
+          title: string
+          total_advances_deducted?: number
+          total_allowances?: number
+          total_basic_salaries?: number
+          total_deductions?: number
+          total_net_salaries?: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: number
+          notes?: string | null
+          status?: string
+          title?: string
+          total_advances_deducted?: number
+          total_allowances?: number
+          total_basic_salaries?: number
+          total_deductions?: number
+          total_net_salaries?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
       }
       employees: {
         Row: {
@@ -1568,6 +1884,7 @@ export type Database = {
           remaining_amount: number | null
           spent_amount: number | null
           status: string | null
+          treasury_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1583,6 +1900,7 @@ export type Database = {
           remaining_amount?: number | null
           spent_amount?: number | null
           status?: string | null
+          treasury_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1598,6 +1916,7 @@ export type Database = {
           remaining_amount?: number | null
           spent_amount?: number | null
           status?: string | null
+          treasury_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1620,6 +1939,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_custody_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
             referencedColumns: ["id"]
           },
         ]
@@ -2683,41 +3009,56 @@ export type Database = {
         }
         Relationships: []
       }
-      technician_payment_allocations: {
+      technician_deposits: {
         Row: {
           amount: number
           created_at: string
+          created_by: string
+          date: string
+          entry_type: string
           id: string
-          payment_id: string
-          project_id: string | null
+          notes: string | null
+          payment_method: string
+          technician_id: string
+          treasury_id: string
         }
         Insert: {
           amount: number
           created_at?: string
+          created_by: string
+          date?: string
+          entry_type: string
           id?: string
-          payment_id: string
-          project_id?: string | null
+          notes?: string | null
+          payment_method?: string
+          technician_id: string
+          treasury_id: string
         }
         Update: {
           amount?: number
           created_at?: string
+          created_by?: string
+          date?: string
+          entry_type?: string
           id?: string
-          payment_id?: string
-          project_id?: string | null
+          notes?: string | null
+          payment_method?: string
+          technician_id?: string
+          treasury_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "technician_payment_allocations_payment_id_fkey"
-            columns: ["payment_id"]
+            foreignKeyName: "technician_deposits_technician_id_fkey"
+            columns: ["technician_id"]
             isOneToOne: false
-            referencedRelation: "technician_payments"
+            referencedRelation: "technicians"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "technician_payment_allocations_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "technician_deposits_treasury_id_fkey"
+            columns: ["treasury_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "treasuries"
             referencedColumns: ["id"]
           },
         ]
@@ -2781,6 +3122,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "technician_payments_context_project_id_fkey"
+            columns: ["context_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "technician_payments_technician_id_fkey"
             columns: ["technician_id"]
@@ -3296,6 +3644,33 @@ export type Database = {
           },
         ]
       }
+      workflow_requests: {
+        Row: {
+          actor_id: string
+          created_at: string
+          operation: string
+          payload: Json
+          request_key: string
+          result: Json | null
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          operation: string
+          payload: Json
+          request_key: string
+          result?: Json | null
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          operation?: string
+          payload?: Json
+          request_key?: string
+          result?: Json | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -3314,12 +3689,61 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_client_credit_v2: {
+        Args: { p_payload: Json; p_request_key: string }
+        Returns: Json
+      }
+      apply_supplier_advance_v2: {
+        Args: {
+          p_amount: number
+          p_purchase_id: string
+          p_request_key: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      begin_workflow_request: {
+        Args: { p_key: string; p_operation: string; p_payload: Json }
+        Returns: Json
+      }
       create_purchase_with_immediate_payment: {
         Args: { p_payment: Json; p_purchase: Json }
         Returns: Json
       }
       delete_project_cascade: { Args: { p_id: string }; Returns: undefined }
+      delete_project_items_atomic: {
+        Args: { p_item_ids: string[]; p_project_id: string }
+        Returns: Json
+      }
+      disburse_employee_advance: {
+        Args: {
+          p_amount: number
+          p_date?: string
+          p_employee_id: string
+          p_monthly_deduction?: number
+          p_notes?: string
+          p_treasury_id: string
+        }
+        Returns: string
+      }
+      disburse_payroll_slip: {
+        Args: {
+          p_date?: string
+          p_notes?: string
+          p_slip_id: string
+          p_treasury_id: string
+        }
+        Returns: boolean
+      }
+      finish_workflow_request: {
+        Args: { p_key: string; p_operation: string; p_result: Json }
+        Returns: Json
+      }
       generate_access_code: { Args: never; Returns: string }
+      generate_monthly_payroll: {
+        Args: { p_month: number; p_title?: string; p_year: number }
+        Returns: string
+      }
       get_client_available_credit: {
         Args: { p_client_id: string }
         Returns: number
@@ -3345,7 +3769,32 @@ export type Database = {
         }
         Returns: boolean
       }
+      issue_employee_custody: {
+        Args: {
+          p_amount: number
+          p_date?: string
+          p_holder_id: string
+          p_holder_type: string
+          p_notes?: string
+          p_project_id?: string
+          p_treasury_id: string
+        }
+        Returns: string
+      }
       pay_supplier_on_account_atomic: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_idempotency_key?: string
+          p_notes?: string
+          p_payment_method: string
+          p_reference?: string
+          p_supplier_id: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      pay_supplier_on_account_unserialized: {
         Args: {
           p_amount: number
           p_date: string
@@ -3361,8 +3810,22 @@ export type Database = {
       pay_technician_on_account_atomic: {
         Args: {
           p_amount: number
-          p_date: string
           p_context_project_id?: string
+          p_date: string
+          p_idempotency_key?: string
+          p_notes?: string
+          p_payment_method: string
+          p_reference?: string
+          p_technician_id: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
+      pay_technician_on_account_unserialized: {
+        Args: {
+          p_amount: number
+          p_context_project_id?: string
+          p_date: string
           p_idempotency_key?: string
           p_notes?: string
           p_payment_method: string
@@ -3379,11 +3842,30 @@ export type Database = {
           p_date?: string
           p_notes?: string
           p_payment_method?: string
-          p_project_id: string | null
+          p_project_id: string
           p_treasury_id: string
         }
         Returns: Json
       }
+      record_client_receipt_v2: {
+        Args: { p_payload: Json; p_request_key: string }
+        Returns: Json
+      }
+      record_technician_deposit_v2: {
+        Args: { p_payload: Json; p_request_key: string }
+        Returns: Json
+      }
+      repay_employee_advance: {
+        Args: {
+          p_advance_id: string
+          p_amount: number
+          p_date?: string
+          p_notes?: string
+          p_treasury_id: string
+        }
+        Returns: string
+      }
+      require_finance_actor: { Args: never; Returns: string }
       reverse_client_credit_application: {
         Args: { p_entry_id: string; p_notes?: string }
         Returns: Json
@@ -3392,8 +3874,39 @@ export type Database = {
         Args: { p_payment_id: string }
         Returns: Json
       }
+      reverse_client_receipt_v2: {
+        Args: { p_payment_id: string }
+        Returns: Json
+      }
+      reverse_technician_payment_atomic: {
+        Args: { p_payment_id: string; p_reversal_reason?: string }
+        Returns: Json
+      }
       run_accounting_invariants_suite: { Args: never; Returns: Json }
       run_golden_accounting_reconciliation: { Args: never; Returns: Json }
+      save_project_item_atomic: {
+        Args: {
+          p_item_id: string
+          p_payload: Json
+          p_request_key: string
+          p_technician: Json
+        }
+        Returns: Json
+      }
+      save_technician_work_v2: {
+        Args: { p_payload: Json; p_record_id: string; p_request_key: string }
+        Returns: Json
+      }
+      settle_custody_cash_return: {
+        Args: {
+          p_custody_id: string
+          p_date?: string
+          p_notes?: string
+          p_return_amount: number
+          p_treasury_id: string
+        }
+        Returns: string
+      }
       settle_supplier_project_invoices_atomic: {
         Args: {
           p_allocations: Json
@@ -3429,6 +3942,22 @@ export type Database = {
         }
         Returns: Json
       }
+      update_client_receipt_v2: {
+        Args: { p_payload: Json; p_payment_id: string; p_request_key: string }
+        Returns: Json
+      }
+      update_technician_payment_atomic: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_notes?: string
+          p_payment_id: string
+          p_payment_method: string
+          p_reference?: string
+          p_treasury_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "admin" | "engineer" | "accountant" | "supervisor"
@@ -3447,12 +3976,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3476,11 +4005,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3501,11 +4030,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3526,11 +4055,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3543,11 +4072,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

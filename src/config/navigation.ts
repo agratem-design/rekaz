@@ -131,7 +131,7 @@ export const ALL_NAVIGATION_ITEMS: NavigationItem[] = [
   },
 
   // ==========================================
-  // GROUP 3: أطراف التعامل (3 Items)
+  // GROUP 3: أطراف التعامل (4 Items)
   // ==========================================
   {
     id: 'clients',
@@ -171,6 +171,19 @@ export const ALL_NAVIGATION_ITEMS: NavigationItem[] = [
     matchPrefixes: ['/technicians'],
     keywords: ['فنيين', 'عمالة', 'صنائعية', 'technicians', 'labor'],
     subtitle: 'دليل الفنيين ومتابعة الإنجاز والمستحقات الميدانية',
+  },
+  {
+    id: 'employees',
+    name: 'الموظفون والرواتب والعُهد',
+    href: '/employees',
+    icon: UserCog,
+    roles: ['admin', 'accountant'],
+    groupId: 'parties',
+    groupLabel: 'أطراف التعامل',
+    isPrimarySidebar: true,
+    matchPrefixes: ['/employees'],
+    keywords: ['موظفين', 'فريق العمل', 'employees', 'رواتب', 'سلف', 'عهد', 'مرتبات', 'payroll', 'مسير'],
+    subtitle: 'إدارة شؤون الموظفين والرواتب الشهرية والسلف والعهد المالية',
   },
 
   // ==========================================
@@ -354,18 +367,6 @@ export const ALL_NAVIGATION_ITEMS: NavigationItem[] = [
     matchPrefixes: ['/engineers'],
     keywords: ['مهندسين', 'مشرفين', 'engineers'],
     subtitle: 'سجل المهندسين المشرفين على المشاريع',
-  },
-  {
-    id: 'employees',
-    name: 'الموظفون',
-    href: '/employees',
-    icon: UserCog,
-    roles: ['admin'],
-    groupId: 'team',
-    groupLabel: 'إدارة الفريق',
-    isPrimarySidebar: false,
-    keywords: ['موظفين', 'فريق العمل', 'employees'],
-    subtitle: 'سجل الموظفين الإداريين والماليين',
   },
   {
     id: 'project-expenses',

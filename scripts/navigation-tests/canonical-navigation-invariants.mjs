@@ -47,12 +47,12 @@ runTest('NAVCFG-01', 'Global group count = exactly 6 groups', () => {
   );
 });
 
-runTest('NAVCFG-02', 'Primary Sidebar item count = exactly 17 items (1+4+3+5+2+2)', () => {
+runTest('NAVCFG-02', 'Primary Sidebar item count = exactly 18 items (1+4+4+5+2+2)', () => {
   const primaryItems = ALL_NAVIGATION_ITEMS.filter((i) => i.isPrimarySidebar);
   assert.strictEqual(
     primaryItems.length,
-    17,
-    `Expected exactly 17 primary sidebar items, got ${primaryItems.length}`
+    18,
+    `Expected exactly 18 primary sidebar items, got ${primaryItems.length}`
   );
 
   const groupCounts = PRIMARY_SIDEBAR_GROUP_IDS.map(
@@ -60,8 +60,8 @@ runTest('NAVCFG-02', 'Primary Sidebar item count = exactly 17 items (1+4+3+5+2+2
   );
   assert.deepStrictEqual(
     groupCounts,
-    [1, 4, 3, 5, 2, 2],
-    `Expected group counts [1, 4, 3, 5, 2, 2], got ${JSON.stringify(groupCounts)}`
+    [1, 4, 4, 5, 2, 2],
+    `Expected group counts [1, 4, 4, 5, 2, 2], got ${JSON.stringify(groupCounts)}`
   );
 });
 
@@ -70,11 +70,11 @@ runTest('NAVCFG-02', 'Primary Sidebar item count = exactly 17 items (1+4+3+5+2+2
 // -----------------------------------------------------------------
 console.log('\n--- ROLE-SAFE VISIBILITY INVARIANTS ---');
 
-runTest('NAVCFG-03', 'Admin visibility equals allowed target set (17 primary items in 6 groups)', () => {
+runTest('NAVCFG-03', 'Admin visibility equals allowed target set (18 primary items in 6 groups)', () => {
   const adminGroups = getCanonicalSidebarGroups('admin', true);
   assert.strictEqual(adminGroups.length, 6, 'Admin must see all 6 groups');
   const totalAdminItems = adminGroups.reduce((sum, g) => sum + g.items.length, 0);
-  assert.strictEqual(totalAdminItems, 17, 'Admin must see all 17 primary items');
+  assert.strictEqual(totalAdminItems, 18, 'Admin must see all 18 primary items');
 });
 
 runTest('NAVCFG-04', 'Accountant does not gain Project routes (/projects/contracting & finishing)', () => {
@@ -316,9 +316,9 @@ runTest('NAVCFG-GI-01', 'Group count = exactly 6', () => {
   assert.strictEqual(PRIMARY_SIDEBAR_GROUP_IDS.length, 6);
 });
 
-runTest('NAVCFG-GI-02', 'Primary Sidebar item count = exactly 17 items', () => {
+runTest('NAVCFG-GI-02', 'Primary Sidebar item count = exactly 18 items', () => {
   const primaryItems = ALL_NAVIGATION_ITEMS.filter((i) => i.isPrimarySidebar);
-  assert.strictEqual(primaryItems.length, 17);
+  assert.strictEqual(primaryItems.length, 18);
 });
 
 runTest('NAVCFG-GI-03', 'General Items belongs to projects_contracts group', () => {

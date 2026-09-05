@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft, ArrowRight, Home } from 'lucide-react';
+import { ChevronRight, ArrowRight, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { validateInternalReturnTo } from '@/lib/navigation/projectNavigation';
 
@@ -78,7 +78,7 @@ export function DeterministicBreadcrumb({
 
           return (
             <React.Fragment key={`${item.label}-${index}`}>
-              <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" aria-hidden="true" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" aria-hidden="true" />
               {isLast || !item.href ? (
                 <span
                   className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[300px]"

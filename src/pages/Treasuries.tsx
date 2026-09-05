@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1564,44 +1565,31 @@ const Treasuries = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-3">
-            <div className="space-y-2">
-              <Label>من الخزينة المصدر *</Label>
-              <Select
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2">
+              <HierarchicalTreasurySelect
                 value={transferForm.fromTreasuryId}
                 onValueChange={(val) => setTransferForm({ ...transferForm, fromTreasuryId: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر الخزينة المصدر" />
-                </SelectTrigger>
-                <SelectContent>
-                  {operationalTreasuries.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} (الرصيد: {formatCurrencyLYD(t.balance)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                treasuries={treasuries || []}
+                parentLabel="من الخزينة الرئيسية (المصدر) *"
+                childLabel="الحساب / الفرع المصدر *"
+                parentPlaceholder="اختر الخزينة الرئيسية المصدر..."
+                childPlaceholder="اختر الحساب أو الفرع المصدر..."
+                required
+              />
             </div>
 
-            <div className="space-y-2">
-              <Label>إلى الخزينة الوجهة *</Label>
-              <Select
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2">
+              <HierarchicalTreasurySelect
                 value={transferForm.toTreasuryId}
                 onValueChange={(val) => setTransferForm({ ...transferForm, toTreasuryId: val })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر الخزينة الوجهة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {operationalTreasuries
-                    .filter((t) => t.id !== transferForm.fromTreasuryId)
-                    .map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name} (الرصيد: {formatCurrencyLYD(t.balance)})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                treasuries={treasuries || []}
+                excludeTreasuryId={transferForm.fromTreasuryId}
+                parentLabel="إلى الخزينة الرئيسية (الوجهة) *"
+                childLabel="الحساب / الفرع المستلم *"
+                parentPlaceholder="اختر الخزينة الرئيسية الوجهة..."
+                childPlaceholder="اختر الحساب أو الفرع المستلم..."
+                required
+              />
             </div>
 
             <div className="space-y-2">

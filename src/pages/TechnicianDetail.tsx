@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useOperationKey } from "@/hooks/useOperationKey";
 import { TechnicianDepositsPanel } from "@/components/technicians/TechnicianDepositsPanel";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
+import { useAuth } from "@/contexts/AuthContext";
 import { invalidateFinancialQueries } from "@/lib/financialMutations";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -49,6 +51,14 @@ import {
   RotateCcw,
   Receipt,
   FileSpreadsheet,
+  CheckCircle2,
+  TableProperties,
+  LayoutGrid,
+  Copy,
+  Check,
+  ShieldCheck,
+  Briefcase,
+  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -77,6 +87,11 @@ interface TechnicianItemAssignment {
   projectItemName: string;
   phaseId: string | null;
   phaseName: string;
+  projectId: string;
+  projectName: string;
+  projectType: "contracting" | "finishing";
+  clientId: string;
+  clientName: string;
   rate: number | null;
   rateType: string | null;
   quantity: number | null;
@@ -106,11 +121,26 @@ export default function TechnicianDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const canManagePayments = role === "admin" || role === "accountant";
   const paymentOperation = useOperationKey();
 
-  const [activeTab, setActiveTab] = useState<"projects" | "statement">("projects");
+  // Active Tab: projects (المشاريع والزبائن) | payments | statement | deposits
+  const [activeTab, setActiveTab] = useState<"projects" | "payments" | "statement" | "deposits">("projects");
+  
+  // View mode for assignments: "grouped" (default) vs "table"
+  const [assignmentsViewMode, setAssignmentsViewMode] = useState<"grouped" | "table">("grouped");
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterProject, setFilterProject] = useState<string>("all");
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
+  const [copiedPhone, setCopiedPhone] = useState(false);
+
+  // Edit Technician Profile Modal State
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editProfileName, setEditProfileName] = useState("");
+  const [editProfilePhone, setEditProfilePhone] = useState("");
+  const [editProfileSpecialty, setEditProfileSpecialty] = useState("");
+  const [editProfileNotes, setEditProfileNotes] = useState("");
 
   // On-Account Payment State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -163,7 +193,6 @@ export default function TechnicianDetail() {
     return parent ? [parent] : [];
   }, [treasuriesList, paySelectedParentTreasuryId]);
 
-  // Keep the payment form actionable by selecting the first active treasury as soon as it is available
   useEffect(() => {
     if (!paySelectedParentTreasuryId && parentTreasuries.length > 0) {
       setPaySelectedParentTreasuryId(parentTreasuries[0].id);
@@ -192,6 +221,16 @@ export default function TechnicianDetail() {
     },
     enabled: !!id,
   });
+
+  // Populate edit profile fields when technician is loaded
+  useEffect(() => {
+    if (technician) {
+      setEditProfileName(technician.name || "");
+      setEditProfilePhone(technician.phone || "");
+      setEditProfileSpecialty(technician.specialty || (technician as any).technician_types?.name || "");
+      setEditProfileNotes(technician.notes || "");
+    }
+  }, [technician]);
 
   // 3. Fetch canonical staffing assignments (Technician Work Authority)
   const { 
@@ -296,7 +335,28 @@ export default function TechnicianDetail() {
     enabled: !!id,
   });
 
-  // 6. Company settings for receipt printing
+  // 6. Technician Deposits balance
+  const { data: depositEntries = [] } = useQuery({
+    queryKey: ["technician-deposits", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("technician_deposits" as any)
+        .select("id, entry_type, amount, date, notes")
+        .eq("technician_id", id!)
+        .order("date", { ascending: false });
+      if (error) return [];
+      return (data || []) as any[];
+    },
+    enabled: !!id,
+  });
+
+  const totalDepositBalance = useMemo(() => {
+    return depositEntries.reduce((sum: number, e: any) => {
+      return sum + (e.entry_type === "receipt" ? 1 : -1) * Number(e.amount || 0);
+    }, 0);
+  }, [depositEntries]);
+
+  // 7. Company settings for receipt printing
   const { data: companySettings } = useQuery({
     queryKey: ["company-settings"],
     queryFn: async () => {
@@ -310,17 +370,20 @@ export default function TechnicianDetail() {
     },
   });
 
-  // 7. Canonical Global Financial Account & Operational Project Views
+  // 8. Canonical Global Financial Account & Operational Project Views
   const {
+    allFlatAssignments,
     clientGroups,
     globalWorkValue,
     globalPaid,
     signedBalance,
+    distinctProjects,
     distinctProjectsCount,
     totalAssignmentsCount,
   } = useMemo(() => {
     let gWorkValue = 0;
     const projectMap = new Map<string, TechnicianProjectGroup>();
+    const flatList: TechnicianItemAssignment[] = [];
 
     const getOrCreateGroup = (
       projId: string,
@@ -346,24 +409,29 @@ export default function TechnicianDetail() {
     assignments.forEach((a: any) => {
       const pItem = a.project_items;
       const proj = pItem?.projects;
-      const grp = getOrCreateGroup(
-        proj?.id || "unassigned",
-        proj?.name || "مشروع مقاولات",
-        (proj?.project_type || "contracting") as "contracting" | "finishing",
-        proj?.clients?.id || "unassigned",
-        proj?.clients?.name || "بدون زبون"
-      );
+      const projId = proj?.id || "unassigned";
+      const projName = proj?.name || "مشروع مقاولات";
+      const projType = (proj?.project_type || "contracting") as "contracting" | "finishing";
+      const cliId = proj?.clients?.id || "unassigned";
+      const cliName = proj?.clients?.name || "بدون زبون";
+
+      const grp = getOrCreateGroup(projId, projName, projType, cliId, cliName);
       const rawCost = Number(a.total_cost);
       const wVal = rawCost > 0 ? rawCost : (Number(a.rate || 0) * Number(a.quantity || 1));
       gWorkValue += wVal;
       grp.totalWorkValue += wVal;
 
-      grp.assignments.push({
+      const itemAssignment: TechnicianItemAssignment = {
         id: a.id,
         projectItemId: a.project_item_id,
         projectItemName: pItem?.name || "بند",
         phaseId: pItem?.phase_id || null,
-        phaseName: pItem?.project_phases?.name || "المرحلة",
+        phaseName: pItem?.project_phases?.name || "المرحلة الرئيسية",
+        projectId: projId,
+        projectName: projName,
+        projectType: projType,
+        clientId: cliId,
+        clientName: cliName,
         rate: a.rate,
         rateType: a.rate_type,
         quantity: a.quantity,
@@ -371,20 +439,47 @@ export default function TechnicianDetail() {
         workValue: wVal,
         notes: a.notes,
         createdAt: a.created_at,
-      });
+      };
+
+      grp.assignments.push(itemAssignment);
+      flatList.push(itemAssignment);
     });
 
     laborPurchases.forEach((work) => {
       const proj = work.projects;
-      const group = getOrCreateGroup(proj?.id || "unassigned", proj?.name || "عمل فني",
-        (proj?.project_type || "finishing") as "contracting" | "finishing",
-        proj?.clients?.id || "unassigned", proj?.clients?.name || "بدون زبون");
+      const projId = proj?.id || "unassigned";
+      const projName = proj?.name || "عمل فني";
+      const projType = (proj?.project_type || "finishing") as "contracting" | "finishing";
+      const cliId = proj?.clients?.id || "unassigned";
+      const cliName = proj?.clients?.name || "بدون زبون";
+
+      const group = getOrCreateGroup(projId, projName, projType, cliId, cliName);
       const value = Number(work.total_amount || 0);
       gWorkValue += value;
       group.totalWorkValue += value;
-      group.assignments.push({ id: `labor-${work.id}`, projectItemId: "", projectItemName: work.title || "عمل فني",
-        phaseId: work.phase_id, phaseName: "أعمال العمالة", rate: Number((work.items?.[0] as any)?.price || 0), rateType: "unit", quantity: Number((work.items?.[0] as any)?.qty || 1),
-        totalCost: value, workValue: value, notes: work.notes, createdAt: work.created_at });
+
+      const laborAssignment: TechnicianItemAssignment = {
+        id: `labor-${work.id}`,
+        projectItemId: "",
+        projectItemName: work.title || "عمل فني",
+        phaseId: work.phase_id,
+        phaseName: "أعمال العمالة والتشطيب",
+        projectId: projId,
+        projectName: projName,
+        projectType: projType,
+        clientId: cliId,
+        clientName: cliName,
+        rate: Number((work.items?.[0] as any)?.price || 0),
+        rateType: "unit",
+        quantity: Number((work.items?.[0] as any)?.qty || 1),
+        totalCost: value,
+        workValue: value,
+        notes: work.notes,
+        createdAt: work.created_at,
+      };
+
+      group.assignments.push(laborAssignment);
+      flatList.push(laborAssignment);
     });
 
     const clientMap = new Map<string, TechnicianClientGroup>();
@@ -402,13 +497,20 @@ export default function TechnicianDetail() {
     const gPaid = tPaid + lPaid + laborInvoicePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const sBalance = gWorkValue - gPaid;
 
+    const projectsList = Array.from(projectMap.values()).map(p => ({
+      id: p.projectId,
+      name: p.projectName,
+    }));
+
     return {
+      allFlatAssignments: flatList,
       clientGroups: Array.from(clientMap.values()),
       globalWorkValue: gWorkValue,
       globalPaid: gPaid,
       signedBalance: sBalance,
+      distinctProjects: projectsList,
       distinctProjectsCount: projectMap.size,
-      totalAssignmentsCount: assignments.length + laborPurchases.length,
+      totalAssignmentsCount: flatList.length,
     };
   }, [assignments, technicianPayments, laborPayments, laborPurchases, laborInvoicePayments]);
 
@@ -417,53 +519,60 @@ export default function TechnicianDetail() {
       return {
         label: "المتبقي للفني",
         amount: signedBalance,
-        color: "text-amber-600 dark:text-amber-400",
-        description: "صافي المستحقات المتبقية في ذمة المؤسسة",
+        color: "text-amber-700 dark:text-amber-400",
+        badgeBg: "bg-amber-500/15 border-amber-500/30 text-amber-800 dark:text-amber-300",
+        statusText: "صافي المستحقات المتبقية في ذمة المؤسسة",
       };
     }
     if (signedBalance === 0) {
       return {
         label: "الرصيد",
         amount: 0,
-        color: "text-foreground",
-        description: "الحساب متوازن بالكامل (لا توجد مستحقات)",
+        color: "text-emerald-700 dark:text-emerald-400",
+        badgeBg: "bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-300",
+        statusText: "الحساب متوازن بالكامل (لا توجد مستحقات)",
       };
     }
     return {
       label: "رصيد مقدم للفني",
       amount: Math.abs(signedBalance),
-      color: "text-blue-600 dark:text-blue-400",
-      description: "دفعة مقدمة على الحساب تستوعب الأعمال القادمة تلقائياً",
+      color: "text-blue-700 dark:text-blue-400",
+      badgeBg: "bg-blue-500/15 border-blue-500/30 text-blue-800 dark:text-blue-300",
+      statusText: "دفعة مقدمة على الحساب تستوعب الأعمال القادمة تلقائياً",
     };
   }, [signedBalance]);
 
-  const handleOpenPayModal = (contextProjId?: string) => {
-    setPayContextProjectId(contextProjId || null);
-    if (treasuriesList.length > 0 && !payTreasuryId) setPayTreasuryId(treasuriesList[0].id);
-    setPayAmount(signedBalance > 0 ? signedBalance.toString() : "");
-    setIsPayModalOpen(true);
-  };
-
-  const handleStartEditPayment = (payment: any) => {
-    setEditingPayment(payment);
-    setEditAmount(payment.amount?.toString() || "");
-    setEditTreasuryId(payment.treasury_id || payment.treasuries?.id || "");
-    setEditPaymentMethod(payment.payment_method || "cash");
-    setEditDate(payment.date || "");
-    setEditReference(payment.reference || "");
-    setEditNotes(payment.notes || "");
-  };
-
-  const handleStartReversePayment = (payment: any) => {
-    setReversingPayment(payment);
-    setReversalReason("إلغاء دفعة بطلب المستخدم");
-  };
+  // Mutations
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: { name: string; phone: string; specialty: string; notes: string }) => {
+      const { data, error } = await supabase
+        .from("technicians")
+        .update({
+          name: payload.name,
+          phone: payload.phone || null,
+          specialty: payload.specialty || null,
+          notes: payload.notes || null,
+        })
+        .eq("id", id!)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["technician", id] });
+      queryClient.invalidateQueries({ queryKey: ["technicians"] });
+      toast.success("تم تحديث بيانات الفني بنجاح");
+      setIsEditProfileOpen(false);
+    },
+    onError: (err: any) => toast.error(err.message || "تعذر تحديث البيانات"),
+  });
 
   const payOnAccountMutation = useMutation({
     mutationFn: async () => {
       const amt = parseFloat(payAmount);
-      if (!amt || amt <= 0) throw new Error("يرجى إدخال مبلغ دفع صحيح");
-      if (!payTreasuryId) throw new Error("يرجى اختيار الخزينة");
+      if (!amt || amt <= 0) throw new Error("يرجى إدخال مبلغ دفع صحيح أكبر من صفر");
+      if (!payTreasuryId) throw new Error("يرجى اختيار الخزينة المخصوم منها");
 
       const { data, error } = await (supabase.rpc as any)("pay_technician_on_account_atomic", {
         p_technician_id: id,
@@ -480,17 +589,42 @@ export default function TechnicianDetail() {
       if (error) throw new Error(error.message);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       paymentOperation.reset();
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["technician-direct-payments", id] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["parent-treasuries-list"] });
-      toast.success("تم تسجيل الدفعة بنجاح");
+      
+      const paidAmt = parseFloat(payAmount);
+      toast.success(`تم تسجيل دفعة بقيمة ${formatCurrencyLYD(paidAmt)} بنجاح`, {
+        action: {
+          label: "طباعة السند",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `PAY-${data?.payment_id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                date: payDate,
+                type: "salary",
+                amount: paidAmt,
+                paidToOrBy: technician?.name || "الفني",
+                description: payNotes || "صرف دفعة على الحساب",
+                paymentMethod: payPaymentMethod,
+                treasuryName: treasuriesList.find((t: any) => t.id === payTreasuryId)?.name,
+                notes: payNotes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
+
       setIsPayModalOpen(false);
       setPayAmount("");
+      setPayNotes("");
+      setPayReference("");
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message || "فشلت عملية الصرف"),
   });
 
   const updatePaymentMutation = useMutation({
@@ -510,12 +644,13 @@ export default function TechnicianDetail() {
     onSuccess: () => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["technician-direct-payments", id] });
+      queryClient.invalidateQueries({ queryKey: ["technicians", id] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["parent-treasuries-list"] });
-      toast.success("تم التعديل بنجاح");
+      toast.success("تم تعديل السند بنجاح");
       setEditingPayment(null);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message || "تعذر تعديل السند"),
   });
 
   const reversePaymentMutation = useMutation({
@@ -532,12 +667,13 @@ export default function TechnicianDetail() {
       queryClient.invalidateQueries({ queryKey: ["technician-direct-payments", id] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["parent-treasuries-list"] });
-      toast.success("تم إلغاء الدفعة بنجاح");
+      toast.success("تم إلغاء السند واستعادة الرصيد للخزينة");
       setReversingPayment(null);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err: any) => toast.error(err.message || "تعذر إلغاء السند"),
   });
 
+  // Chronological statement computation
   const chronologicalStatement = useMemo(() => {
     const items: Array<{
       id: string;
@@ -571,14 +707,31 @@ export default function TechnicianDetail() {
     }
 
     for (const work of laborPurchases) {
-      items.push({ id: `labor-${work.id}`, date: work.date, createdAt: work.created_at, type: "work",
-        description: work.title || "عمل فني", projectName: work.projects?.name,
-        workValue: Number(work.total_amount || 0), paymentAmount: 0, runningBalance: 0 });
+      items.push({
+        id: `labor-${work.id}`,
+        date: work.date || work.created_at?.slice(0, 10) || "",
+        createdAt: work.created_at,
+        type: "work",
+        description: work.title || "عمل فني",
+        projectName: work.projects?.name,
+        workValue: Number(work.total_amount || 0),
+        paymentAmount: 0,
+        runningBalance: 0,
+      });
     }
+
     for (const payment of laborInvoicePayments) {
-      items.push({ id: `labor-paid-${payment.id}`, date: payment.date, createdAt: payment.created_at,
-        type: "payment", description: `سداد فاتورة العمالة: ${payment.purchases?.title || "عمل فني"}`,
-        projectName: payment.purchases?.projects?.name, workValue: 0, paymentAmount: Number(payment.amount), runningBalance: 0 });
+      items.push({
+        id: `labor-paid-${payment.id}`,
+        date: payment.date || payment.created_at?.slice(0, 10) || "",
+        createdAt: payment.created_at,
+        type: "payment",
+        description: `سداد فاتورة عمالة: ${payment.purchases?.title || "عمل فني"}`,
+        projectName: payment.purchases?.projects?.name,
+        workValue: 0,
+        paymentAmount: Number(payment.amount),
+        runningBalance: 0,
+      });
     }
 
     for (const tp of technicianPayments) {
@@ -588,7 +741,9 @@ export default function TechnicianDetail() {
         date: tp.date || tp.created_at?.slice(0, 10) || "",
         createdAt: tp.created_at || "",
         type: "payment",
-        description: isRev ? `دفعة ملغاة - ${tp.notes || "سند ملغي"}` : (tp.notes || `دفعة على الحساب - ${tp.treasuries?.name || "الخزينة"}`),
+        description: isRev 
+          ? `سند صرف ملغي - ${tp.notes || "ملغي"}`
+          : (tp.notes || `دفعة على الحساب - ${tp.treasuries?.name || "الخزينة"}`),
         projectName: "دفعة على الحساب (حساب الفني العام)",
         workValue: 0,
         paymentAmount: isRev ? 0 : Number(tp.amount || 0),
@@ -604,7 +759,7 @@ export default function TechnicianDetail() {
         date: pay.date || pay.created_at?.slice(0, 10) || "",
         createdAt: pay.created_at || "",
         type: "payment",
-        description: pay.description || "دفعة على الحساب (تاريخية)",
+        description: pay.description || "دفعة عمالة على الحساب",
         projectName: pay.projects?.name,
         workValue: 0,
         paymentAmount: Number(pay.amount || 0),
@@ -631,45 +786,80 @@ export default function TechnicianDetail() {
     return items;
   }, [assignments, technicianPayments, laborPayments, laborPurchases, laborInvoicePayments]);
 
-  // Filter Client/Project by Search Query
+  // Filtered Flat Assignments
+  const filteredFlatAssignments = useMemo(() => {
+    return allFlatAssignments.filter((asg) => {
+      const matchesSearch = !searchQuery.trim() || 
+        asg.projectItemName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        asg.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        asg.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        asg.phaseName.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesProject = filterProject === "all" || asg.projectId === filterProject;
+
+      return matchesSearch && matchesProject;
+    });
+  }, [allFlatAssignments, searchQuery, filterProject]);
+
+  // Filtered Client Groups (for grouped view)
   const filteredClientGroups = useMemo(() => {
-    if (!searchQuery.trim()) return clientGroups;
+    if (!searchQuery.trim() && filterProject === "all") return clientGroups;
     const q = searchQuery.trim().toLowerCase();
 
     return clientGroups
       .map((c) => {
-        const matchingProjects = c.projects.filter(
-          (p) =>
+        const matchingProjects = c.projects.filter((p) => {
+          const projectMatchesFilter = filterProject === "all" || p.projectId === filterProject;
+          const projectMatchesSearch = !q ||
             p.projectName.toLowerCase().includes(q) ||
             p.clientName.toLowerCase().includes(q) ||
-            p.assignments.some(
-              (a) =>
-                a.projectItemName.toLowerCase().includes(q) ||
-                (a.phaseName && a.phaseName.toLowerCase().includes(q))
-            )
-        );
+            p.assignments.some(a => a.projectItemName.toLowerCase().includes(q) || a.phaseName.toLowerCase().includes(q));
 
-        if (c.clientName.toLowerCase().includes(q)) {
-          return c;
-        }
+          return projectMatchesFilter && projectMatchesSearch;
+        });
 
         if (matchingProjects.length > 0) {
-          return {
-            ...c,
-            projects: matchingProjects,
-          };
+          return { ...c, projects: matchingProjects };
         }
-
         return null;
       })
       .filter(Boolean) as TechnicianClientGroup[];
-  }, [clientGroups, searchQuery]);
+  }, [clientGroups, searchQuery, filterProject]);
 
   const toggleClientExpand = (clientId: string) => {
     setExpandedClients((prev) => ({
       ...prev,
       [clientId]: prev[clientId] === undefined ? false : !prev[clientId],
     }));
+  };
+
+  const handleOpenPayModal = (contextProjId?: string) => {
+    setPayContextProjectId(contextProjId || null);
+    if (treasuriesList.length > 0 && !payTreasuryId) setPayTreasuryId(treasuriesList[0].id);
+    setPayAmount(signedBalance > 0 ? signedBalance.toString() : "");
+    setIsPayModalOpen(true);
+  };
+
+  const handleStartEditPayment = (payment: any) => {
+    setEditingPayment(payment);
+    setEditAmount(payment.amount?.toString() || "");
+    setEditTreasuryId(payment.treasury_id || payment.treasuries?.id || "");
+    setEditPaymentMethod(payment.payment_method || "cash");
+    setEditDate(payment.date || "");
+    setEditReference(payment.reference || "");
+    setEditNotes(payment.notes || "");
+  };
+
+  const handleStartReversePayment = (payment: any) => {
+    setReversingPayment(payment);
+    setReversalReason("إلغاء دفعة بطلب المستخدم");
+  };
+
+  const handleCopyPhone = (phone: string) => {
+    navigator.clipboard.writeText(phone);
+    setCopiedPhone(true);
+    toast.success("تم نسخ رقم الهاتف");
+    setTimeout(() => setCopiedPhone(false), 2000);
   };
 
   const handlePrintStatement = () => {
@@ -679,59 +869,85 @@ export default function TechnicianDetail() {
       ? `رصيد مقدم للفني: ${formatCurrencyLYD(Math.abs(signedBalance))}`
       : `الرصيد: متوازن (0.00 د.ل)`;
 
+    const tableRows = chronologicalStatement.map(st => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${st.date}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${st.description} ${st.projectName ? `(${st.projectName})` : ''}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: left; direction: ltr;">${st.workValue > 0 ? formatCurrencyLYD(st.workValue) : '—'}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: left; direction: ltr;">${st.paymentAmount > 0 ? formatCurrencyLYD(st.paymentAmount) : (st.isReversed ? 'ملغاة' : '—')}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: left; direction: ltr; font-weight: bold;">${formatCurrencyLYD(st.runningBalance)}</td>
+      </tr>
+    `).join("");
+
     const htmlContent = `
       <div class="print-area" dir="rtl">
-        <div class="print-report-header">
-          <div class="print-report-title">كشف حساب الفني: ${technician?.name || ""}</div>
-          <div class="print-report-subtitle">التخصص: ${technician?.specialty || (technician as any)?.technician_types?.name || "فني"}</div>
-          <div class="print-report-meta">التاريخ: ${new Date().toLocaleDateString("ar-LY")}</div>
+        <div class="print-report-header" style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #d6ac40; padding-bottom: 12px;">
+          <h2 style="margin: 0; font-size: 20px; color: #111;">كشف حساب فني / عامل</h2>
+          <h3 style="margin: 6px 0; font-size: 16px; color: #d6ac40;">${technician?.name || ""}</h3>
+          <div style="font-size: 12px; color: #666;">
+            التخصص: ${technician?.specialty || (technician as any)?.technician_types?.name || "فني عام"} | 
+            الهاتف: ${technician?.phone || "—"} | 
+            التاريخ: ${new Date().toLocaleDateString("ar-LY")}
+          </div>
         </div>
-        <div class="print-content">
-          <table class="print-info-table">
-            <tr>
-              <td class="info-label">إجمالي قيمة الأعمال</td>
-              <td class="info-value">${formatCurrencyLYD(globalWorkValue)}</td>
-              <td class="info-label">إجمالي المدفوعات</td>
-              <td class="info-value">${formatCurrencyLYD(globalPaid)}</td>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+          <tr style="background: #fdfaf3;">
+            <td style="padding: 10px; border: 1px solid #d6ac40; font-weight: bold;">إجمالي قيمة الأعمال:</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; direction: ltr; text-align: left; font-weight: bold;">${formatCurrencyLYD(globalWorkValue)}</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; font-weight: bold;">إجمالي المدفوعات:</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; direction: ltr; text-align: left; font-weight: bold; color: #16a34a;">${formatCurrencyLYD(globalPaid)}</td>
+          </tr>
+          <tr style="background: #fff;">
+            <td style="padding: 10px; border: 1px solid #d6ac40; font-weight: bold;">الوديعة المحفوظة:</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; direction: ltr; text-align: left;">${formatCurrencyLYD(totalDepositBalance)}</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; font-weight: bold;">صافي الرصيد:</td>
+            <td style="padding: 10px; border: 1px solid #d6ac40; direction: ltr; text-align: left; font-weight: bold; font-size: 14px; color: #d6ac40;">${balanceText}</td>
+          </tr>
+        </table>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr style="background: #f5f5f5; border: 1px solid #ddd;">
+              <th style="padding: 8px; border: 1px solid #ddd;">التاريخ</th>
+              <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">البيان / تفاصيل العمل أو السند</th>
+              <th style="padding: 8px; border: 1px solid #ddd;">قيمة العمل (+)</th>
+              <th style="padding: 8px; border: 1px solid #ddd;">الدفعة الصادرة (-)</th>
+              <th style="padding: 8px; border: 1px solid #ddd;">الرصيد التراكمي</th>
             </tr>
-            <tr>
-              <td class="info-label">المشاريع المرتبط بها</td>
-              <td class="info-value">${distinctProjectsCount} مشروع</td>
-              <td class="info-label">الأعمال المسندة</td>
-              <td class="info-value">${totalAssignmentsCount} عمل</td>
-            </tr>
-            <tr>
-              <td class="info-label">حالة الرصيد</td>
-              <td class="info-value" colspan="3" style="font-weight: bold; color: #d6ac40;">${balanceText}</td>
-            </tr>
-          </table>
-        </div>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
       </div>
     `;
-    openPrintWindow(`كشف حساب الفني: ${technician?.name || ""}`, htmlContent, companySettings);
+    openPrintWindow(`كشف حساب: ${technician?.name || ""}`, htmlContent, companySettings);
   };
 
   if (loadingTechnician) {
     return (
-      <div className="space-y-4 p-6" dir="rtl">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="space-y-4 p-4 sm:p-6" dir="rtl">
+        <Skeleton className="h-28 rounded-2xl w-full" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-24 rounded-2xl" />
         </div>
+        <Skeleton className="h-96 rounded-2xl w-full" />
       </div>
     );
   }
 
   if (technicianError || !technician) {
     return (
-      <div className="p-8 text-center" dir="rtl">
-        <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-2" />
-        <h3 className="text-lg font-bold text-foreground">تعذر العثور على الفني</h3>
-        <p className="text-sm text-muted-foreground mt-1">الفني المطلوب غير موجود أو تم حذفه.</p>
-        <Button className="mt-4" onClick={() => navigate("/technicians")}>
-          العودة لقائمة الفنيين
+      <div className="p-12 text-center" dir="rtl">
+        <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-3" />
+        <h3 className="text-xl font-bold text-foreground">تعذر العثور على الفني أو العامل</h3>
+        <p className="text-sm text-muted-foreground mt-1">السجل المطلوب غير موجود أو تم حذفه من النظام.</p>
+        <Button className="mt-4 bg-primary text-primary-foreground font-bold cursor-pointer" onClick={() => navigate("/technicians")}>
+          العودة لقائمة الفنيين والعمال
         </Button>
       </div>
     );
@@ -739,70 +955,132 @@ export default function TechnicianDetail() {
 
   const isLoadingData = loadingAssignments || loadingPayments || loadingLaborWork || loadingTechPayments || loadingLaborInvoicePayments;
 
-  if (assignmentsError || paymentsError || laborWorkError || laborInvoicePaymentsError || techPaymentsError) return (
-    <Card className="m-6 p-6 space-y-3" dir="rtl" role="alert">
-      <p>تعذر تحميل حساب الفني كاملاً. لم نعرض أرصدة جزئية.</p>
-      <Button variant="outline" onClick={() => invalidateFinancialQueries(queryClient)}>إعادة المحاولة</Button>
-    </Card>
-  );
-  if (isLoadingData) return <div className="p-6 text-muted-foreground" dir="rtl" role="status">جاري مطابقة أعمال الفني ومدفوعاته…</div>;
-
   return (
     <div className="space-y-5 p-4 sm:p-6" dir="rtl">
-      {/* Breadcrumb Navigation */}
+      {/* Deterministic Breadcrumbs */}
       <DeterministicBreadcrumb
         items={[
-          { label: "الفنيون", href: "/technicians" },
+          { label: "الفنيين والعمال", href: "/technicians" },
           { label: technician?.name || "تفاصيل الفني", isCurrent: true },
         ]}
         fallbackBackHref="/technicians"
       />
 
-      {/* Header Info & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border/80 shadow-xs">
-        <div className="flex items-center gap-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0 border border-primary/20">
-            <Wrench className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight flex items-center gap-2">
-              <span>{technician.name}</span>
-            </h1>
-            <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1 flex-wrap">
-              {(technician.specialty || (technician as any).technician_types?.name) && (
-                <Badge variant="secondary" className="font-bold">
-                  {technician.specialty || (technician as any).technician_types?.name}
+      {/* Hero Party Account Header */}
+      <Card className="overflow-hidden border border-border/80 bg-gradient-to-l from-card via-card to-primary/[0.04] shadow-xs rounded-2xl">
+        <div className="h-1.5 bg-gradient-to-r from-primary via-amber-500 to-primary/40" />
+        <div className="p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          {/* Right side: Party Info */}
+          <div className="flex items-start gap-4">
+            <div className="h-16 w-16 shrink-0 rounded-2xl border-2 border-primary/30 bg-primary/10 flex items-center justify-center text-primary shadow-xs">
+              <Wrench className="h-8 w-8 text-primary animate-in fade-in" />
+            </div>
+            
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-black text-foreground">{technician.name}</h1>
+                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5">
+                  فني / عامل
                 </Badge>
-              )}
-              {technician.phone && (
-                <span className="flex items-center gap-1 font-semibold text-foreground/80">
-                  <Phone className="h-3.5 w-3.5 text-primary" />
-                  <span dir="ltr">{technician.phone}</span>
+                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs font-bold px-2 py-0.5 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>نشط</span>
+                </Badge>
+              </div>
+
+              {/* Specialty & Contact Chips */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-0.5">
+                {(technician.specialty || (technician as any).technician_types?.name) && (
+                  <div className="flex items-center gap-1 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/60 text-foreground font-semibold">
+                    <Briefcase className="h-3.5 w-3.5 text-primary" />
+                    <span>{technician.specialty || (technician as any).technician_types?.name}</span>
+                  </div>
+                )}
+
+                {technician.phone ? (
+                  <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/60">
+                    <Phone className="h-3.5 w-3.5 text-primary" />
+                    <a
+                      href={`tel:${technician.phone}`}
+                      className="text-foreground hover:text-primary font-bold hover:underline transition-colors"
+                      dir="ltr"
+                    >
+                      {technician.phone}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPhone(technician.phone)}
+                      className="p-1 hover:text-primary text-muted-foreground transition-colors cursor-pointer"
+                      title="نسخ الرقم"
+                    >
+                      {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground text-xs italic">لا يوجد رقم هاتف مسجل</span>
+                )}
+
+                {technician.notes && (
+                  <span className="text-xs text-muted-foreground line-clamp-1 max-w-xs">
+                    ملاحظات: {technician.notes}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Left side: Quick Actions & Live Balance Pill */}
+          <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end gap-3 shrink-0">
+            {/* Live Balance Banner Chip */}
+            <div className={`px-3.5 py-1.5 rounded-xl border flex items-center justify-between sm:justify-start gap-2.5 ${balanceInfo.badgeBg}`}>
+              <div className="text-right">
+                <span className="text-[10px] font-bold block text-muted-foreground">{balanceInfo.label}</span>
+                <span className="text-base font-black text-foreground" dir="ltr">
+                  {formatCurrencyLYD(balanceInfo.amount)}
                 </span>
+              </div>
+              <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              {canManagePayments && (
+                <Button
+                  onClick={() => handleOpenPayModal()}
+                  className="h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                >
+                  <Wallet className="h-4 w-4" />
+                  <span>صرف دفعة على الحساب</span>
+                </Button>
               )}
+
+              <Button
+                variant="outline"
+                onClick={handlePrintStatement}
+                className="h-9 px-3 text-xs font-bold gap-1.5 cursor-pointer border-border/80 hover:bg-muted transition-all"
+              >
+                <Printer className="h-3.5 w-3.5 text-primary" />
+                <span>كشف الحساب</span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditProfileOpen(true)}
+                className="h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer border border-border/60 hover:bg-muted"
+                title="تعديل بيانات الفني"
+              >
+                <Pencil className="h-4 w-4 text-blue-600" />
+              </Button>
             </div>
           </div>
         </div>
+      </Card>
 
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => handleOpenPayModal()}
-            className="gap-1.5 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer"
-          >
-            <Sparkles className="h-4 w-4" />
-            <span>دفع على الحساب</span>
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={handlePrintStatement} className="gap-1.5 text-xs font-bold bg-card border-border/80 hover:bg-muted cursor-pointer shadow-2xs">
-            <Printer className="h-4 w-4 text-primary" />
-            <span>طباعة كشف الحساب</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Top Reconciled Summary KPIs (Financial Authority) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+      {/* KPI Executive Summary Grid (4 Cohesive Financial & Activity Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* KPI 1: Total Work Value */}
+        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground font-bold">إجمالي قيمة الأعمال</span>
             <div className="p-2 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400">
@@ -812,12 +1090,18 @@ export default function TechnicianDetail() {
           <p className="text-2xl font-black text-foreground mt-2" dir="ltr">
             {formatCurrencyLYD(globalWorkValue)}
           </p>
-          <span className="text-[11px] text-muted-foreground font-medium">إجمالي أجور وقيم الأعمال المسندة للفني بكافة المشاريع</span>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>مجموع أجور الأعمال المسندة</span>
+            <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-muted">
+              {totalAssignmentsCount} عمل
+            </Badge>
+          </div>
         </Card>
 
-        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+        {/* KPI 2: Total Paid Out */}
+        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs relative overflow-hidden group hover:border-emerald-500/40 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-bold">إجمالي المدفوعات</span>
+            <span className="text-xs text-muted-foreground font-bold">إجمالي المدفوعات الصادرة</span>
             <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <Wallet className="h-4 w-4" />
             </div>
@@ -825,206 +1109,247 @@ export default function TechnicianDetail() {
           <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2" dir="ltr">
             {formatCurrencyLYD(globalPaid)}
           </p>
-          <span className="text-[11px] text-muted-foreground font-medium">سندات الصرف والدفعات النقدية المسددة</span>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>سندات الصرف والدفعات</span>
+            <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+              {technicianPayments.filter((p: any) => p.status !== "reversed").length + laborPayments.length} سند
+            </Badge>
+          </div>
         </Card>
 
-        <Card className="rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-primary/[0.03] to-card p-4 shadow-xs flex flex-col justify-between">
+        {/* KPI 3: Signed Net Balance */}
+        <Card className={`rounded-2xl border p-4 shadow-xs flex flex-col justify-between ${
+          signedBalance > 0 
+            ? "border-amber-500/40 bg-gradient-to-br from-amber-500/[0.08] via-amber-500/[0.02] to-card"
+            : signedBalance < 0
+            ? "border-blue-500/40 bg-gradient-to-br from-blue-500/[0.08] via-blue-500/[0.02] to-card"
+            : "border-emerald-500/40 bg-gradient-to-br from-emerald-500/[0.08] via-emerald-500/[0.02] to-card"
+        }`}>
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-primary font-bold">{balanceInfo.label}</span>
+              <span className={`text-xs font-bold ${balanceInfo.color}`}>{balanceInfo.label}</span>
               <div className="p-2 rounded-xl bg-primary/20 text-primary">
-                <Sparkles className="h-4 w-4" />
+                <Receipt className="h-4 w-4" />
               </div>
             </div>
             <p className={`text-2xl font-black ${balanceInfo.color} mt-2`} dir="ltr">
               {formatCurrencyLYD(balanceInfo.amount)}
             </p>
-            <span className="text-[11px] text-foreground/80 font-semibold">{balanceInfo.description}</span>
           </div>
+          <div className="mt-2 pt-2 border-t border-border/50 text-[11px] text-foreground/80 font-medium line-clamp-1">
+            {balanceInfo.statusText}
+          </div>
+        </Card>
 
-          <Button
-            size="sm"
-            onClick={() => handleOpenPayModal()}
-            className="mt-3 w-full h-8 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer gap-1"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>دفع على الحساب</span>
-          </Button>
+        {/* KPI 4: Security Deposit & Active Projects */}
+        <Card className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs relative overflow-hidden group hover:border-primary/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground font-bold">الوديعة المحفوظة</span>
+            <div className="p-2 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-foreground mt-2" dir="ltr">
+            {formatCurrencyLYD(totalDepositBalance)}
+          </p>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>المشاريع المرتبط بها:</span>
+            <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 border-border/80">
+              {distinctProjectsCount} مشروع
+            </Badge>
+          </div>
         </Card>
       </div>
 
-      {/* Operational Stats Strip */}
-      <TechnicianDepositsPanel technicianId={id!} />
-      <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border/80 text-xs shadow-2xs overflow-x-auto">
-        <div className="flex items-center gap-2 pr-2">
-          <Building2 className="h-4 w-4 text-primary" />
-          <span className="text-muted-foreground font-bold">المشاريع المرتبط بها:</span>
-          <Badge variant="secondary" className="font-bold text-xs">{distinctProjectsCount}</Badge>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <span className="text-muted-foreground font-bold">الأعمال المسندة:</span>
-          <Badge variant="secondary" className="font-bold text-xs">{totalAssignmentsCount}</Badge>
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-muted-foreground font-bold">عدد الدفعات المسددة:</span>
-          <Badge variant="secondary" className="font-bold text-xs">
-            {technicianPayments.filter((p: any) => p.status !== "reversed").length + laborPayments.length}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Query Error Alert if any query fails */}
-      {(assignmentsError || paymentsError || laborWorkError || laborInvoicePaymentsError) && (
-        <Card className="p-3.5 bg-destructive/10 border-destructive/30 rounded-2xl flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-destructive text-xs font-bold">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>حدث خطأ أثناء جلب بعض بيانات الفني أو سجلات العمل.</span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7 font-bold border-destructive/30 hover:bg-destructive/10 cursor-pointer"
-            onClick={() => {
-              refetchAssignments();
-              refetchPayments();
-            }}
-          >
-            إعادة المحاولة
-          </Button>
-        </Card>
-      )}
-
-      {/* Tabs Layout: Projects & Assignments vs Statement */}
+      {/* Main Interactive Tabs Section */}
       <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <TabsList className="bg-card border border-border/80 p-1 rounded-xl shadow-2xs h-11">
-            <TabsTrigger value="projects" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/60 pb-3">
+          <TabsList className="bg-card border border-border/80 p-1 rounded-xl shadow-2xs h-11 flex-wrap">
+            <TabsTrigger 
+              value="projects" 
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
               <Building2 className="h-4 w-4 text-primary" />
-              <span>المشاريع والأعمال المسندة</span>
+              <span>المشاريع والزبائن</span>
               <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
                 {distinctProjectsCount}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="statement" className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer">
-              <Receipt className="h-4 w-4 text-primary" />
-              <span>سجل السندات والعمليات</span>
+
+            <TabsTrigger 
+              value="payments" 
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span>سندات الصرف والمدفوعات</span>
+              <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
+                {technicianPayments.length + laborPayments.length}
+              </Badge>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="statement" 
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>كشف الحساب التراكمي</span>
               <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
                 {chronologicalStatement.length}
               </Badge>
             </TabsTrigger>
+
+            <TabsTrigger 
+              value="deposits" 
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span>الوديعة والتسويات</span>
+              {totalDepositBalance > 0 && (
+                <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-purple-500/10 text-purple-700">
+                  {formatCurrencyLYD(totalDepositBalance)}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
-          {/* Instant Search Bar */}
+          {/* Quick Tab Controls & Filters */}
           {activeTab === "projects" && (
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="بحث باسم الزبون، المشروع، أو البند..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-9 h-10 text-xs rounded-xl bg-card border-border/80"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Project Filter Select */}
+              <Select value={filterProject} onValueChange={setFilterProject} dir="rtl">
+                <SelectTrigger className="h-9 w-40 text-xs rounded-xl bg-card border-border/80">
+                  <SelectValue placeholder="كل المشاريع" />
+                </SelectTrigger>
+                <SelectContent dir="rtl">
+                  <SelectItem value="all" className="text-xs font-bold">كافة المشاريع</SelectItem>
+                  {distinctProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-xl border border-border/80 bg-card p-0.5 shadow-2xs">
+                <Button
+                  variant={assignmentsViewMode === "grouped" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-lg cursor-pointer"
+                  onClick={() => setAssignmentsViewMode("grouped")}
+                  title="عرض مجمّع حسب المشروع والعميل"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">مجموعات المشاريع</span>
+                </Button>
+                <Button
+                  variant={assignmentsViewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-lg cursor-pointer"
+                  onClick={() => setAssignmentsViewMode("table")}
+                  title="عرض كجدول ERP تفصيلي"
+                >
+                  <TableProperties className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">جدول ERP</span>
+                </Button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-56">
+                <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="بحث في البنود والمشاريع..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8 h-9 text-xs rounded-xl bg-card border-border/80"
+                />
+              </div>
             </div>
           )}
         </div>
 
-        {/* TAB 1: CLIENTS -> PROJECTS -> ASSIGNMENTS */}
-        <TabsContent value="projects" className="space-y-4 mt-2">
+        {/* ============================================================ */}
+        {/* TAB 1: WORK ITEMS & ASSIGNMENTS (المشاريع والزبائن)          */}
+        {/* ============================================================ */}
+        <TabsContent value="projects" className="space-y-4 mt-1">
           {isLoadingData ? (
             <div className="space-y-3">
               <Skeleton className="h-28 rounded-2xl" />
               <Skeleton className="h-28 rounded-2xl" />
             </div>
-          ) : filteredClientGroups.length === 0 ? (
-            <Card className="p-8 text-center rounded-2xl border-dashed border-border/80 bg-card">
-              <Wrench className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
-              <h4 className="text-base font-bold text-foreground">لا توجد أعمال أو مشاريع مسندة لهذا الفني</h4>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">
-                يمكن إسناد الفني إلى بنود المشاريع مباشرة وتحديد أجر العمل، أو تسجيل دفعات مقدمة على حسابه.
+          ) : filteredFlatAssignments.length === 0 ? (
+            <Card className="p-10 text-center rounded-2xl border-dashed border-border/80 bg-card">
+              <Box className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+              <h4 className="text-base font-bold text-foreground">لا توجد أعمال أو بنود مسندة لهذا الفني</h4>
+              <p className="text-xs text-muted-foreground mt-1 font-medium max-w-md mx-auto">
+                يمكن إسناد الفني إلى بنود مقايسة المشاريع وتحديد أجر العمل، أو تسجيل دفعات وصرف سندات مباشرة على حسابه.
               </p>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 border-r-2 border-primary pr-3">
-                <Building2 className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-extrabold text-foreground">المشاريع والزبائن</h2>
-                <span className="hidden text-xs text-muted-foreground sm:inline">تجميع الأعمال حسب العميل ثم المشروع</span>
-              </div>
+          ) : assignmentsViewMode === "grouped" ? (
+            /* Grouped View (Client -> Projects) - Canonical ERP Hierarchy */
+            <div className="space-y-3.5">
               {filteredClientGroups.map((client) => {
-              const isClientExpanded = expandedClients[client.clientId] !== false;
-              const clientTotalWork = client.projects.reduce((sum, p) => sum + p.totalWorkValue, 0);
+                const isClientExpanded = expandedClients[client.clientId] !== false;
+                const clientTotalWork = client.projects.reduce((sum, p) => sum + p.totalWorkValue, 0);
 
-              return (
-                <Card
-                  key={client.clientId}
-                  className="rounded-2xl border border-border/80 shadow-xs overflow-hidden bg-card"
-                >
-                  {/* Client Group Header */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={isClientExpanded}
-                    className="flex cursor-pointer items-center justify-between border-b border-border/80 bg-muted/30 p-3.5 transition-all duration-200 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => toggleClientExpand(client.clientId)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggleClientExpand(client.clientId);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600">
-                        <Building2 className="h-4 w-4" />
+                return (
+                  <Card key={client.clientId} className="rounded-2xl border border-border/80 shadow-xs overflow-hidden bg-card">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isClientExpanded}
+                      className="flex cursor-pointer items-center justify-between border-b border-border/80 bg-muted/20 p-3.5 transition-all duration-200 hover:bg-muted/40 focus-visible:outline-none"
+                      onClick={() => toggleClientExpand(client.clientId)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleClientExpand(client.clientId);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                            <span>العميل: {client.clientName}</span>
+                            <Badge variant="outline" className="text-[10px] font-bold py-0.5 border-border/80">
+                              {client.projects.length} {client.projects.length === 1 ? "مشروع" : "مشاريع"}
+                            </Badge>
+                          </h3>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <span>العميل: {client.clientName}</span>
-                          <Badge variant="outline" className="text-[10px] font-bold py-0.5 border-border/80">
-                            {client.projects.length} {client.projects.length === 1 ? "مشروع" : "مشاريع"}
-                          </Badge>
-                        </h3>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-left">
+                          <span className="text-[10px] text-muted-foreground font-bold block">إجمالي أعمال العميل</span>
+                          <span className="text-xs font-black text-foreground" dir="ltr">
+                            {formatCurrencyLYD(clientTotalWork)}
+                          </span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                          {isClientExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="text-left">
-                        <span className="text-[10px] text-muted-foreground font-bold block">إجمالي أعمال العميل</span>
-                        <span className="text-xs font-black text-foreground" dir="ltr">
-                          {formatCurrencyLYD(clientTotalWork)}
-                        </span>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                        {isClientExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Projects under this Client */}
-                  {isClientExpanded && (
-                    <div className="p-4 grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
-                      {client.projects.map((proj) => (
-                        <div
-                          key={proj.projectId}
-                          className="p-4 rounded-xl border border-border/80 bg-card hover:border-primary/50 transition-all flex flex-col justify-between shadow-2xs space-y-3"
-                        >
-                          <div className="space-y-3">
-                            {/* Project Title & Badges */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
+                    {isClientExpanded && (
+                      <div className="p-4 grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+                        {client.projects.map((proj) => (
+                          <div
+                            key={proj.projectId}
+                            className="p-4 rounded-xl border border-border/80 bg-card hover:border-primary/50 transition-all flex flex-col justify-between shadow-2xs space-y-3"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
                                 <Link
                                   to={`/projects/${proj.projectId}`}
-                                  className="font-bold text-base text-foreground hover:text-primary transition-colors flex items-center gap-1.5"
+                                  className="font-bold text-sm text-foreground hover:text-primary transition-colors flex items-center gap-1.5"
                                 >
                                   <Layers className="h-4 w-4 text-primary shrink-0" />
                                   <span>{proj.projectName}</span>
                                 </Link>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                                 <Badge
                                   variant="outline"
                                   className={`text-[10px] px-2 py-0.5 font-bold ${
@@ -1036,130 +1361,388 @@ export default function TechnicianDetail() {
                                   {proj.projectType === "contracting" ? "مقاولات" : "تشطيبات"}
                                 </Badge>
                               </div>
-                            </div>
 
-                            {/* Project Financial Metrics Box */}
-                            <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/60 text-center">
-                              <div>
-                                <span className="text-[10px] text-muted-foreground font-bold block">إجمالي قيمة الأعمال</span>
-                                <span className="text-xs font-black text-foreground" dir="ltr">
-                                  {formatCurrencyLYD(proj.totalWorkValue)}
-                                </span>
+                              <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/60 text-center">
+                                <div>
+                                  <span className="text-[10px] text-muted-foreground font-bold block">إجمالي قيمة الأعمال</span>
+                                  <span className="text-xs font-black text-foreground" dir="ltr">
+                                    {formatCurrencyLYD(proj.totalWorkValue)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-muted-foreground font-bold block">الأعمال المسندة</span>
+                                  <span className="text-xs font-black text-primary" dir="ltr">
+                                    {proj.assignments.length} بند
+                                  </span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-[10px] text-muted-foreground font-bold block">الأعمال المسندة</span>
-                                <span className="text-xs font-black text-primary" dir="ltr">
-                                  {proj.assignments.length} بند
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Assigned BOQ Items List */}
-                            <div className="space-y-2">
-                              <span className="text-xs font-bold text-foreground flex items-center gap-1.5 py-1">
-                                <Box className="h-3.5 w-3.5 text-primary" />
-                                <span>الأعمال والبنود المسندة ({proj.assignments.length})</span>
-                              </span>
 
                               <div className="space-y-2">
-                                {proj.assignments.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-lg text-center">
-                                    لا توجد بنود مسندة حالياً في هذا المشروع.
-                                  </p>
-                                ) : (
-                                  proj.assignments.map((asg) => (
-                                    <div
-                                      key={asg.id}
-                                      className="p-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs space-y-1.5"
-                                    >
+                                <span className="text-xs font-bold text-foreground flex items-center gap-1.5 py-1">
+                                  <Box className="h-3.5 w-3.5 text-primary" />
+                                  <span>الأعمال والبنود المسندة ({proj.assignments.length})</span>
+                                </span>
+
+                                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                  {proj.assignments.map((asg) => (
+                                    <div key={asg.id} className="p-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs space-y-1">
                                       <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                          <div className="font-bold text-foreground flex items-center gap-1.5">
-                                            <span>{asg.projectItemName}</span>
-                                          </div>
-                                          <div className="text-[11px] text-muted-foreground font-medium mt-0.5">
-                                            المرحلة: <span className="text-foreground/80 font-semibold">{asg.phaseName}</span>
-                                          </div>
-                                        </div>
+                                        <div className="font-bold text-foreground">{asg.projectItemName}</div>
                                         <div className="text-left font-black text-foreground" dir="ltr">
                                           {formatCurrencyLYD(asg.workValue)}
                                         </div>
                                       </div>
-
-                                      <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40 font-medium">
-                                        <div>
-                                          {asg.rate ? (
-                                            <span>
-                                              الأجر: <strong className="text-foreground">{formatCurrencyLYD(asg.rate)}</strong> {rateTypeLabels[asg.rateType || ""] || asg.rateType}
-                                              {asg.quantity ? ` × ${asg.quantity}` : ""}
-                                            </span>
-                                          ) : (
-                                            <span>معدل الأجر: غير محدد</span>
-                                          )}
-                                        </div>
+                                      <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                                        <span>المرحلة: {asg.phaseName}</span>
+                                        {asg.rate && (
+                                          <span>
+                                            الأجر: {formatCurrencyLYD(asg.rate)} {rateTypeLabels[asg.rateType || ""] || asg.rateType}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
-                                  ))
-                                )}
+                                  ))}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Actions */}
-                          <div className="pt-2 border-t border-border/60 flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              className="h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1 text-xs px-3 shadow-2xs cursor-pointer"
-                              onClick={() => handleOpenPayModal(proj.projectId)}
-                            >
-                              <Sparkles className="h-3.5 w-3.5" />
-                              <span>دفع على الحساب</span>
-                            </Button>
+                            <div className="pt-2 border-t border-border/60 flex items-center justify-end">
+                              <Button
+                                size="sm"
+                                className="h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1 text-xs px-3 shadow-2xs cursor-pointer"
+                                onClick={() => handleOpenPayModal(proj.projectId)}
+                                disabled={!canManagePayments}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                <span>صرف دفعة للمشروع</span>
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              );
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                );
               })}
             </div>
+          ) : (
+            /* ERP Table View */
+            <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-xs bg-card">
+              <CardHeader className="p-3.5 bg-muted/20 border-b border-border/60 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TableProperties className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-xs font-bold text-foreground">
+                    جدول كافة الأعمال والبنود المسندة ({filteredFlatAssignments.length})
+                  </CardTitle>
+                </div>
+                <div className="text-xs font-bold text-muted-foreground">
+                  إجمالي القيمة: <strong className="text-foreground text-sm" dir="ltr">{formatCurrencyLYD(filteredFlatAssignments.reduce((s, a) => s + a.workValue, 0))}</strong>
+                </div>
+              </CardHeader>
+              <div className="overflow-x-auto">
+                <Table className="text-xs" dir="rtl">
+                  <TableHeader className="bg-muted/40">
+                    <TableRow>
+                      <TableHead className="text-right font-bold text-foreground w-12">#</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">اسم بند العمل</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">المشروع والعميل</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">المرحلة</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">معدل الأجر والكمية</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">إجمالي القيمة</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">التاريخ</TableHead>
+                      <TableHead className="text-center font-bold text-foreground">إجراء</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredFlatAssignments.map((asg, idx) => (
+                      <TableRow key={asg.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-bold text-muted-foreground">{idx + 1}</TableCell>
+                        <TableCell>
+                          <div className="font-bold text-foreground text-xs">{asg.projectItemName}</div>
+                          {asg.notes && <div className="text-[10px] text-muted-foreground mt-0.5">{asg.notes}</div>}
+                        </TableCell>
+                        <TableCell>
+                          <Link 
+                            to={`/projects/${asg.projectId}`} 
+                            className="font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1"
+                          >
+                            <span>{asg.projectName}</span>
+                            <ExternalLink className="h-3 w-3 opacity-60" />
+                          </Link>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">العميل: {asg.clientName}</div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-medium">{asg.phaseName}</TableCell>
+                        <TableCell>
+                          {asg.rate ? (
+                            <div>
+                              <span className="font-bold text-foreground" dir="ltr">{formatCurrencyLYD(asg.rate)}</span>
+                              <span className="text-[10px] text-muted-foreground mr-1">
+                                {rateTypeLabels[asg.rateType || ""] || asg.rateType}
+                              </span>
+                              {asg.quantity ? <span className="text-[10px] font-semibold text-primary block">× {asg.quantity}</span> : null}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground italic">مقطوع</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-black text-foreground" dir="ltr">
+                          {formatCurrencyLYD(asg.workValue)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-[11px]">
+                          {asg.createdAt?.slice(0, 10) || "—"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[11px] px-2 font-bold text-primary hover:bg-primary/10 cursor-pointer"
+                            onClick={() => handleOpenPayModal(asg.projectId)}
+                            disabled={!canManagePayments}
+                            title="صرف دفعة مرتبطة بهذا المشروع"
+                          >
+                            <Wallet className="h-3.5 w-3.5 ml-1" />
+                            <span>صرف</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           )}
         </TabsContent>
 
-        {/* TAB 2: FULL CHRONOLOGICAL RUNNING BALANCE STATEMENT */}
-        <TabsContent value="statement" className="mt-2">
+        {/* ============================================================ */}
+        {/* TAB 2: PAYMENT VOUCHERS & DISBURSEMENTS                     */}
+        {/* ============================================================ */}
+        <TabsContent value="payments" className="space-y-4 mt-1">
           <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-xs bg-card">
             <CardHeader className="p-4 bg-muted/20 border-b border-border/60 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
-                <Receipt className="h-4 w-4 text-primary" />
-                <span>كشف الحساب التراكمي وسجل الحركات المالية</span>
-              </CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-bold border-border/80">
-                  {chronologicalStatement.length} حركة مسجلة
-                </Badge>
+                <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <CardTitle className="text-xs font-bold text-foreground">
+                  سجل سندات الصرف والمدفوعات المسددة ({technicianPayments.length + laborPayments.length})
+                </CardTitle>
+              </div>
+              {canManagePayments && (
                 <Button
                   size="sm"
-                  variant="outline"
-                  onClick={handlePrintStatement}
-                  className="h-7 text-xs gap-1 font-bold cursor-pointer"
+                  onClick={() => handleOpenPayModal()}
+                  className="h-8 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <Printer className="h-3.5 w-3.5 text-primary" />
-                  <span>طباعة الكشف</span>
+                  <Wallet className="h-3.5 w-3.5" />
+                  <span>تسجيل دفعة جديدة</span>
                 </Button>
+              )}
+            </CardHeader>
+            <div className="overflow-x-auto">
+              <Table className="text-xs" dir="rtl">
+                <TableHeader className="bg-muted/40">
+                  <TableRow>
+                    <TableHead className="text-right font-bold text-foreground">رقم السند</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">التاريخ</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">الخزينة المخصوم منها</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">طريقة الدفع</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">البيان / الملاحظات</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">المبلغ المصروف</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">الحالة</TableHead>
+                    <TableHead className="text-center font-bold text-foreground">الإجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {technicianPayments.length === 0 && laborPayments.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground font-medium">
+                        لا توجد سندات صرف أو دفعات مسجلة لهذا الفني حتى الآن.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <>
+                      {technicianPayments.map((pay: any) => {
+                        const isRev = pay.status === "reversed";
+                        return (
+                          <TableRow key={`tp-${pay.id}`} className={`hover:bg-muted/30 transition-colors ${isRev ? "opacity-50 line-through bg-muted/10" : ""}`}>
+                            <TableCell className="font-mono font-bold text-foreground text-[11px]">
+                              PAY-{pay.id.slice(0, 8)}
+                            </TableCell>
+                            <TableCell className="font-semibold text-muted-foreground">{pay.date || pay.created_at?.slice(0, 10)}</TableCell>
+                            <TableCell className="font-semibold text-foreground">
+                              {pay.treasuries?.name || "الخزينة العامة"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] font-bold border-border/80">
+                                {pay.payment_method === "cash" ? "نقداً" : pay.payment_method === "transfer" ? "تحويل" : "صك"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-foreground font-medium">{pay.notes || "صرف دفعة على الحساب"}</span>
+                              {isRev && pay.reversal_reason && (
+                                <div className="text-[10px] text-destructive font-medium mt-0.5">
+                                  سبب الإلغاء: {pay.reversal_reason}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-black text-emerald-600 dark:text-emerald-400 text-sm" dir="ltr">
+                              {formatCurrencyLYD(Number(pay.amount || 0))}
+                            </TableCell>
+                            <TableCell>
+                              {isRev ? (
+                                <Badge variant="destructive" className="text-[10px] font-bold">ملغاة</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/30 text-emerald-700 bg-emerald-500/10">
+                                  معتمدة
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                                  title="طباعة سند الصرف"
+                                  onClick={() =>
+                                    openReceiptPrintWindow(
+                                      {
+                                        receiptNumber: `PAY-${pay.id.slice(0, 8)}`,
+                                        date: pay.date,
+                                        type: "salary",
+                                        amount: Number(pay.amount || 0),
+                                        paidToOrBy: technician.name,
+                                        description: pay.notes || `صرف مستحقات فني`,
+                                        paymentMethod: pay.payment_method,
+                                        treasuryName: pay.treasuries?.name,
+                                        notes: pay.notes || undefined,
+                                        isCancelled: isRev,
+                                        reversalReason: pay.reversal_reason || undefined,
+                                        reversedAt: pay.reversed_at || undefined,
+                                      },
+                                      companySettings
+                                    )
+                                  }
+                                >
+                                  <Printer className="h-3.5 w-3.5 text-primary" />
+                                </Button>
+
+                                {!isRev && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-blue-600 cursor-pointer"
+                                      title="تعديل الدفعة"
+                                      onClick={() => handleStartEditPayment(pay)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
+                                      title="إلغاء الدفعة واسترجاع الرصيد"
+                                      onClick={() => handleStartReversePayment(pay)}
+                                    >
+                                      <RotateCcw className="h-3.5 w-3.5 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+
+                      {laborPayments.map((pay: any) => (
+                        <TableRow key={`lp-${pay.id}`} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="font-mono text-muted-foreground text-[11px]">
+                            EXP-{pay.id.slice(0, 8)}
+                          </TableCell>
+                          <TableCell className="font-semibold text-muted-foreground">{pay.date || pay.created_at?.slice(0, 10)}</TableCell>
+                          <TableCell className="text-muted-foreground">صرف مباشر (مشروع)</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] font-bold border-border/80">نقداً</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-foreground font-medium">{pay.description || "صرف عمالة مشروع"}</span>
+                            {pay.projects?.name && (
+                              <div className="text-[10px] text-muted-foreground">مشروع: {pay.projects.name}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-black text-emerald-600 dark:text-emerald-400 text-sm" dir="ltr">
+                            {formatCurrencyLYD(Number(pay.amount || 0))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/30 text-emerald-700 bg-emerald-500/10">
+                              معتمدة
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                              title="طباعة إيصال الصرف"
+                              onClick={() =>
+                                openReceiptPrintWindow(
+                                  {
+                                    receiptNumber: `EXP-${pay.id.slice(0, 8)}`,
+                                    date: pay.date,
+                                    type: "salary",
+                                    amount: Number(pay.amount || 0),
+                                    paidToOrBy: technician.name,
+                                    description: pay.description || `صرف مستحقات عمالة`,
+                                    projectName: pay.projects?.name,
+                                  },
+                                  companySettings
+                                )
+                              }
+                            >
+                              <Printer className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* ============================================================ */}
+        {/* TAB 3: RUNNING BALANCE STATEMENT (LEDGER)                    */}
+        {/* ============================================================ */}
+        <TabsContent value="statement" className="space-y-4 mt-1">
+          <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-xs bg-card">
+            <CardHeader className="p-4 bg-muted/20 border-b border-border/60 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-primary" />
+                <CardTitle className="text-xs font-bold text-foreground">
+                  كشف الحساب التراكمي المالي المتسلسل ({chronologicalStatement.length} حركة)
+                </CardTitle>
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handlePrintStatement}
+                className="h-8 text-xs gap-1.5 font-bold cursor-pointer border-border/80 hover:bg-muted"
+              >
+                <Printer className="h-3.5 w-3.5 text-primary" />
+                <span>طباعة الكشف التراكمي</span>
+              </Button>
             </CardHeader>
             <div className="overflow-x-auto">
               <Table className="text-xs" dir="rtl">
                 <TableHeader className="bg-muted/40">
                   <TableRow>
                     <TableHead className="text-right font-bold text-foreground">التاريخ</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">البيان / المشروع</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">البيان / تفاصيل العملية</TableHead>
                     <TableHead className="text-right font-bold text-foreground">قيمة العمل (+)</TableHead>
                     <TableHead className="text-right font-bold text-foreground">الدفعة المسددة (-)</TableHead>
                     <TableHead className="text-right font-bold text-foreground">الرصيد التراكمي</TableHead>
-                    <TableHead className="text-center font-bold text-foreground">الإجراءات والسندات</TableHead>
+                    <TableHead className="text-center font-bold text-foreground">السند</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1171,22 +1754,17 @@ export default function TechnicianDetail() {
                     </TableRow>
                   ) : (
                     chronologicalStatement.map((st) => (
-                      <TableRow key={st.id} className={`hover:bg-muted/30 ${st.isReversed ? "opacity-50 line-through bg-muted/10" : ""}`}>
-                        <TableCell className="font-semibold">{st.date}</TableCell>
+                      <TableRow key={st.id} className={`hover:bg-muted/30 transition-colors ${st.isReversed ? "opacity-50 line-through bg-muted/10" : ""}`}>
+                        <TableCell className="font-semibold text-muted-foreground">{st.date}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-foreground">{st.description}</span>
                             {st.isReversed && (
-                              <Badge variant="destructive" className="text-[10px] py-0 px-1 font-bold">
-                                ملغاة
-                              </Badge>
+                              <Badge variant="destructive" className="text-[10px] py-0 px-1 font-bold">ملغاة</Badge>
                             )}
                           </div>
                           {st.projectName && (
-                            <div className="text-[11px] text-muted-foreground">مشروع: {st.projectName}</div>
-                          )}
-                          {st.isReversed && st.paymentRecord?.reversal_reason && (
-                            <div className="text-[10px] text-destructive font-medium">سبب الإلغاء: {st.paymentRecord.reversal_reason}</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">المشروع: {st.projectName}</div>
                           )}
                         </TableCell>
                         <TableCell className="font-bold text-blue-600 dark:text-blue-400" dir="ltr">
@@ -1197,66 +1775,39 @@ export default function TechnicianDetail() {
                         </TableCell>
                         <TableCell className="font-black text-foreground" dir="ltr">
                           <span className={st.runningBalance > 0 ? "text-amber-600 dark:text-amber-400" : st.runningBalance < 0 ? "text-blue-600 dark:text-blue-400" : ""}>
-                            {st.runningBalance > 0 ? `متبقي: ${formatCurrencyLYD(st.runningBalance)}` : st.runningBalance < 0 ? `مقدم: ${formatCurrencyLYD(Math.abs(st.runningBalance))}` : formatCurrencyLYD(0)}
+                            {st.runningBalance > 0 
+                              ? `مستحق: ${formatCurrencyLYD(st.runningBalance)}` 
+                              : st.runningBalance < 0 
+                              ? `مقدم: ${formatCurrencyLYD(Math.abs(st.runningBalance))}` 
+                              : formatCurrencyLYD(0)}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {st.type === "payment" && st.paymentRecord && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
-                                title="طباعة سند الصرف"
-                                onClick={() =>
-                                  openReceiptPrintWindow(
-                                    {
-                                      receiptNumber: `PAY-${st.paymentRecord.id.slice(0, 8)}`,
-                                      date: st.paymentRecord.date,
-                                      type: "salary",
-                                      amount: Number(st.paymentRecord.amount || 0),
-                                      paidToOrBy: technician.name,
-                                      description: st.paymentRecord.description || `صرف مستحقات فني`,
-                                      projectName: st.paymentRecord.projects?.name,
-                                      paymentMethod: st.paymentRecord.payment_method,
-                                      treasuryName: st.paymentRecord.treasuries?.name,
-                                      notes: st.paymentRecord.notes || undefined,
-                                      isCancelled: st.isReversed,
-                                      reversalReason: st.paymentRecord.reversal_reason || undefined,
-                                      reversedAt: st.paymentRecord.reversed_at || undefined,
-                                    },
-                                    companySettings
-                                  )
-                                }
-                              >
-                                <Printer className="h-3.5 w-3.5 text-primary" />
-                              </Button>
-                            )}
-
-                            {/* Edit & Reversal Actions for Canonical Technician Payments */}
-                            {st.type === "payment" && st.paymentRecord && !st.isReversed && !st.paymentRecord.project_id && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-blue-600 cursor-pointer"
-                                  title="تعديل الدفعة"
-                                  onClick={() => handleStartEditPayment(st.paymentRecord)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5 text-blue-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
-                                  title="إلغاء الدفعة"
-                                  onClick={() => handleStartReversePayment(st.paymentRecord)}
-                                >
-                                  <RotateCcw className="h-3.5 w-3.5 text-destructive" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
+                          {st.type === "payment" && st.paymentRecord && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                              title="طباعة السند"
+                              onClick={() =>
+                                openReceiptPrintWindow(
+                                  {
+                                    receiptNumber: `PAY-${st.paymentRecord.id.slice(0, 8)}`,
+                                    date: st.paymentRecord.date,
+                                    type: "salary",
+                                    amount: Number(st.paymentRecord.amount || 0),
+                                    paidToOrBy: technician.name,
+                                    description: st.paymentRecord.description || `صرف مستحقات فني`,
+                                    paymentMethod: st.paymentRecord.payment_method,
+                                    treasuryName: st.paymentRecord.treasuries?.name,
+                                  },
+                                  companySettings
+                                )
+                              }
+                            >
+                              <Printer className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -1266,22 +1817,123 @@ export default function TechnicianDetail() {
             </div>
           </Card>
         </TabsContent>
+
+        {/* ============================================================ */}
+        {/* TAB 4: SECURITY DEPOSITS & SETTLEMENTS                      */}
+        {/* ============================================================ */}
+        <TabsContent value="deposits" className="space-y-4 mt-1">
+          <TechnicianDepositsPanel technicianId={id!} />
+        </TabsContent>
       </Tabs>
 
-      {/* DIALOG: SIMPLE ON-ACCOUNT PAYMENT FOR TECHNICIAN */}
+      {/* ============================================================ */}
+      {/* DIALOG: EDIT TECHNICIAN PROFILE                              */}
+      {/* ============================================================ */}
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-blue-600" />
+              <span>تعديل بيانات الفني / العامل</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              تحديث معلومات الاتصال والتخصص والملاحظات الخاصة بالفني.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateProfileMutation.mutate({
+                name: editProfileName,
+                phone: editProfilePhone,
+                specialty: editProfileSpecialty,
+                notes: editProfileNotes,
+              });
+            }}
+            className="space-y-3.5 py-1"
+          >
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">اسم الفني / العامل *</Label>
+              <Input
+                value={editProfileName}
+                onChange={(e) => setEditProfileName(e.target.value)}
+                placeholder="اسم الفني الثلاثي"
+                className="text-xs h-9"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">رقم الهاتف</Label>
+              <Input
+                value={editProfilePhone}
+                onChange={(e) => setEditProfilePhone(e.target.value)}
+                placeholder="09XXXXXXXX"
+                className="text-xs h-9 text-left font-mono"
+                dir="ltr"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">التخصص / المهنة</Label>
+              <Input
+                value={editProfileSpecialty}
+                onChange={(e) => setEditProfileSpecialty(e.target.value)}
+                placeholder="مثال: سباكة، نجارة، حدادة، كهرباء"
+                className="text-xs h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">ملاحظات عامة</Label>
+              <Textarea
+                value={editProfileNotes}
+                onChange={(e) => setEditProfileNotes(e.target.value)}
+                placeholder="أي تفاصيل أو ملاحظات حول العامل..."
+                rows={2}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="submit"
+                className="flex-1 text-xs h-9 font-bold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer shadow-xs gap-1.5"
+                disabled={updateProfileMutation.isPending || !editProfileName.trim()}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>{updateProfileMutation.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-xs h-9 cursor-pointer"
+                onClick={() => setIsEditProfileOpen(false)}
+              >
+                إلغاء
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* DIALOG: PAY ON ACCOUNT FOR TECHNICIAN                        */}
+      {/* ============================================================ */}
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span>دفع على حساب الفني</span>
+              <span>صرف دفعة مالية للفني / العامل</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               صرف دفعة مالية مباشرة أو دفعة مقدمة/وديعة على حساب الفني، مع تحديث الخزينة فوراً.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Party Summary Box */}
+          {/* Party Financial Recap Box */}
           <div className="p-3 rounded-xl bg-muted/40 border border-border/80 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground font-bold">الفني:</span>
@@ -1354,7 +2006,7 @@ export default function TechnicianDetail() {
                   disabled={!paySelectedParentTreasuryId || loadingTreasuries || payOnAccountMutation.isPending}
                 >
                   <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder={paySelectedParentTreasuryId ? "اختر الحساب أو الفرع..." : "حدد الخزينة الرئيسية أولاً"} />
+                    <SelectValue placeholder={paySelectedParentTreasuryId ? "اختر الحساب أو الفرع..." : "حدد الخزينة أولاً"} />
                   </SelectTrigger>
                   <SelectContent dir="rtl">
                     {eligibleBranches.map((tr: any) => (
@@ -1364,12 +2016,6 @@ export default function TechnicianDetail() {
                     ))}
                   </SelectContent>
                 </Select>
-                {loadingTreasuries && (
-                  <p className="text-[11px] text-muted-foreground">جاري تحميل الخزائن المتاحة...</p>
-                )}
-                {!loadingTreasuries && treasuriesList.length === 0 && (
-                  <p className="text-[11px] text-destructive">لا توجد خزينة نشطة متاحة للصرف. فعّل خزينة من الإعدادات أولاً.</p>
-                )}
               </div>
             </div>
 
@@ -1474,7 +2120,9 @@ export default function TechnicianDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG: EDIT TECHNICIAN PAYMENT */}
+      {/* ============================================================ */}
+      {/* DIALOG: EDIT PAYMENT                                         */}
+      {/* ============================================================ */}
       <Dialog open={editingPayment !== null} onOpenChange={(open) => !open && setEditingPayment(null)}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
@@ -1494,21 +2142,14 @@ export default function TechnicianDetail() {
             }}
             className="space-y-3.5 py-1"
           >
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">الخزينة المخصوم منها *</Label>
-              <Select value={editTreasuryId} onValueChange={setEditTreasuryId} required dir="rtl">
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="اختر الخزينة" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  {treasuriesList.map((tr: any) => (
-                    <SelectItem key={tr.id} value={tr.id} className="text-xs">
-                      {tr.name} ({formatCurrencyLYD(tr.balance || 0)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <HierarchicalTreasurySelect
+              value={editTreasuryId}
+              onValueChange={setEditTreasuryId}
+              treasuries={treasuriesList}
+              parentLabel="الخزينة الرئيسية المصروف منها *"
+              childLabel="الحساب / الفرع المخصوم منه *"
+              required
+            />
 
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">المبلغ (د.ل) *</Label>
@@ -1595,7 +2236,9 @@ export default function TechnicianDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG: REVERSE TECHNICIAN PAYMENT */}
+      {/* ============================================================ */}
+      {/* DIALOG: REVERSE PAYMENT                                      */}
+      {/* ============================================================ */}
       <Dialog open={reversingPayment !== null} onOpenChange={(open) => !open && setReversingPayment(null)}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>

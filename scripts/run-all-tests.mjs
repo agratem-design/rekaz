@@ -22,6 +22,7 @@ const testSuites = [
   { name: 'Party Advance Invariants', cmd: 'node', args: ['scripts/financial-tests/party-advance-invariants.mjs'] },
   { name: 'Canonical Navigation Invariants', cmd: 'node', args: ['scripts/navigation-tests/canonical-navigation-invariants.mjs'] },
   { name: 'Sidebar UI Invariants', cmd: 'node', args: ['scripts/navigation-tests/sidebar-ui-invariants.mjs'] },
+  { name: 'Hierarchical Treasury Invariants', cmd: 'node', args: ['scripts/financial-tests/hierarchical-treasury-invariants.mjs'] },
 ];
 
 function extractTestCount(output) {
@@ -36,6 +37,7 @@ function extractTestCount(output) {
     /SUPPLIER & TECHNICIAN SUITE SUMMARY:\s+(\d+)\s+PASSED/i,
     /NAV-UI-01 SUITE SUMMARY:\s+(\d+)\s+PASSED/i,
     /NAV-UI-02 SUITE SUMMARY:\s+(\d+)\s+PASSED/i,
+    /TREASURY HIERARCHICAL INVARIANTS SUMMARY:\s+(\d+)\s+PASSED/i,
     /Passed:\s+(\d+)/i,
   ];
 

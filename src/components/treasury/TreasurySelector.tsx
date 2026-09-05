@@ -82,7 +82,7 @@ export const TreasurySelector: React.FC<TreasurySelectorProps> = ({
   const isLoading = isTreasuriesLoading || isSettingsLoading;
 
   // Domain Partitioning Logic: Authoritative Sector Main + Active Same-Domain Descendants
-  const { authoritativeRoot, descendants, allowedTreasuryIds, defaultCandidateId } = useMemo(() => {
+  const { authoritativeRoot, descendants, eligibleOptions, allowedTreasuryIds, defaultCandidateId } = useMemo(() => {
     const isContracting = projectType === "contracting";
     const targetMainId = isContracting
       ? companySettings?.contracting_treasury_id
@@ -245,7 +245,7 @@ export const TreasurySelector: React.FC<TreasurySelectorProps> = ({
             <SelectContent dir="rtl">
               {authoritativeRoot && (
                 <SelectItem value={authoritativeRoot.id} className="font-semibold text-primary">
-                  {authoritativeRoot.name}
+                  {authoritativeRoot.name} ({formatCurrencyLYD(authoritativeRoot.balance || 0)})
                 </SelectItem>
               )}
             </SelectContent>
@@ -275,20 +275,20 @@ export const TreasurySelector: React.FC<TreasurySelectorProps> = ({
               <SelectValue placeholder={authoritativeRoot ? "اختر الحساب أو الفرع..." : "حدد الخزينة الرئيسية أولاً"} />
             </SelectTrigger>
             <SelectContent dir="rtl" className="max-h-64">
-              {eligibleOptions.map((item) => (
-                <SelectItem key={item.id} value={item.id} className="py-2 text-xs">
+              {eligibleOptions.map((desc) => (
+                <SelectItem key={desc.id} value={desc.id} className="py-2 text-xs cursor-pointer">
                   <span className="flex items-center gap-2">
-                    {item.treasury_type === "bank" ? (
+                    {desc.treasury_type === "bank" ? (
                       <Landmark className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                     ) : (
                       <Wallet className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     )}
-                    <span>{item.name}</span>
+                    <span>{desc.name}</span>
                     <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-normal">
-                      {item.treasury_type === "bank" ? "مصرفي" : (item.parent_id ? "فرع" : "رئيسية")}
+                      {desc.treasury_type === "bank" ? "مصرفي" : (desc.parent_id ? "فرع" : "رئيسية")}
                     </span>
                     <span className="text-xs text-muted-foreground mr-auto font-normal font-mono">
-                      • {formatCurrencyLYD(item.balance || 0)}
+                      • {formatCurrencyLYD(desc.balance || 0)}
                     </span>
                   </span>
                 </SelectItem>

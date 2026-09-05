@@ -98,7 +98,7 @@ export function AppSidebar({
 
   const isGroupOpen = (groupId: string) => {
     if (groupId in openGroups) return openGroups[groupId];
-    return groupId === activeGroupId || groupId === "main";
+    return true;
   };
 
   const toggleGroup = (groupId: string) => {

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SearchableSelect from "@/components/ui/searchable-select";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import {
   ShoppingCart,
   Wrench,
@@ -93,7 +94,7 @@ const QuickAddSection = () => {
     queryKey: ["quick-add-treasuries"],
     queryFn: async () => {
       const { data, error } = await supabase.from("treasuries")
-        .select("id, name, treasury_type")
+        .select("id, name, treasury_type, parent_id, balance")
         .eq("is_active", true).order("name");
       if (error) throw error;
       return data;
@@ -391,13 +392,15 @@ const QuickAddSection = () => {
                     </div>
                     <Input className="h-9" type="number" value={purchaseForm.paid_amount} onChange={(e) => setPurchaseForm({ ...purchaseForm, paid_amount: e.target.value })} />
                   </div>
-                  <div>
-                    <Label className="text-xs">الخزينة</Label>
-                    <SearchableSelect
-                      options={treasuryOptions}
+                  <div className="col-span-2">
+                    <HierarchicalTreasurySelect
                       value={purchaseForm.treasury_id}
                       onValueChange={(v) => setPurchaseForm({ ...purchaseForm, treasury_id: v })}
-                      placeholder="ابحث عن خزينة..."
+                      treasuries={treasuries || []}
+                      parentLabel="الخزينة الرئيسية"
+                      childLabel="الحساب / الفرع"
+                      parentPlaceholder="اختر الخزينة الرئيسية..."
+                      childPlaceholder="اختر الحساب أو الفرع..."
                     />
                   </div>
                   <div>

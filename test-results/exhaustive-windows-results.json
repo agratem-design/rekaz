@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-09-05T01:48:41.587Z",
+  "passed": 27,
+  "failed": 0,
+  "logs": [
+    {
+      "status": "PASS",
+      "msg": "Login form rendered: identifier, password, submit button"
+    },
+    {
+      "status": "PASS",
+      "msg": "Live UI Login successful! Authenticated Dashboard rendered."
+    },
+    {
+      "status": "PASS",
+      "msg": "Global Command Palette opened with RTL layout and search input"
+    },
+    {
+      "status": "PASS",
+      "msg": "Global Command Palette search verified and dismissed"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Client Dialog opened with RTL dir=\"rtl\" attribute"
+    },
+    {
+      "status": "PASS",
+      "msg": "Client \"شركة الفارس التفاعلية 9810\" created and reflected dynamically in UI"
+    },
+    {
+      "status": "PASS",
+      "msg": "PostgreSQL confirmed persistent client ID: 61df6e8b-7d74-4dac-88a8-1d4e8c25dc3d"
+    },
+    {
+      "status": "PASS",
+      "msg": "Client Detail page rendered with financial summary and account sections"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Supplier Dialog opened with dir=\"rtl\""
+    },
+    {
+      "status": "PASS",
+      "msg": "Supplier \"مورد واجهات وزجاج 1643\" created and confirmed in UI"
+    },
+    {
+      "status": "PASS",
+      "msg": "PostgreSQL confirmed persistent supplier ID: fd27fa43-a25c-4b6c-9332-767b9f9d4c81"
+    },
+    {
+      "status": "PASS",
+      "msg": "Supplier Detail page rendered with SupplierAdvancePanel and account sections"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Technician Dialog opened with RTL layout"
+    },
+    {
+      "status": "PASS",
+      "msg": "Technician Sub-Dialog \"+ إضافة تخصص جديد\" opened with RTL layout"
+    },
+    {
+      "status": "PASS",
+      "msg": "Technician dialogs verified and dismissed cleanly"
+    },
+    {
+      "status": "PASS",
+      "msg": "Technician Detail page loaded with TechnicianDepositsPanel and statement tabs"
+    },
+    {
+      "status": "PASS",
+      "msg": "Primary Treasury Dialog opened with dir=\"rtl\" and Arabic form labels"
+    },
+    {
+      "status": "PASS",
+      "msg": "Primary Treasury Dialog cleanly dismissed"
+    },
+    {
+      "status": "PASS",
+      "msg": "Treasury Transfer Dialog opened with RTL layout"
+    },
+    {
+      "status": "PASS",
+      "msg": "Selected client from combobox menu"
+    },
+    {
+      "status": "PASS",
+      "msg": "Dynamic financial revenue indicator calculated and rendered live in DOM"
+    },
+    {
+      "status": "PASS",
+      "msg": "Project Items workspace hydrated with InvoiceItemForm inline builder"
+    },
+    {
+      "status": "PASS",
+      "msg": "Project Expenses page loaded"
+    },
+    {
+      "status": "PASS",
+      "msg": "Project Expense Dialog opened with treasury and category selector"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Employee Dialog opened with RTL layout"
+    },
+    {
+      "status": "PASS",
+      "msg": "General Project Item Dialog opened with category & pricing inputs"
+    },
+    {
+      "status": "PASS",
+      "msg": "Teardown complete: Zero test fixture leaks in PostgreSQL database"
+    }
+  ]
+}

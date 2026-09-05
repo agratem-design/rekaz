@@ -48,6 +48,7 @@ import ProjectsWithRentals from "./pages/ProjectsWithRentals";
 import ProjectExpenses from "./pages/ProjectExpenses";
 import AllProjectExpenses from "./pages/AllProjectExpenses";
 import Employees from "./pages/Employees";
+import EmployeeDetail from "./pages/EmployeeDetail";
 import ProjectCustody from "./pages/ProjectCustody";
 import Custody from "./pages/Custody";
 import CustodyDetail from "./pages/CustodyDetail";
@@ -137,6 +138,7 @@ const App = () => (
               <Route path="custody" element={<Custody />} />
               <Route path="custody/:id" element={<CustodyDetail />} />
               <Route path="employees" element={<Employees />} />
+              <Route path="employees/:id" element={<EmployeeDetail />} />
               <Route path="general-items" element={<GeneralItems />} />
               <Route path="measurement-types" element={<MeasurementTypes />} />
               <Route path="equipment" element={<Equipment />} />

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,7 +37,7 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
     } });
   const treasuries = useQuery({ queryKey: ["treasuries-active"], enabled: allowed,
     queryFn: async () => {
-      const { data, error } = await supabase.from("treasuries").select("id, name").eq("is_active", true).order("name");
+      const { data, error } = await supabase.from("treasuries").select("id, name, parent_id, balance, treasury_type").eq("is_active", true).order("name");
       if (error) throw error;
       return data || [];
     } });
@@ -74,8 +75,16 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
         <form onSubmit={e => { e.preventDefault(); if (!save.isPending) save.mutate(); }}>
           <fieldset disabled={save.isPending} className="space-y-4">
             <div><Label htmlFor="deposit-amount">المبلغ (د.ل)</Label><Input id="deposit-amount" type="number" min="0.01" step="0.01" required value={amount} onChange={e => setAmount(e.target.value)} /></div>
-            <div><Label>الخزينة</Label><Select value={treasury} onValueChange={setTreasury} disabled={save.isPending}><SelectTrigger aria-label="خزينة الوديعة"><SelectValue placeholder="اختر الخزينة" /></SelectTrigger>
-              <SelectContent>{(treasuries.data || []).map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+            <HierarchicalTreasurySelect
+              value={treasury}
+              onValueChange={setTreasury}
+              treasuries={treasuries.data || []}
+              disabled={save.isPending}
+              childAriaLabel="خزينة الوديعة"
+              parentLabel={mode === "receipt" ? "الخزينة الرئيسية المودع فيها *" : "الخزينة الرئيسية المنصرف منها *"}
+              childLabel={mode === "receipt" ? "الحساب / الفرع المودع فيه *" : "الحساب / الفرع المنصرف منه *"}
+              required
+            />
             {treasuries.error && <p role="alert" className="text-sm text-destructive">تعذر تحميل الخزائن.</p>}
             <div><Label htmlFor="deposit-date">التاريخ</Label><Input id="deposit-date" type="date" required value={date} onChange={e => setDate(e.target.value)} /></div>
             <Select value={method} onValueChange={setMethod} disabled={save.isPending}><SelectTrigger aria-label="طريقة دفع الوديعة"><SelectValue /></SelectTrigger><SelectContent>

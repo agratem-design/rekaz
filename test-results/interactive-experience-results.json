@@ -1,0 +1,90 @@
+{
+  "passed": 21,
+  "failed": 0,
+  "logs": [
+    {
+      "status": "PASS",
+      "msg": "Login form rendered: identifier, password, submit button"
+    },
+    {
+      "status": "PASS",
+      "msg": "Live UI Login successful! Authenticated Dashboard rendered with Sidebar and Header."
+    },
+    {
+      "status": "PASS",
+      "msg": "Clients page hydrated and \"+ عميل جديد\" button available"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Client Dialog opened with RTL layout and form inputs"
+    },
+    {
+      "status": "PASS",
+      "msg": "Client \"شركة الفارس للتطوير 1064\" successfully created and rendered live in UI!"
+    },
+    {
+      "status": "PASS",
+      "msg": "PostgreSQL confirmed record persistent: ID=71012ae8-2d51-4247-b550-6ec4fceacb73"
+    },
+    {
+      "status": "PASS",
+      "msg": "Search input filtered table dynamically to match \"شركة الفارس للتطوير 1064\""
+    },
+    {
+      "status": "PASS",
+      "msg": "Suppliers page loaded with \"+ مورد جديد\" button"
+    },
+    {
+      "status": "PASS",
+      "msg": "Add Supplier Dialog opened with dir=\"rtl\" and inputs"
+    },
+    {
+      "status": "PASS",
+      "msg": "Supplier \"مورد مواد بناء تفاعلي 5790\" successfully created and rendered live in UI!"
+    },
+    {
+      "status": "PASS",
+      "msg": "PostgreSQL confirmed supplier write: ID=cf83db55-7140-4798-b6ed-62ae54b2d2f0"
+    },
+    {
+      "status": "PASS",
+      "msg": "Treasuries page loaded with custom tab bar"
+    },
+    {
+      "status": "PASS",
+      "msg": "Transactions journal table rendered and populated with live financial records"
+    },
+    {
+      "status": "PASS",
+      "msg": "Treasury modal opened with dir=\"rtl\""
+    },
+    {
+      "status": "PASS",
+      "msg": "Treasury modal cleanly dismissed on clicking \"إلغاء\""
+    },
+    {
+      "status": "PASS",
+      "msg": "Client payments screen hydrated with client selector trigger"
+    },
+    {
+      "status": "PASS",
+      "msg": "Selected client from dropdown menu"
+    },
+    {
+      "status": "PASS",
+      "msg": "Client summary cards appeared (\"المستحق على الزبون\" / \"إجمالي ما سدّده\") and amount input enabled!"
+    },
+    {
+      "status": "PASS",
+      "msg": "Dynamic financial arithmetic triggered live! Indicator: \"رصيد فائض سيُضاف 3.500 د.ل\""
+    },
+    {
+      "status": "PASS",
+      "msg": "Cleaned up test client ID=71012ae8-2d51-4247-b550-6ec4fceacb73"
+    },
+    {
+      "status": "PASS",
+      "msg": "Cleaned up test supplier ID=cf83db55-7140-4798-b6ed-62ae54b2d2f0"
+    }
+  ]
+}

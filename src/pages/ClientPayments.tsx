@@ -61,6 +61,7 @@ import { toast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNavigate } from "react-router-dom";
 import { openPrintWindow } from "@/lib/printStyles";
+import { availableClientCredit } from "@/lib/financialCore";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ const ClientPayments = () => {
     },
   });
 
-  const { data: treasuries } = useQuery({
+  const { data: treasuries, isLoading: treasuriesLoading, error: treasuriesError } = useQuery({
     queryKey: ["treasuries-active"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -152,7 +153,7 @@ const ClientPayments = () => {
       // 1. Get all projects for this client
       const { data: projects, error: projErr } = await supabase
         .from("projects")
-        .select("id, name, project_type")
+        .select("id, name, project_type, default_treasury_id")
         .eq("client_id", selectedClientId)
         .order("name");
       if (projErr) throw projErr;
@@ -280,9 +281,12 @@ const ClientPayments = () => {
 
       // Group totals
       const paidPerProject: Record<string, number> = {};
+      let totalDirectCreditCash = 0;
       payments?.forEach(p => {
         if (p.project_id) {
           paidPerProject[p.project_id] = (paidPerProject[p.project_id] || 0) + Number(p.amount);
+        } else {
+          totalDirectCreditCash += Number(p.amount);
         }
       });
 
@@ -291,8 +295,16 @@ const ClientPayments = () => {
         outstandingPerProject[inv.project_id] = (outstandingPerProject[inv.project_id] || 0) + inv.remaining;
       });
 
+      // 7. Get client credit ledger entries for this client
+      const { data: creditEntries } = await supabase
+        .from("client_credit_ledger")
+        .select("entry_type, amount, target_project_id, source_payment_id")
+        .eq("client_id", selectedClientId);
+      const availableCredit = availableClientCredit((creditEntries || []) as any);
+
+      const totalCollected = (payments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
       const totalOutstanding = Object.values(outstandingPerProject).reduce((s, v) => s + v, 0);
-      const totalPaid = Object.values(paidPerProject).reduce((s, v) => s + v, 0);
+      const totalProjectPaid = Object.values(paidPerProject).reduce((s, v) => s + v, 0);
 
       return {
         projects: projects.map(p => ({
@@ -301,7 +313,11 @@ const ClientPayments = () => {
           paid: paidPerProject[p.id] || 0,
         })),
         totalOutstanding,
-        totalPaid,
+        totalPaid: totalCollected > 0 ? totalCollected : totalProjectPaid,
+        settledPaid: totalProjectPaid,
+        availableCredit,
+        totalCollected,
+        totalDirectCreditCash,
         invoices: unpaidInvoices,
         payments: payments || [],
         allocations: clientPaymentAllocs,
@@ -335,23 +351,23 @@ const ClientPayments = () => {
   }, [clientSummary?.projects]);
 
   const totalOutstanding = useMemo(() => {
-    if (!clientSummary?.projects) return 0;
+    if (!clientSummary) return 0;
     if (selectedProjectId && selectedProjectId !== "none") {
       return selectedProjectData?.outstanding || 0;
     }
-    return clientSummary.projects.reduce((sum, p) => sum + (p.outstanding || 0), 0);
-  }, [clientSummary?.projects, selectedProjectId, selectedProjectData]);
+    return clientSummary.totalOutstanding || 0;
+  }, [clientSummary, selectedProjectId, selectedProjectData]);
 
   const totalPaid = useMemo(() => {
-    if (!clientSummary?.projects) return 0;
+    if (!clientSummary) return 0;
     if (selectedProjectId && selectedProjectId !== "none") {
       return selectedProjectData?.paid || 0;
     }
-    return clientSummary.projects.reduce((sum, p) => sum + (p.paid || 0), 0);
-  }, [clientSummary?.projects, selectedProjectId, selectedProjectData]);
+    return clientSummary.totalPaid || 0;
+  }, [clientSummary, selectedProjectId, selectedProjectData]);
 
   const remaining = totalOutstanding - amount;
-  const isSurplus = amount > totalOutstanding && totalOutstanding > 0;
+  const isSurplus = amount > totalOutstanding;
   const surplus = isSurplus ? amount - totalOutstanding : 0;
 
   const selectedClient = clients?.find(c => c.id === selectedClientId);
@@ -361,78 +377,10 @@ const ClientPayments = () => {
   const subTreasuries = useMemo(() =>
     treasuries?.filter(t => !!t.parent_id) ?? [], [treasuries]);
 
-  // تصفية الخزينة الرئيسية بناءً على نوع المشروع المختار
-  const filteredParentTreasuries = useMemo(() => {
-    if (!parentTreasuries.length) return [];
-    if (selectedProjectId && selectedProjectId !== "none") {
-      const proj = projects?.find((p: any) => p.id === selectedProjectId);
-      if (proj?.default_treasury_id) {
-        const direct = parentTreasuries.find(t => t.id === proj.default_treasury_id);
-        if (direct) return [direct];
-        const sub = subTreasuries.find(t => t.id === proj.default_treasury_id);
-        if (sub?.parent_id) {
-          const root = parentTreasuries.find(t => t.id === sub.parent_id);
-          if (root) return [root];
-        }
-      }
-      const pType = proj?.project_type || paymentProjectType;
-      if (pType && pType !== "all") {
-        const matched = parentTreasuries.filter((t: any) => {
-          if (t.project_category) return t.project_category === pType;
-          if (pType === "contracting") return t.name.includes("مقاولات") || t.name.includes("المقاولات");
-          if (pType === "finishing") return t.name.includes("تشطيب") || t.name.includes("التشطيب");
-          return false;
-        });
-        if (matched.length > 0) return matched;
-      }
-    }
-    return parentTreasuries;
-  }, [parentTreasuries, subTreasuries, selectedProjectId, paymentProjectType, projects]);
-
   const filteredChildTreasuries = useMemo(() => {
     if (!selectedParentTreasuryId) return [];
-    let list = subTreasuries.filter(t => t.parent_id === selectedParentTreasuryId);
-    if (list.length > 0) {
-      if (paymentMethod === "cash") {
-        const cashList = list.filter(t => t.treasury_type === "cash");
-        if (cashList.length > 0) return cashList;
-      } else {
-        const bankList = list.filter(t => t.treasury_type === "bank");
-        if (bankList.length > 0) return bankList;
-      }
-      return list;
-    }
-    // Fallback if parent has no children
-    const parent = parentTreasuries.find(t => t.id === selectedParentTreasuryId);
-    return parent ? [parent] : [];
-  }, [subTreasuries, parentTreasuries, selectedParentTreasuryId, paymentMethod]);
-
-  // ── اختيار الخزينة الرئيسية تلقائياً عند اختيار الزبون / تغيير المشروع ──
-  useEffect(() => {
-    if (!filteredParentTreasuries.length) {
-      setSelectedParentTreasuryId("");
-      return;
-    }
-
-    if (selectedProjectId && selectedProjectId !== "none") {
-      setSelectedParentTreasuryId(filteredParentTreasuries[0].id);
-    } else {
-      if (!selectedParentTreasuryId || !filteredParentTreasuries.some(t => t.id === selectedParentTreasuryId)) {
-        setSelectedParentTreasuryId(filteredParentTreasuries[0].id);
-      }
-    }
-  }, [selectedProjectId, paymentProjectType, filteredParentTreasuries]);
-
-  // ── اختيار الخزينة الفرعية تلقائياً عند تغير الخزينة الرئيسية أو طريقة الدفع ──
-  useEffect(() => {
-    if (filteredChildTreasuries.length > 0) {
-      if (!selectedTreasuryId || !filteredChildTreasuries.some(t => t.id === selectedTreasuryId)) {
-        setSelectedTreasuryId(filteredChildTreasuries[0].id);
-      }
-    } else {
-      setSelectedTreasuryId("");
-    }
-  }, [filteredChildTreasuries, selectedParentTreasuryId]);
+    return subTreasuries.filter(t => t.parent_id === selectedParentTreasuryId);
+  }, [subTreasuries, selectedParentTreasuryId]);
 
   // General audit log calculations
   const filteredAllPayments = useMemo(() => {
@@ -474,7 +422,13 @@ const ClientPayments = () => {
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["client-payments-all-list"] });
-      toast({ title: "تم تسجيل التسديد بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-panel"] });
+      queryClient.invalidateQueries({ queryKey: ["client", selectedClientId] });
+      queryClient.invalidateQueries({ queryKey: ["client-payments-list", selectedClientId] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["all-payments-clients-page"] });
+      toast({ title: "تم تسجيل الدفعة وإضافتها للخزينة بنجاح" });
       setPaymentAmount("");
       setNotes("");
       setSelectedParentTreasuryId("");
@@ -498,6 +452,12 @@ const ClientPayments = () => {
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["client-payments-all-list"] });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-panel"] });
+      queryClient.invalidateQueries({ queryKey: ["client", selectedClientId] });
+      queryClient.invalidateQueries({ queryKey: ["client-payments-list", selectedClientId] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["all-payments-clients-page"] });
       toast({ title: "تم حذف التسديد" });
       setDeleteId(null);
     },
@@ -712,7 +672,7 @@ const ClientPayments = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold">إيصالات مقبوضات الزبائن</h1>
-            <p className="text-sm text-muted-foreground">تسجيل المدفوعات المستلمة من الزبائن</p>
+            <p className="text-sm text-muted-foreground">تسجيل دفعة لمشروع أو رصيد عام على حساب الزبون</p>
           </div>
         </div>
       </div>
@@ -726,7 +686,7 @@ const ClientPayments = () => {
                 <div className="p-1.5 bg-primary/10 rounded-lg">
                   <Plus className="h-4 w-4 text-primary" />
                 </div>
-                <h2 className="font-bold text-sm">إضافة تسديد جديد</h2>
+                <h2 className="font-bold text-sm">إضافة دفعة جديدة</h2>
               </div>
             </CardHeader>
             <CardContent className="p-5 space-y-5">
@@ -747,7 +707,13 @@ const ClientPayments = () => {
                     </Button>
                   )}
                 </div>
-                <Select value={selectedClientId} onValueChange={v => { setSelectedClientId(v); setPaymentAmount(""); setSelectedProjectId(""); }} dir="rtl">
+                <Select value={selectedClientId} onValueChange={v => {
+                  setSelectedClientId(v);
+                  setPaymentAmount("");
+                  setSelectedProjectId("");
+                  setSelectedParentTreasuryId("");
+                  setSelectedTreasuryId("");
+                }} dir="rtl">
                   <SelectTrigger className="h-11 rounded-xl border-primary/20 focus:border-primary text-base">
                     <SelectValue placeholder="اختر الزبون..." />
                   </SelectTrigger>
@@ -784,6 +750,8 @@ const ClientPayments = () => {
                       value={selectedProjectId}
                       onValueChange={(val) => {
                         setSelectedProjectId(val);
+                        setSelectedParentTreasuryId("");
+                        setSelectedTreasuryId("");
                       }}
                       dir="rtl"
                       disabled={summaryLoading}
@@ -823,7 +791,7 @@ const ClientPayments = () => {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold flex items-center gap-1.5">
                       <Landmark className="h-3.5 w-3.5 text-primary" />
-                      القسم / الخزينة الرئيسية <span className="text-destructive">*</span>
+                      الخزينة الرئيسية <span className="text-destructive">*</span>
                     </Label>
                     <Select
                       value={selectedParentTreasuryId}
@@ -832,36 +800,54 @@ const ClientPayments = () => {
                         setSelectedTreasuryId("");
                       }}
                       dir="rtl"
-                      disabled={!selectedClientId || (filteredParentTreasuries.length <= 1 && !!selectedProjectId && selectedProjectId !== "none")}
+                      disabled={!selectedClientId || treasuriesLoading || !!treasuriesError}
                     >
                       <SelectTrigger className="h-10 rounded-xl border-primary/20 focus:border-primary">
-                        <SelectValue placeholder="اختر الخزينة الرئيسية..." />
+                        <SelectValue placeholder={treasuriesLoading ? "جاري تحميل الخزائن..." : "اختر الخزينة الرئيسية..."} />
                       </SelectTrigger>
                       <SelectContent dir="rtl">
-                        {filteredParentTreasuries.map((parent: any) => (
+                        {parentTreasuries.map((parent: any) => (
                           <SelectItem key={parent.id} value={parent.id}>
                             {parent.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] leading-5 text-muted-foreground">اختر الرئيسية أولاً، ثم سيظهر في الأسفل الحساب أو الفرع التابع لها.</p>
+                    {treasuriesError && (
+                      <p role="alert" className="text-xs text-destructive">تعذر تحميل الخزائن. أعد المحاولة قبل حفظ الدفعة.</p>
+                    )}
+                    {!treasuriesLoading && !treasuriesError && parentTreasuries.length === 0 && (
+                      <p role="alert" className="text-xs text-destructive">لا توجد خزائن رئيسية نشطة حالياً.</p>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Outstanding summary (shows after client is selected) */}
               {selectedClientId && !summaryLoading && clientSummary && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3 rounded-xl bg-destructive/5 border border-destructive/20 text-center">
                     <p className="text-[11px] text-muted-foreground mb-1">المستحق على الزبون</p>
-                    <p className="font-bold text-base text-destructive">
+                    <p className="font-bold text-base text-destructive" dir="ltr">
                       {formatCurrencyLYD(totalOutstanding)}
                     </p>
                   </div>
-                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-center">
-                    <p className="text-[11px] text-muted-foreground mb-1">إجمالي ما سدّده</p>
-                    <p className="font-bold text-base text-primary">
+                  <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center">
+                    <p className="text-[11px] text-muted-foreground mb-1">
+                      {selectedProjectId && selectedProjectId !== "none" ? "ما سُدد للمشروع" : "إجمالي ما سدّده للشركة"}
+                    </p>
+                    <p className="font-bold text-base text-emerald-600 dark:text-emerald-400" dir="ltr">
                       {formatCurrencyLYD(totalPaid)}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 text-center">
+                    <p className="text-[11px] text-muted-foreground mb-1 flex items-center justify-center gap-1">
+                      <Sparkles className="h-3 w-3 text-blue-600" />
+                      <span>رصيد دائن متاح (مقدم)</span>
+                    </p>
+                    <p className="font-bold text-base text-blue-600 dark:text-blue-400 font-mono" dir="ltr">
+                      {formatCurrencyLYD(clientSummary.availableCredit || 0)}
                     </p>
                   </div>
                 </div>
@@ -975,6 +961,9 @@ const ClientPayments = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedParentTreasuryId && filteredChildTreasuries.length === 0 && (
+                  <p role="alert" className="text-xs text-destructive">لا توجد حسابات أو فروع نشطة تابعة لهذه الخزينة.</p>
+                )}
               </div>
 
               {/* Notes */}
@@ -983,7 +972,7 @@ const ClientPayments = () => {
                 <Textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  placeholder="أي ملاحظات عن هذا التسديد..."
+                  placeholder="أي ملاحظات عن هذه الدفعة..."
                   className="rounded-xl border-primary/20 focus:border-primary text-sm resize-none"
                   rows={2}
                 />
@@ -1166,6 +1155,27 @@ const ClientPayments = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="p-3 space-y-4">
+                  {clientSummary?.availableCredit > 0 && (
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 shrink-0">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                            رصيد دائن عام متاح للزبون (دفعات وسلف غير مخصصة)
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            مدفوعات مسددة لصالح الزبون يمكن تطبيقها على المشاريع
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-black font-mono text-blue-700 dark:text-blue-300 shrink-0" dir="ltr">
+                        {formatCurrencyLYD(clientSummary.availableCredit)}
+                      </span>
+                    </div>
+                  )}
+
                   {clientSummary?.projects.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">لا توجد مشاريع للزبون حالياً</p>
                   ) : (

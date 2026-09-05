@@ -19,13 +19,15 @@ import {
   ExternalLink,
   Search,
   AlertTriangle,
+  Sparkles,
+  Wallet,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { openPrintWindow } from "@/lib/printStyles";
-import { calculateProjectFinancials } from "@/lib/financialCore";
+import { calculateProjectFinancials, availableClientCredit } from "@/lib/financialCore";
 import { useClientCreditLedger } from "@/hooks/useClientCreditLedger";
 import {
   Dialog,
@@ -188,7 +190,7 @@ export default function Clients() {
       const clientProjList = projects.filter((p) => p.client_id === client.id);
       let totalBilled = 0;
       let remaining = 0;
-      let totalPaid = 0;
+      let settledPaid = 0;
 
       clientProjList.forEach((proj) => {
         const projPurchases = purchases.filter((p: any) => p.project_id === proj.id);
@@ -213,15 +215,25 @@ export default function Clients() {
 
         totalBilled += projResult.clientObligation;
         remaining += projResult.clientRemaining;
-        totalPaid += projResult.totalSettled;
+        settledPaid += projResult.totalSettled;
       });
+
+      // All payments actually collected from this client (both project-specific and general advances)
+      const allPaymentsFromClient = (clientPayments || []).filter((p: any) => p.client_id === client.id);
+      const totalCollected = allPaymentsFromClient.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+      // Available unallocated credit / advance balance for this client
+      const clientLedgerEntries = (creditLedger || []).filter((e: any) => e.client_id === client.id);
+      const availableCredit = availableClientCredit(clientLedgerEntries as any);
 
       return {
         ...client,
         projects: clientProjList,
         totalBilled,
-        totalPaid,
+        totalPaid: totalCollected > 0 ? totalCollected : settledPaid,
+        settledPaid,
         remaining,
+        availableCredit,
       };
     });
   }, [clients, projects, phases, projectItems, purchases, clientPayments, contracts, clientExpenses, clientItemTechs, creditLedger]);
@@ -241,18 +253,20 @@ export default function Clients() {
 
   // General Stats
   const stats = useMemo(() => {
-    if (!clientsWithFinancials) return { totalClients: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0 };
+    if (!clientsWithFinancials) return { totalClients: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0, totalAvailableCredit: 0 };
     
     const totalClients = clientsWithFinancials.length;
     const totalBilled = clientsWithFinancials.reduce((sum, c) => sum + c.totalBilled, 0);
     const totalPaid = clientsWithFinancials.reduce((sum, c) => sum + c.totalPaid, 0);
     const totalRemaining = clientsWithFinancials.reduce((sum, c) => sum + (c.remaining > 0 ? c.remaining : 0), 0);
+    const totalAvailableCredit = clientsWithFinancials.reduce((sum, c) => sum + (c.availableCredit || 0), 0);
 
     return {
       totalClients,
       totalBilled,
       totalPaid,
       totalRemaining,
+      totalAvailableCredit,
     };
   }, [clientsWithFinancials]);
 
@@ -642,7 +656,14 @@ export default function Clients() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-extrabold text-green-600 dark:text-green-400">{stats.totalPaid.toLocaleString()} د.ل</p>
-            <p className="text-xs text-muted-foreground mt-1">مجموع المبالغ المقبوضة والمحصلة</p>
+            <div className="text-xs text-muted-foreground mt-1">
+              <span>مجموع المبالغ المقبوضة والمحصلة</span>
+              {stats.totalAvailableCredit > 0 && (
+                <span className="block text-[11px] text-blue-600 dark:text-blue-400 font-bold mt-0.5">
+                  منها {stats.totalAvailableCredit.toLocaleString()} د.ل أرصدة دائنة متاحة
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -718,11 +739,17 @@ export default function Clients() {
                   {/* Title and Actions */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-lg font-bold text-foreground flex items-center gap-1.5">
+                      <h3 className="text-lg font-bold text-foreground flex items-center gap-1.5 flex-wrap">
                         {client.name}
                         {hasDebt && (
                           <Badge variant="outline" className="border-red-500/20 bg-red-500/5 text-red-600 text-[10px] py-0 px-1 font-semibold">
                             مدين
+                          </Badge>
+                        )}
+                        {client.availableCredit > 0 && (
+                          <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] py-0 px-1.5 font-bold flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-blue-600" />
+                            <span>رصيد دائن: {client.availableCredit.toLocaleString()} د.ل</span>
                           </Badge>
                         )}
                       </h3>
@@ -790,6 +817,18 @@ export default function Clients() {
                         {client.totalPaid.toLocaleString()} د.ل
                       </span>
                     </div>
+
+                    {client.availableCredit > 0 && (
+                      <div className="flex justify-between items-center text-xs p-1.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                        <span className="text-blue-800 dark:text-blue-300 font-bold flex items-center gap-1">
+                          <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                          رصيد دائن متاح (مقدم):
+                        </span>
+                        <span className="font-black text-blue-700 dark:text-blue-300 font-mono">
+                          {client.availableCredit.toLocaleString()} د.ل
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-center text-sm pt-2 border-t border-dashed border-border/80">
                       <span className="font-semibold text-foreground flex items-center gap-1">

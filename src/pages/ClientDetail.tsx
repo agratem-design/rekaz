@@ -1,6 +1,8 @@
 import { useParams, Link } from "react-router-dom";
 import { useOperationKey } from "@/hooks/useOperationKey";
 import { ClientCreditPanel } from "@/components/clients/ClientCreditPanel";
+import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
+import { availableClientCredit } from "@/lib/financialCore";
 import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +21,15 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowRight,
+  Pencil,
+  Copy,
+  Check,
+  Sparkles,
+  LayoutGrid,
+  TableProperties,
+  ChevronDown,
+  ChevronUp,
+  Search,
   Phone,
   Mail,
   MapPin,
@@ -89,6 +100,7 @@ type Project = {
   status: string;
   budget: number;
   spent: number;
+  created_at?: string;
 };
 
 type Phase = {
@@ -148,8 +160,10 @@ type Treasury = {
   id: string;
   name: string;
   treasury_type: string;
-  parent_id: string | null;
+  parent_id?: string | null;
   balance: number;
+  project_category?: string | null;
+  is_active?: boolean;
 };
 
 const statusLabels: Record<string, string> = {
@@ -180,6 +194,68 @@ export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const receiptOperation = useOperationKey();
+
+  // View mode and filter states
+  const [activeTab, setActiveTab] = useState<"projects" | "payments" | "statement" | "credit">("projects");
+  const [projectsViewMode, setProjectsViewMode] = useState<"cards" | "table">("cards");
+  const [projectTypeFilter, setProjectTypeFilter] = useState<"all" | "contracting" | "finishing">("all");
+  const [projectStatusFilter, setProjectStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [copiedPhone, setCopiedPhone] = useState(false);
+
+  // Edit Client Modal state
+  const [isEditClientOpen, setIsEditClientOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  const openEditClientModal = () => {
+    if (!client) return;
+    setEditName(client.name || "");
+    setEditPhone(client.phone || "");
+    setEditEmail(client.email || "");
+    setEditCity(client.city || "");
+    setEditAddress(client.address || "");
+    setEditNotes(client.notes || "");
+    setIsEditClientOpen(true);
+  };
+
+  const copyPhone = (phone: string) => {
+    navigator.clipboard.writeText(phone);
+    setCopiedPhone(true);
+    toast.success("تم نسخ رقم الهاتف");
+    setTimeout(() => setCopiedPhone(false), 2000);
+  };
+
+  const updateClientMutation = useMutation({
+    mutationFn: async () => {
+      if (!client) throw new Error("بيانات العميل غير متوفرة");
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          name: editName.trim(),
+          phone: editPhone.trim() || null,
+          email: editEmail.trim() || null,
+          city: editCity.trim() || null,
+          address: editAddress.trim() || null,
+          notes: editNotes.trim() || null,
+        })
+        .eq("id", client.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client", id] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("تم تحديث بيانات العميل بنجاح");
+      setIsEditClientOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "حدث خطأ أثناء حفظ البيانات");
+    },
+  });
 
   // Add payment states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -279,7 +355,7 @@ export default function ClientDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("treasuries")
-        .select("id, name, treasury_type, parent_id, balance")
+        .select("id, name, treasury_type, parent_id, balance, is_active")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -287,89 +363,50 @@ export default function ClientDetail() {
     },
   });
 
-  // Split parent and child treasuries
-  const allParentTreasuries = useMemo(() => {
-    return treasuries?.filter((t) => t.parent_id === null) || [];
-  }, [treasuries]);
+  // ── Auto-select parent treasury based on selected project or dominant sector ──
+  useEffect(() => {
+    if (!treasuries || treasuries.length === 0) return;
+    const parentList = treasuries.filter((t) => !t.parent_id && t.is_active !== false);
+    if (!parentList.length) return;
 
-  // Restrict parent treasuries: If a project is selected, ONLY show the treasury associated with that project!
-  const parentTreasuries = useMemo(() => {
-    if (!allParentTreasuries.length) return [];
     if (selectedProjectId && selectedProjectId !== "none") {
       const proj = projects?.find((p) => p.id === selectedProjectId);
       if (proj) {
-        // 1. Check if project has an explicit default_treasury_id
         if ((proj as any).default_treasury_id) {
           const defId = (proj as any).default_treasury_id;
-          const directParent = allParentTreasuries.find((t) => t.id === defId);
-          if (directParent) return [directParent];
-          const child = treasuries?.find((t) => t.id === defId);
+          const directParent = parentList.find((t) => t.id === defId);
+          if (directParent) {
+            setSelectedParentTreasuryId(directParent.id);
+            return;
+          }
+          const child = treasuries.find((t) => t.id === defId);
           if (child?.parent_id) {
-            const rootParent = allParentTreasuries.find((t) => t.id === child.parent_id);
-            if (rootParent) return [rootParent];
+            setSelectedParentTreasuryId(child.parent_id);
+            return;
           }
         }
-
-        // 2. Otherwise match by project_type
         const pType = proj.project_type;
-        const matched = allParentTreasuries.filter(
-          (t: any) =>
+        const matched = parentList.find(
+          (t) =>
             t.project_category === pType ||
-            (pType === "contracting" && (t.name.includes("مقاولات") || t.name.includes("المقاولات"))) ||
-            (pType === "finishing" && (t.name.includes("تشطيب") || t.name.includes("التشطيب")))
+            (pType === "contracting" && t.name.includes("مقاولات")) ||
+            (pType === "finishing" && t.name.includes("تشطيب"))
         );
-        if (matched.length > 0) return matched;
+        if (matched) {
+          setSelectedParentTreasuryId(matched.id);
+          return;
+        }
       }
-    }
-    return allParentTreasuries;
-  }, [allParentTreasuries, selectedProjectId, projects, treasuries]);
-
-  const filteredChildTreasuries = useMemo(() => {
-    if (!selectedParentTreasuryId || !treasuries) return [];
-    let list = treasuries.filter((t) => t.parent_id === selectedParentTreasuryId);
-    if (list.length > 0) {
-      if (paymentMethod === "cash") {
-        const cashList = list.filter((t) => t.treasury_type === "cash");
-        if (cashList.length > 0) return cashList;
+    } else if (!selectedParentTreasuryId) {
+      const hasContractingOnly = projects?.length && projects.every((p) => p.project_type === "contracting");
+      const contractingRoot = parentList.find((t) => t.name.includes("مقاولات"));
+      if (hasContractingOnly && contractingRoot) {
+        setSelectedParentTreasuryId(contractingRoot.id);
       } else {
-        const bankList = list.filter((t) => t.treasury_type === "bank");
-        if (bankList.length > 0) return bankList;
-      }
-      return list;
-    }
-    // Fallback if parent has no sub-branches
-    const parent = treasuries.find((t) => t.id === selectedParentTreasuryId);
-    return parent ? [parent] : [];
-  }, [treasuries, selectedParentTreasuryId, paymentMethod]);
-
-  // ── Auto-select parent treasury based on selected project ──
-  useEffect(() => {
-    if (!parentTreasuries || parentTreasuries.length === 0) {
-      setSelectedParentTreasuryId("");
-      return;
-    }
-
-    if (selectedProjectId && selectedProjectId !== "none") {
-      // Strictly set to the project's single associated parent treasury
-      setSelectedParentTreasuryId(parentTreasuries[0].id);
-    } else {
-      // General payment: maintain current or default to first if invalid
-      if (!selectedParentTreasuryId || !parentTreasuries.some((pt) => pt.id === selectedParentTreasuryId)) {
-        setSelectedParentTreasuryId(parentTreasuries[0].id);
+        setSelectedParentTreasuryId(parentList[0].id);
       }
     }
-  }, [selectedProjectId, parentTreasuries]);
-
-  // ── Auto-select child treasury based on parent treasury and payment method ──
-  useEffect(() => {
-    if (filteredChildTreasuries && filteredChildTreasuries.length > 0) {
-      if (!selectedTreasuryId || !filteredChildTreasuries.some((t) => t.id === selectedTreasuryId)) {
-        setSelectedTreasuryId(filteredChildTreasuries[0].id);
-      }
-    } else {
-      setSelectedTreasuryId("");
-    }
-  }, [filteredChildTreasuries, selectedParentTreasuryId]);
+  }, [selectedProjectId, projects, treasuries, selectedParentTreasuryId]);
 
   // Fetch other related data for billing calculations
   const { data: phases, isLoading: phasesLoading, error: phasesError } = useQuery<Phase[]>({
@@ -448,6 +485,8 @@ export default function ClientDetail() {
       queryClient.invalidateQueries({ queryKey: ["client", id] });
       queryClient.invalidateQueries({ queryKey: ["client-projects", id] });
       queryClient.invalidateQueries({ queryKey: ["client-payments-list", id] });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-ledger", id] });
+      queryClient.invalidateQueries({ queryKey: ["client-credit-panel", id] });
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["all-clients-debts"] });
       queryClient.invalidateQueries({ queryKey: ["treasuries-active-client-detail"] });
@@ -685,6 +724,81 @@ export default function ClientDetail() {
   const finishingProjectsForSelect = useMemo(() => {
     return projects?.filter((p) => p.project_type === "finishing") || [];
   }, [projects]);
+
+  // Client Credit / Unallocated Advances
+  const clientCredit = useMemo(() => {
+    return availableClientCredit(clientCreditLedger as any);
+  }, [clientCreditLedger]);
+
+  // Chronological Statement Memo
+  const chronologicalStatement = useMemo(() => {
+    type StatementRow = {
+      id: string;
+      date: string;
+      type: "bill" | "payment";
+      description: string;
+      projectName: string;
+      debit: number;
+      credit: number;
+      balance: number;
+    };
+
+    const rows: StatementRow[] = [];
+
+    (projects || []).forEach((proj) => {
+      const bill = clientFinancials.projectBills[proj.id] || 0;
+      if (bill > 0) {
+        rows.push({
+          id: 'proj-' + proj.id,
+          date: proj.created_at || new Date().toISOString(),
+          type: "bill",
+          description: 'مطالبات أعمال: ' + proj.name,
+          projectName: proj.name,
+          debit: bill,
+          credit: 0,
+          balance: 0,
+        });
+      }
+    });
+
+    (payments || []).forEach((p) => {
+      const projName = p.projects?.name || "رصيد عام للزبون";
+      rows.push({
+        id: 'pay-' + p.id,
+        date: p.date,
+        type: "payment",
+        description: 'دفعة مستلمة: ' + (p.notes || methodLabels[p.payment_method] || "سداد"),
+        projectName: projName,
+        debit: 0,
+        credit: Number(p.amount) || 0,
+        balance: 0,
+      });
+    });
+
+    rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let running = 0;
+    return rows.map((r) => {
+      running += r.debit - r.credit;
+      return { ...r, balance: running };
+    });
+  }, [projects, payments, clientFinancials]);
+
+  // Filtered Projects Memo
+  const filteredProjects = useMemo(() => {
+    let list = projects || [];
+    if (projectTypeFilter !== "all") {
+      list = list.filter((p) => p.project_type === projectTypeFilter);
+    }
+    if (projectStatusFilter !== "all") {
+      list = list.filter((p) => p.status === projectStatusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((p) => p.name.toLowerCase().includes(q) || (p.description && p.description.toLowerCase().includes(q)));
+    }
+    return list;
+  }, [projects, projectTypeFilter, projectStatusFilter, searchQuery]);
 
   // Print Payment Receipt (إيصال قبض)
   const handlePrintReceipt = async (payment: any) => {
@@ -1083,49 +1197,63 @@ export default function ClientDetail() {
               </DialogHeader>
 
               {/* ── Summary Cards Box (المستحقات والمتبقي الحقيقي) ── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-2">
+                {/* الرصيد الدائن المتاح */}
+                <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-blue-800 dark:text-blue-300 font-semibold">
+                    <span>رصيد دائن متاح للزبون</span>
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="text-lg font-black text-blue-700 dark:text-blue-400 font-mono" dir="ltr">
+                    {formatCurrencyLYD(clientCredit)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-blue-500/15">
+                    <span>دفعات وسلف عامة غير مخصصة</span>
+                  </div>
+                </div>
+
                 {/* العميل ككل */}
-                <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+                <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
                   <div className="flex items-center justify-between text-xs text-amber-800 dark:text-amber-300 font-semibold">
-                    <span>إجمالي المتبقي المستحق على الزبون</span>
+                    <span>المتبقي المستحق على الزبون</span>
                     <Coins className="h-4 w-4 text-amber-600" />
                   </div>
-                  <div className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono">
+                  <div className="text-lg font-black text-amber-700 dark:text-amber-400 font-mono" dir="ltr">
                     {formatCurrencyLYD(clientFinancials.remaining)}
                   </div>
                   <div className="text-[10px] text-muted-foreground pt-1 border-t border-amber-500/15 flex justify-between">
-                    <span>إجمالي المطالبات: {formatCurrencyLYD(clientFinancials.totalBilled)}</span>
-                    <span>المسدد: {formatCurrencyLYD(clientFinancials.totalPaid)}</span>
+                    <span>مطالبات: {formatCurrencyLYD(clientFinancials.totalBilled)}</span>
+                    <span>مسدد: {formatCurrencyLYD(clientFinancials.totalPaid)}</span>
                   </div>
                 </div>
 
                 {/* المشروع المختار (عند اختياره) */}
-                <div className={`p-3.5 rounded-xl border space-y-1 transition-all ${
+                <div className={`p-3 rounded-xl border space-y-1 transition-all ${
                   selectedProjectId && selectedProjectId !== "none"
-                    ? "bg-blue-500/5 border-blue-500/20"
+                    ? "bg-emerald-500/5 border-emerald-500/20"
                     : "bg-muted/30 border-border/40 opacity-70"
                 }`}>
-                  <div className="flex items-center justify-between text-xs font-semibold text-blue-800 dark:text-blue-300">
+                  <div className="flex items-center justify-between text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                     <span className="truncate">
                       {selectedProjectId && selectedProjectId !== "none"
-                        ? `المتبقي على مشروع: ${selectedProject?.name || ''}`
-                        : "متبقي المشروع المستهدف"}
+                        ? `متبقي: ${selectedProject?.name || ''}`
+                        : "متبقي المشروع"}
                     </span>
-                    <Building2 className="h-4 w-4 text-blue-600" />
+                    <Building2 className="h-4 w-4 text-emerald-600" />
                   </div>
-                  <div className="text-xl font-black text-blue-700 dark:text-blue-400 font-mono">
+                  <div className="text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono" dir="ltr">
                     {selectedProjectId && selectedProjectId !== "none"
                       ? formatCurrencyLYD(selectedProjectRemaining)
-                      : "حدد مشروعاً بالأسفل"}
+                      : "حدد مشروعاً"}
                   </div>
-                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-blue-500/15 flex justify-between">
+                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-emerald-500/15 flex justify-between">
                     {selectedProjectId && selectedProjectId !== "none" ? (
                       <>
-                        <span>مطالبات المشروع: {formatCurrencyLYD(selectedProjectBill)}</span>
-                        <span>المسدد: {formatCurrencyLYD(selectedProjectPaid)}</span>
+                        <span>أعمال: {formatCurrencyLYD(selectedProjectBill)}</span>
+                        <span>مسدد: {formatCurrencyLYD(selectedProjectPaid)}</span>
                       </>
                     ) : (
-                      <span>اختر المشروع لعرض المتبقي المستحق عليه</span>
+                      <span>اختر المشروع لعرض تفاصيله</span>
                     )}
                   </div>
                 </div>
@@ -1146,7 +1274,12 @@ export default function ClientDetail() {
                       min="0"
                       required
                       value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value
+                          .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString())
+                          .replace(/,/g, "");
+                        setPaymentAmount(val);
+                      }}
                       placeholder="0.00"
                       className="h-14 text-2xl font-black text-center rounded-xl border-emerald-500/30 focus:border-emerald-600 bg-background"
                       dir="ltr"
@@ -1318,58 +1451,16 @@ export default function ClientDetail() {
                 </div>
 
                 {/* 4. القسم والخزينة الفرعية المستلمة */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                      <FolderOpen className="h-3.5 w-3.5 text-primary" />
-                      <span>القسم / الخزينة الرئيسية *</span>
-                    </Label>
-                    <Select
-                      value={selectedParentTreasuryId}
-                      onValueChange={(val) => {
-                        setSelectedParentTreasuryId(val);
-                        setSelectedTreasuryId("");
-                      }}
-                      disabled={parentTreasuries.length <= 1 && !!selectedProjectId && selectedProjectId !== "none"}
-                      dir="rtl"
-                    >
-                      <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue placeholder="اختر الخزينة الرئيسية..." />
-                      </SelectTrigger>
-                      <SelectContent dir="rtl">
-                        {parentTreasuries.map((pt) => (
-                          <SelectItem key={pt.id} value={pt.id}>
-                            {pt.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                      <Wallet className="h-3.5 w-3.5 text-primary" />
-                      <span>الحساب / الفرع المستلم *</span>
-                    </Label>
-                    <Select
-                      value={selectedTreasuryId}
-                      onValueChange={setSelectedTreasuryId}
-                      disabled={!selectedParentTreasuryId || filteredChildTreasuries.length === 0}
-                      dir="rtl"
-                    >
-                      <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue placeholder={selectedParentTreasuryId ? "اختر الحساب / الفرع المستلم..." : "حدد الخزينة الرئيسية أولاً"} />
-                      </SelectTrigger>
-                      <SelectContent dir="rtl">
-                        {filteredChildTreasuries.map((ct) => (
-                          <SelectItem key={ct.id} value={ct.id}>
-                            {ct.name} ({ct.treasury_type === 'cash' ? 'نقدي' : 'بنك'}) - رصيد: {formatCurrencyLYD(ct.balance || 0)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <HierarchicalTreasurySelect
+                  value={selectedTreasuryId}
+                  onValueChange={setSelectedTreasuryId}
+                  treasuries={treasuries || []}
+                  selectedParentId={selectedParentTreasuryId}
+                  onParentChange={setSelectedParentTreasuryId}
+                  parentLabel="القسم / الخزينة الرئيسية *"
+                  childLabel="الحساب / الفرع المستلم *"
+                  required
+                />
 
                 {/* 5. ملاحظات */}
                 <div className="space-y-2">
@@ -1420,560 +1511,929 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      {/* Client Header Info Card */}
-      <div className="flex items-start gap-4 flex-wrap bg-card p-6 rounded-xl border border-border/80">
-        <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-          <Building className="h-8 w-8 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-extrabold text-foreground">{client.name}</h1>
-          <div className="flex flex-wrap items-center gap-4 mt-2 text-muted-foreground text-sm">
-            {client.phone && (
-              <div className="flex items-center gap-1 font-mono">
-                <Phone className="h-4 w-4" />
-                <span>{client.phone}</span>
+      {/* Golden Hero Header */}
+      <div className="rounded-2xl border border-primary/30 bg-gradient-to-l from-primary/5 via-background to-card p-5 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3.5 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0 shadow-2xs">
+              <Building2 className="h-7 w-7 text-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
+                  {client.name}
+                </h1>
+                <Badge
+                  variant="outline"
+                  className="text-[11px] font-bold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 gap-1.5"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>نشط</span>
+                </Badge>
+                <Badge variant="secondary" className="text-[11px] font-bold bg-muted/60">
+                  <span>حساب زبون</span>
+                </Badge>
+                {client.city && (
+                  <Badge variant="outline" className="text-[11px] font-medium border-border/70 gap-1">
+                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                    <span>{client.city}{client.address ? ` - ${client.address}` : ""}</span>
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary cursor-pointer transition-colors"
+                  onClick={openEditClientModal}
+                  title="تعديل بيانات العميل"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
               </div>
-            )}
-            {client.email && (
-              <div className="flex items-center gap-1">
-                <Mail className="h-4 w-4" />
-                <span>{client.email}</span>
+
+              {/* Contact details & Notes */}
+              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                {client.phone ? (
+                  <div className="flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/50">
+                    <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <a
+                      href={`tel:${client.phone}`}
+                      className="font-mono text-foreground hover:text-primary transition-colors text-xs"
+                      dir="ltr"
+                    >
+                      {client.phone}
+                    </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                      onClick={() => copyPhone(client.phone!)}
+                      title="نسخ رقم الهاتف"
+                    >
+                      {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">لا يوجد رقم هاتف مسجل</span>
+                )}
+
+                {client.email && (
+                  <div className="flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/50">
+                    <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <a href={`mailto:${client.email}`} className="text-foreground hover:text-primary transition-colors text-xs" dir="ltr">
+                      {client.email}
+                    </a>
+                  </div>
+                )}
+
+                {client.notes && (
+                  <span className="text-xs text-muted-foreground/80 line-clamp-1 max-w-md">
+                    ملاحظات: {client.notes}
+                  </span>
+                )}
               </div>
-            )}
-            {client.city && (
-              <div className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
-                <span>{client.city} {client.address ? `- ${client.address}` : ""}</span>
-              </div>
-            )}
+            </div>
           </div>
-          {client.notes && (
-            <p className="text-xs text-muted-foreground bg-muted/40 p-2 rounded mt-2 border border-border/40">
-              <span className="font-bold">ملاحظات:</span> {client.notes}
-            </p>
-          )}
+
+          {/* Live Balance Status Chip */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            {clientCredit > 0 && (
+              <div className="flex items-center gap-3 p-3 rounded-xl border shadow-2xs border-blue-500/30 bg-blue-500/10 text-blue-900 dark:text-blue-200">
+                <div className="p-1.5 rounded-lg bg-background/80 shadow-2xs shrink-0">
+                  <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground font-bold block">
+                    رصيد دائن متاح (مقدم)
+                  </span>
+                  <span className="text-base font-black font-mono tracking-tight text-blue-700 dark:text-blue-300" dir="ltr">
+                    {formatCurrencyLYD(clientCredit)}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-2xs ${
+              clientFinancials.remaining > 0
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+            }`}>
+              <div className="p-1.5 rounded-lg bg-background/80 shadow-2xs shrink-0">
+                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground font-bold block">
+                  {clientFinancials.remaining > 0 ? "صافي المستحق على الزبون" : "الحساب مسدد بالكامل"}
+                </span>
+                <span className="text-base font-black font-mono tracking-tight" dir="ltr">
+                  {formatCurrencyLYD(clientFinancials.remaining)}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Financial Overview Row (3 Summary Cards) */}
-      <ClientCreditPanel clientId={id!} projects={(projects || []).map(p => ({ id: p.id, name: p.name, remaining: clientFinancials.projectRemainders[p.id] || 0 }))} />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-border bg-card/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-              إجمالي العقود المبرمة
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-black text-foreground font-mono">
-                {totalContractsAmount.toLocaleString()} د.ل
-              </span>
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border/60">
-              إجمالي قيمة عقود الاتفاقيات المبرمة ({contracts?.length || 0} عقود)
-            </p>
-          </CardContent>
-        </Card>
+        {/* Action Buttons Row */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => {
+                setSelectedProjectId("none");
+                setPaymentDialogOpen(true);
+              }}
+              className="h-9 cursor-pointer gap-2 font-bold shadow-2xs bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              <Wallet className="h-4 w-4" />
+              <span>تسجيل دفعة / قبض</span>
+            </Button>
 
-        <Card className="border-border bg-card/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-              إجمالي قيمة الأعمال والمطالبات
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-black text-foreground font-mono">
-                {clientFinancials.totalBilled.toLocaleString()} د.ل
-              </span>
-              <Building className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/60 text-[10px] text-muted-foreground">
-              <span className="truncate">مقاولات: <strong className="text-foreground font-mono">{clientFinancials.contractingBilled.toLocaleString()}</strong></span>
-              <span>•</span>
-              <span className="truncate">تشطيب: <strong className="text-foreground font-mono">{clientFinancials.finishingBilled.toLocaleString()}</strong></span>
-            </div>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              onClick={handlePrintStatement}
+              className="h-9 cursor-pointer gap-2 border-border/80 font-bold bg-card hover:bg-muted"
+            >
+              <Printer className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>كشف الحساب</span>
+            </Button>
 
-        <Card className="border-border bg-card/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase flex items-center justify-between">
-              <span>إجمالي المبالغ المسددة</span>
-              <Badge variant="outline" className="text-[10px] text-green-600 bg-green-500/10 border-green-500/30 font-mono">
-                {paymentsSummary.count} دفعة
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xl font-black text-green-600 dark:text-green-400 font-mono">
-                {(paymentsSummary.totalPaid || 0).toLocaleString()} د.ل
-              </span>
-              <Wallet className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-border/60 text-[10px] text-muted-foreground">
-              <span className="truncate">مقاولات: <strong className="text-foreground font-mono">{(paymentsSummary.contractingPaid || 0).toLocaleString()}</strong></span>
-              <span>•</span>
-              <span className="truncate">تشطيب: <strong className="text-foreground font-mono">{(paymentsSummary.finishingPaid || 0).toLocaleString()}</strong></span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Debts Breakdown Row (Split into Contracting Debts Card & Finishing Debts Card) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Contracting Projects Debt Card */}
-        <Card className="border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Hammer className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <span>ديون مشاريع المقاولات</span>
-              </span>
-              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-700 bg-amber-500/10">
-                {clientFinancials.contractingCount || 0} مشاريع
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-amber-700 dark:text-amber-300 font-mono">
-                {(clientFinancials.contractingRemaining || 0).toLocaleString()} د.ل
-              </span>
-              <Coins className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-amber-500/20 text-[11px] text-muted-foreground">
-              <span>مطالبات المقاولات: <strong className="text-foreground font-mono">{(clientFinancials.contractingBilled || 0).toLocaleString()} د.ل</strong></span>
-              <span>المسدد: <strong className="text-green-600 font-mono">{(clientFinancials.contractingPaid || 0).toLocaleString()} د.ل</strong></span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Finishing Projects Debt Card */}
-        <Card className="border-blue-500/30 bg-blue-500/5 dark:bg-blue-500/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Paintbrush className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span>ديون مشاريع التشطيبات</span>
-              </span>
-              <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-700 bg-blue-500/10">
-                {clientFinancials.finishingCount || 0} مشاريع
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-blue-700 dark:text-blue-300 font-mono">
-                {(clientFinancials.finishingRemaining || 0).toLocaleString()} د.ل
-              </span>
-              <Coins className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-blue-500/20 text-[11px] text-muted-foreground">
-              <span>مطالبات التشطيبات: <strong className="text-foreground font-mono">{(clientFinancials.finishingBilled || 0).toLocaleString()} د.ل</strong></span>
-              <span>المسدد: <strong className="text-green-600 font-mono">{(clientFinancials.finishingPaid || 0).toLocaleString()} د.ل</strong></span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Projects Section Split by Type */}
-      <Tabs defaultValue="all" dir="rtl" className="w-full">
-        <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <CardTitle>مشاريع العميل وقيمها</CardTitle>
-              <TabsList className="bg-muted p-1">
-                <TabsTrigger value="all" className="gap-1.5 cursor-pointer text-xs">
-                  <FolderOpen className="h-4 w-4" />
-                  <span>جميع المشاريع ({projects?.length || 0})</span>
-                </TabsTrigger>
-                <TabsTrigger value="contracting" className="gap-1.5 cursor-pointer text-xs">
-                  <Hammer className="h-4 w-4 text-amber-500" />
-                  <span>مشاريع المقاولات ({clientFinancials.contractingCount})</span>
-                </TabsTrigger>
-                <TabsTrigger value="finishing" className="gap-1.5 cursor-pointer text-xs">
-                  <Paintbrush className="h-4 w-4 text-blue-500" />
-                  <span>مشاريع التشطيب ({clientFinancials.finishingCount})</span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <Button size="sm" asChild className="h-8 text-xs cursor-pointer">
+            <Button
+              variant="outline"
+              asChild
+              className="h-9 cursor-pointer gap-2 border-border/80 font-bold bg-card hover:bg-muted"
+            >
               <Link to="/projects/new">
-                <Plus className="h-4 w-4 ml-1" />
-                مشروع جديد
+                <Plus className="h-4 w-4 text-primary" />
+                <span>مشروع جديد</span>
               </Link>
             </Button>
-          </CardHeader>
-          <CardContent className="p-0">
-            <TabsContent value="all" className="m-0">
-              {(() => {
-                const list = projects || [];
-                if (list.length === 0) {
-                  return (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <FolderOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>لا توجد مشاريع لهذا العميل</p>
-                    </div>
-                  );
-                }
-                return (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">المشروع</TableHead>
-                        <TableHead className="text-right">نوع المشروع</TableHead>
-                        <TableHead className="text-right">الحالة</TableHead>
-                        <TableHead className="text-center">ميزانية المشروع</TableHead>
-                        <TableHead className="text-center">قيمة الأعمال المنجزة</TableHead>
-                        <TableHead className="text-left w-[100px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {list.map((project) => {
-                        const billAmount = clientFinancials.projectBills[project.id] || 0;
-                        const isContracting = project.project_type === "contracting";
-                        return (
-                          <TableRow key={project.id} className="hover:bg-muted/40 transition-colors">
-                            <TableCell className="font-semibold">{project.name}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  isContracting
-                                    ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
-                                    : "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
-                                }
-                              >
-                                {isContracting ? "مقاولات" : "تشطيبات"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={statusColors[project.status] || ""}>
-                                {statusLabels[project.status] || project.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {Number(project.budget) > 0 ? formatCurrencyLYD(project.budget) : "---"}
-                            </TableCell>
-                            <TableCell className="text-center font-bold text-foreground font-mono">
-                              {billAmount.toLocaleString()} د.ل
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}`}>
-                                  <span>عرض التفاصيل</span>
-                                  <ArrowUpRight className="h-4 w-4 mr-1" />
-                                </Link>
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                );
-              })()}
-            </TabsContent>
-
-            <TabsContent value="contracting" className="m-0">
-              <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-xs font-semibold flex items-center justify-between text-amber-900 dark:text-amber-200">
-                <span className="flex items-center gap-1.5">
-                  <Hammer className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <span>إجمالي مطالبات أعمال المقاولات:</span>
-                </span>
-                <span className="text-sm font-bold font-mono">{clientFinancials.contractingBilled.toLocaleString()} د.ل</span>
-              </div>
-              {(() => {
-                const list = (projects || []).filter((p) => p.project_type === "contracting");
-                if (list.length === 0) {
-                  return (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Hammer className="h-12 w-12 mx-auto mb-4 opacity-50 text-amber-500" />
-                      <p>لا توجد مشاريع مقاولات لهذا العميل</p>
-                    </div>
-                  );
-                }
-                return (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">المشروع</TableHead>
-                        <TableHead className="text-right">الحالة</TableHead>
-                        <TableHead className="text-center">ميزانية المشروع</TableHead>
-                        <TableHead className="text-center">قيمة الأعمال المنجزة</TableHead>
-                        <TableHead className="text-left w-[100px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {list.map((project) => {
-                        const billAmount = clientFinancials.projectBills[project.id] || 0;
-                        return (
-                          <TableRow key={project.id} className="hover:bg-muted/40 transition-colors">
-                            <TableCell className="font-semibold">{project.name}</TableCell>
-                            <TableCell>
-                              <Badge className={statusColors[project.status] || ""}>
-                                {statusLabels[project.status] || project.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {Number(project.budget) > 0 ? formatCurrencyLYD(project.budget) : "---"}
-                            </TableCell>
-                            <TableCell className="text-center font-bold text-foreground font-mono">
-                              {billAmount.toLocaleString()} د.ل
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}`}>
-                                  <span>عرض التفاصيل</span>
-                                  <ArrowUpRight className="h-4 w-4 mr-1" />
-                                </Link>
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                );
-              })()}
-            </TabsContent>
-
-            <TabsContent value="finishing" className="m-0">
-              <div className="px-4 py-2.5 bg-blue-500/10 border-b border-blue-500/20 text-xs font-semibold flex items-center justify-between text-blue-900 dark:text-blue-200">
-                <span className="flex items-center gap-1.5">
-                  <Paintbrush className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span>إجمالي مطالبات أعمال التشطيبات:</span>
-                </span>
-                <span className="text-sm font-bold font-mono">{clientFinancials.finishingBilled.toLocaleString()} د.ل</span>
-              </div>
-              {(() => {
-                const list = (projects || []).filter((p) => p.project_type === "finishing");
-                if (list.length === 0) {
-                  return (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Paintbrush className="h-12 w-12 mx-auto mb-4 opacity-50 text-blue-500" />
-                      <p>لا توجد مشاريع تشطيب لهذا العميل</p>
-                    </div>
-                  );
-                }
-                return (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">المشروع</TableHead>
-                        <TableHead className="text-right">الحالة</TableHead>
-                        <TableHead className="text-center">ميزانية المشروع</TableHead>
-                        <TableHead className="text-center">قيمة الأعمال المنجزة</TableHead>
-                        <TableHead className="text-left w-[100px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {list.map((project) => {
-                        const billAmount = clientFinancials.projectBills[project.id] || 0;
-                        return (
-                          <TableRow key={project.id} className="hover:bg-muted/40 transition-colors">
-                            <TableCell className="font-semibold">{project.name}</TableCell>
-                            <TableCell>
-                              <Badge className={statusColors[project.status] || ""}>
-                                {statusLabels[project.status] || project.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {Number(project.budget) > 0 ? formatCurrencyLYD(project.budget) : "---"}
-                            </TableCell>
-                            <TableCell className="text-center font-bold text-foreground font-mono">
-                              {billAmount.toLocaleString()} د.ل
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                                <Link to={`/projects/${project.id}`}>
-                                  <span>عرض التفاصيل</span>
-                                  <ArrowUpRight className="h-4 w-4 mr-1" />
-                                </Link>
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                );
-              })()}
-            </TabsContent>
-          </CardContent>
-        </Card>
-      </Tabs>
-
-      {/* Client Payments (تسديدات الزبون) Table */}
-      <Card>
-        <CardHeader className="pb-3 flex flex-col gap-4">
-          <div className="flex flex-row items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-green-600" />
-              <CardTitle>كشف الدفعات والتسديدات المستلمة</CardTitle>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => setPaymentDialogOpen(true)}
-              className="h-8 text-xs cursor-pointer bg-green-600 hover:bg-green-700 text-white font-bold"
-            >
-              <Plus className="h-4 w-4 ml-1" />
-              إضافة دفعة
-            </Button>
           </div>
 
-          {/* Dedicated Payments Summary Bar Card */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 p-3.5 rounded-xl bg-green-500/5 border border-green-500/20 text-xs">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>المشاريع المسجلة:</span>
+            <Badge variant="outline" className="font-mono font-bold text-xs">
+              {projects?.length || 0}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* 4-Card Golden KPI Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Card 1: Billed Works */}
+        <Card className="p-4 rounded-2xl border border-border/80 bg-card hover:border-primary/40 transition-all shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground">إجمالي قيمة الأعمال والمطالبات</span>
+            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+              <Building className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-xl font-black text-foreground font-mono" dir="ltr">
+              {formatCurrencyLYD(clientFinancials.totalBilled)}
+            </span>
+          </div>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>مقاولات: {formatCurrencyLYD(clientFinancials.contractingBilled)}</span>
+            <span>تشطيب: {formatCurrencyLYD(clientFinancials.finishingBilled)}</span>
+          </div>
+        </Card>
+
+        {/* Card 2: Received Payments */}
+        <Card className="p-4 rounded-2xl border border-border/80 bg-card hover:border-emerald-500/40 transition-all shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground">إجمالي المقبوضات المسددة</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Wallet className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono" dir="ltr">
+              {formatCurrencyLYD(paymentsSummary.totalPaid)}
+            </span>
+            <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10">
+              {paymentsSummary.count} دفعة
+            </Badge>
+          </div>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>مسدد للمشاريع: {formatCurrencyLYD(clientFinancials.totalPaid)}</span>
+            <span>كاش: {formatCurrencyLYD(paymentsSummary.cashPaid)}</span>
+          </div>
+        </Card>
+
+        {/* Card 3: Net Due */}
+        <Card className="p-4 rounded-2xl border border-border/80 bg-card hover:border-amber-500/40 transition-all shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground">صافي الرصيد المستحق (المتبقي)</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Coins className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono" dir="ltr">
+              {formatCurrencyLYD(clientFinancials.remaining)}
+            </span>
+          </div>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>متبقي المقاولات: {formatCurrencyLYD(clientFinancials.contractingRemaining)}</span>
+            <span>التشطيبات: {formatCurrencyLYD(clientFinancials.finishingRemaining)}</span>
+          </div>
+        </Card>
+
+        {/* Card 4: Available Credit / Advance */}
+        <Card className="p-4 rounded-2xl border border-border/80 bg-card hover:border-blue-500/40 transition-all shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground">الرصيد المتاح على الحساب</span>
+            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Sparkles className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono" dir="ltr">
+              {formatCurrencyLYD(clientCredit)}
+            </span>
+            <Badge variant="outline" className="text-[10px] font-bold border-blue-500/30 text-blue-700 dark:text-blue-400 bg-blue-500/10">
+              رصيد دائن
+            </Badge>
+          </div>
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>دفعات عامة غير مخصصة</span>
+            <span>{projects?.length || 0} مشاريع مؤهلة</span>
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Interactive Tabs */}
+      <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="space-y-4" dir="rtl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/60 pb-3">
+          <TabsList className="bg-card border border-border/80 p-1 rounded-xl shadow-2xs h-11 flex-wrap">
+            <TabsTrigger
+              value="projects"
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <FolderOpen className="h-4 w-4 text-primary" />
+              <span>المشاريع والتعاقدات</span>
+              <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
+                {projects?.length || 0}
+              </Badge>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="payments"
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span>سندات القبض والدفعات</span>
+              <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
+                {payments?.length || 0}
+              </Badge>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="statement"
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>كشف الحساب التراكمي</span>
+              <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-muted">
+                {chronologicalStatement.length}
+              </Badge>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="credit"
+              className="rounded-lg text-xs font-bold gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary cursor-pointer transition-all"
+            >
+              <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span>الرصيد الدائن والتسويات</span>
+              {clientCredit > 0 && (
+                <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0 font-bold bg-blue-500/10 text-blue-700">
+                  {formatCurrencyLYD(clientCredit)}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Filters for Projects Tab */}
+          {activeTab === "projects" && (
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Sector Filter */}
+              <Select value={projectTypeFilter} onValueChange={(val: any) => setProjectTypeFilter(val)} dir="rtl">
+                <SelectTrigger className="h-9 w-32 text-xs rounded-xl bg-card border-border/80">
+                  <SelectValue placeholder="القطاع" />
+                </SelectTrigger>
+                <SelectContent dir="rtl">
+                  <SelectItem value="all" className="text-xs font-bold">كافة القطاعات</SelectItem>
+                  <SelectItem value="contracting" className="text-xs">مقاولات</SelectItem>
+                  <SelectItem value="finishing" className="text-xs">تشطيبات</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Status Filter */}
+              <Select value={projectStatusFilter} onValueChange={(val: any) => setProjectStatusFilter(val)} dir="rtl">
+                <SelectTrigger className="h-9 w-32 text-xs rounded-xl bg-card border-border/80">
+                  <SelectValue placeholder="الحالة" />
+                </SelectTrigger>
+                <SelectContent dir="rtl">
+                  <SelectItem value="all" className="text-xs font-bold">كافة الحالات</SelectItem>
+                  <SelectItem value="active" className="text-xs">نشط</SelectItem>
+                  <SelectItem value="completed" className="text-xs">مكتمل</SelectItem>
+                  <SelectItem value="pending" className="text-xs">قيد الانتظار</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-xl border border-border/80 bg-card p-0.5 shadow-2xs">
+                <Button
+                  variant={projectsViewMode === "cards" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-lg cursor-pointer"
+                  onClick={() => setProjectsViewMode("cards")}
+                  title="عرض بطاقات المشاريع"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">بطاقات</span>
+                </Button>
+                <Button
+                  variant={projectsViewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold gap-1 rounded-lg cursor-pointer"
+                  onClick={() => setProjectsViewMode("table")}
+                  title="عرض كجدول ERP موحد"
+                >
+                  <TableProperties className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">جدول ERP</span>
+                </Button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-48">
+                <Search className="absolute right-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="بحث باسم المشروع..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8 h-9 text-xs rounded-xl bg-card border-border/80"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* TAB 1: PROJECTS & CONTRACTS */}
+        <TabsContent value="projects" className="space-y-4 mt-1">
+          {filteredProjects.length === 0 ? (
+            <Card className="p-10 text-center rounded-2xl border-dashed border-border/80 bg-card">
+              <FolderOpen className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+              <h4 className="text-base font-bold text-foreground">لا توجد مشاريع مطابقة للبحث أو الفلتر</h4>
+              <p className="text-xs text-muted-foreground mt-1 font-medium max-w-md mx-auto">
+                لم يتم العثور على مشاريع لهذا العميل بالمعايير المحددة. يمكنك إضافة مشروع جديد أو تغيير شروط التصفية.
+              </p>
+            </Card>
+          ) : projectsViewMode === "cards" ? (
+            <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+              {filteredProjects.map((project) => {
+                const billAmount = clientFinancials.projectBills[project.id] || 0;
+                const remainder = clientFinancials.projectRemainders[project.id] || 0;
+                const paidAmount = Math.max(0, billAmount - remainder);
+                const isContracting = project.project_type === "contracting";
+
+                return (
+                  <div
+                    key={project.id}
+                    className="p-4 rounded-xl border border-border/80 bg-card hover:border-primary/50 transition-all flex flex-col justify-between shadow-2xs space-y-3"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <Link
+                          to={`/projects/${project.id}`}
+                          className="font-bold text-sm text-foreground hover:text-primary transition-colors flex items-center gap-1.5"
+                        >
+                          <FolderOpen className="h-4 w-4 text-primary shrink-0" />
+                          <span>{project.name}</span>
+                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-2 py-0.5 font-bold ${
+                              isContracting
+                                ? "border-amber-500/30 text-amber-700 bg-amber-500/10"
+                                : "border-blue-500/30 text-blue-700 bg-blue-500/10"
+                            }`}
+                          >
+                            {isContracting ? "مقاولات" : "تشطيبات"}
+                          </Badge>
+                          <Badge className={`text-[10px] ${statusColors[project.status] || ""}`}>
+                            {statusLabels[project.status] || project.status}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {project.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {project.description}
+                        </p>
+                      )}
+
+                      {/* 3-column stats */}
+                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-muted/40 border border-border/60 text-center">
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block">الميزانية</span>
+                          <span className="font-mono font-bold text-xs" dir="ltr">
+                            {Number(project.budget) > 0 ? formatCurrencyLYD(project.budget) : "---"}
+                          </span>
+                        </div>
+                        <div className="border-r border-border/50 pr-2">
+                          <span className="text-[10px] text-muted-foreground block">قيمة الأعمال</span>
+                          <span className="font-mono font-bold text-xs text-foreground" dir="ltr">
+                            {formatCurrencyLYD(billAmount)}
+                          </span>
+                        </div>
+                        <div className="border-r border-border/50 pr-2">
+                          <span className="text-[10px] text-muted-foreground block">المتبقي</span>
+                          <span className={`font-mono font-black text-xs ${remainder > 0 ? "text-amber-700 dark:text-amber-400" : "text-emerald-600"}`} dir="ltr">
+                            {formatCurrencyLYD(remainder)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2.5 text-xs font-bold gap-1 border-primary/40 text-primary hover:bg-primary/10 cursor-pointer"
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          setPaymentDialogOpen(true);
+                        }}
+                      >
+                        <Wallet className="h-3 w-3" />
+                        <span>سداد للمشروع</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        asChild
+                        className="h-7 px-2.5 text-xs font-bold gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <Link to={`/projects/${project.id}`}>
+                          <span>عرض المشروع</span>
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border/80 bg-card overflow-x-auto shadow-2xs">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-right text-xs font-bold">المشروع</TableHead>
+                    <TableHead className="text-right text-xs font-bold">القطاع</TableHead>
+                    <TableHead className="text-right text-xs font-bold">الحالة</TableHead>
+                    <TableHead className="text-center text-xs font-bold">الميزانية</TableHead>
+                    <TableHead className="text-center text-xs font-bold">قيمة الأعمال</TableHead>
+                    <TableHead className="text-center text-xs font-bold">المسدد</TableHead>
+                    <TableHead className="text-center text-xs font-bold">المتبقي</TableHead>
+                    <TableHead className="text-left text-xs font-bold">الإجراء</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProjects.map((project) => {
+                    const billAmount = clientFinancials.projectBills[project.id] || 0;
+                    const remainder = clientFinancials.projectRemainders[project.id] || 0;
+                    const paidAmount = Math.max(0, billAmount - remainder);
+                    const isContracting = project.project_type === "contracting";
+
+                    return (
+                      <TableRow key={project.id} className="hover:bg-muted/40 transition-colors">
+                        <TableCell className="font-bold text-xs">
+                          <Link to={`/projects/${project.id}`} className="hover:text-primary transition-colors flex items-center gap-1.5">
+                            <FolderOpen className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span>{project.name}</span>
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold ${
+                              isContracting
+                                ? "border-amber-500/30 text-amber-700 bg-amber-500/10"
+                                : "border-blue-500/30 text-blue-700 bg-blue-500/10"
+                            }`}
+                          >
+                            {isContracting ? "مقاولات" : "تشطيبات"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`text-[10px] ${statusColors[project.status] || ""}`}>
+                            {statusLabels[project.status] || project.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs" dir="ltr">
+                          {Number(project.budget) > 0 ? formatCurrencyLYD(project.budget) : "---"}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-bold text-xs text-foreground" dir="ltr">
+                          {formatCurrencyLYD(billAmount)}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs text-emerald-600" dir="ltr">
+                          {formatCurrencyLYD(paidAmount)}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-black text-xs text-amber-700 dark:text-amber-400" dir="ltr">
+                          {formatCurrencyLYD(remainder)}
+                        </TableCell>
+                        <TableCell className="text-left">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs font-bold gap-1 border-primary/30 text-primary cursor-pointer"
+                              onClick={() => {
+                                setSelectedProjectId(project.id);
+                                setPaymentDialogOpen(true);
+                              }}
+                            >
+                              <Wallet className="h-3 w-3" />
+                              <span>سداد</span>
+                            </Button>
+                            <Button size="sm" variant="ghost" asChild className="h-7 w-7 p-0 cursor-pointer">
+                              <Link to={`/projects/${project.id}`}>
+                                <ArrowUpRight className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Contracts Subcard if any */}
+          {contracts && contracts.length > 0 && (
+            <Card className="rounded-2xl border border-border/80 bg-card overflow-hidden shadow-2xs mt-4">
+              <CardHeader className="py-3 px-4 bg-muted/30 border-b border-border/60 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm font-bold">عقود واتفاقيات العميل ({contracts.length})</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/20">
+                      <TableHead className="text-right text-xs">العقد</TableHead>
+                      <TableHead className="text-right text-xs">رقم العقد</TableHead>
+                      <TableHead className="text-right text-xs">الحالة</TableHead>
+                      <TableHead className="text-center text-xs">القيمة التعاقدية</TableHead>
+                      <TableHead className="text-right text-xs">تاريخ البداية</TableHead>
+                      <TableHead className="text-left text-xs w-[80px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contracts.map((contract) => (
+                      <TableRow key={contract.id} className="hover:bg-muted/40 transition-colors">
+                        <TableCell className="font-bold text-xs">{contract.title}</TableCell>
+                        <TableCell className="text-xs font-mono">{contract.contract_number}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-[10px] ${statusColors[contract.status] || ""}`}>
+                            {statusLabels[contract.status] || contract.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-bold text-xs" dir="ltr">
+                          {formatCurrencyLYD(contract.amount)}
+                        </TableCell>
+                        <TableCell className="text-xs">{contract.start_date}</TableCell>
+                        <TableCell className="text-left">
+                          <Button variant="ghost" size="sm" asChild className="h-7 px-2 text-xs cursor-pointer">
+                            <Link to={`/contracts/${contract.id}`}>
+                              <span>عرض</span>
+                              <ArrowUpRight className="h-3.5 w-3.5 mr-1" />
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* TAB 2: PAYMENTS (سندات القبض والدفعات) */}
+        <TabsContent value="payments" className="space-y-4 mt-1">
+          {/* Summary Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 p-3.5 rounded-xl bg-muted/40 border border-border/80 text-xs">
             <div>
               <span className="text-muted-foreground block text-[10px]">إجمالي المقبوضات</span>
-              <span className="font-black text-sm text-green-600 font-mono">{paymentsSummary.totalPaid.toLocaleString()} د.ل</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[10px]">توزيع المقبوضات حسب نوع العمل</span>
-              <span className="font-semibold text-foreground font-mono">
-                مقاولات: {paymentsSummary.contractingPaid.toLocaleString()} | تشطيب: {paymentsSummary.finishingPaid.toLocaleString()} | رصيد مقدم: {paymentsSummary.generalPaid.toLocaleString()}
+              <span className="font-black text-sm text-emerald-600 font-mono" dir="ltr">
+                {formatCurrencyLYD(paymentsSummary.totalPaid)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">وسيلة الدفع كاش vs بنكي</span>
-              <span className="font-semibold text-foreground font-mono">
+              <span className="text-muted-foreground block text-[10px]">توزيع المقبوضات حسب القطاع</span>
+              <span className="font-semibold text-foreground font-mono text-[11px]">
+                مقاولات: {paymentsSummary.contractingPaid.toLocaleString()} | تشطيب: {paymentsSummary.finishingPaid.toLocaleString()}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block text-[10px]">وسيلة القبض كاش vs بنكي</span>
+              <span className="font-semibold text-foreground font-mono text-[11px]">
                 كاش: {paymentsSummary.cashPaid.toLocaleString()} | بنكي: {paymentsSummary.bankPaid.toLocaleString()}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">إجمالي عدد الدفعات</span>
-              <span className="font-bold text-foreground font-mono">{paymentsSummary.count} دفعة مستلمة</span>
+              <span className="text-muted-foreground block text-[10px]">إجمالي عدد السندات</span>
+              <span className="font-bold text-foreground font-mono">{paymentsSummary.count} سند قبض</span>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
+
           {payments && payments.length > 0 ? (
+            <div className="rounded-2xl border border-border/80 bg-card overflow-x-auto shadow-2xs">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead className="text-right text-xs font-bold w-[60px]">#</TableHead>
+                    <TableHead className="text-right text-xs font-bold">تاريخ السداد</TableHead>
+                    <TableHead className="text-right text-xs font-bold">المشروع</TableHead>
+                    <TableHead className="text-center text-xs font-bold">قيمة الدفعة</TableHead>
+                    <TableHead className="text-right text-xs font-bold">طريقة القبض</TableHead>
+                    <TableHead className="text-right text-xs font-bold">الخزينة المستلمة</TableHead>
+                    <TableHead className="text-right text-xs font-bold">ملاحظات / البيان</TableHead>
+                    <TableHead className="text-left text-xs font-bold w-[80px]">طباعة</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((payment, idx) => (
+                    <TableRow key={payment.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
+                      <TableCell className="font-bold text-xs flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>{format(new Date(payment.date), "yyyy/MM/dd")}</span>
+                      </TableCell>
+                      <TableCell>
+                        {payment.projects ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold ${
+                              payment.projects.project_type === "contracting"
+                                ? "border-amber-500/30 text-amber-700 bg-amber-500/10"
+                                : "border-blue-500/30 text-blue-700 bg-blue-500/10"
+                            }`}
+                          >
+                            {payment.projects.name} ({payment.projects.project_type === "contracting" ? "مقاولات" : "تشطيب"})
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] bg-muted/80">
+                            رصيد عام للزبون
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs" dir="ltr">
+                        {formatCurrencyLYD(payment.amount)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {methodLabels[payment.payment_method] || payment.payment_method}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-semibold text-xs text-foreground">
+                        {payment.treasuries?.name || "---"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
+                        {payment.notes || "---"}
+                      </TableCell>
+                      <TableCell className="text-left">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 cursor-pointer text-primary hover:text-primary/80"
+                          onClick={() => handlePrintReceipt(payment)}
+                          title="طباعة إيصال القبض"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <Card className="p-10 text-center rounded-2xl border-dashed border-border/80 bg-card">
+              <Wallet className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+              <h4 className="text-base font-bold text-foreground">لم يتم تسجيل أي دفعات مستلمة</h4>
+              <p className="text-xs text-muted-foreground mt-1 font-medium max-w-md mx-auto">
+                يمكنك تسجيل دفعات وسندات قبض جديدة بالنقر على زر "تسجيل دفعة / قبض" أعلاه.
+              </p>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* TAB 3: CHRONOLOGICAL STATEMENT */}
+        <TabsContent value="statement" className="space-y-4 mt-1">
+          <div className="flex items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border border-border/80">
+            <div>
+              <h4 className="text-xs font-bold text-foreground">كشف الحساب التراكمي للعميل</h4>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                تتبع كرونولوجي زمني دقيق لكافة المطالبات والمقبوضات مع الرصيد اللحظي التراكمي
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintStatement}
+              className="h-8 text-xs font-bold gap-1.5 border-border/80 cursor-pointer"
+            >
+              <Printer className="h-3.5 w-3.5 text-amber-600" />
+              <span>طباعة الكشف</span>
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-border/80 bg-card overflow-x-auto shadow-2xs">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right w-[60px]">ر.م</TableHead>
-                  <TableHead className="text-right">تاريخ السداد</TableHead>
-                  <TableHead className="text-right">المشروع</TableHead>
-                  <TableHead className="text-center">قيمة الدفعة</TableHead>
-                  <TableHead className="text-right">طريقة الدفع</TableHead>
-                  <TableHead className="text-right">الخزينة / الحساب المستلم</TableHead>
-                  <TableHead className="text-right">ملاحظات</TableHead>
-                  <TableHead className="text-left w-[80px]"></TableHead>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="text-right text-xs font-bold w-[60px]">#</TableHead>
+                  <TableHead className="text-right text-xs font-bold">التاريخ</TableHead>
+                  <TableHead className="text-right text-xs font-bold">النوع</TableHead>
+                  <TableHead className="text-right text-xs font-bold">البيان / المشروع</TableHead>
+                  <TableHead className="text-center text-xs font-bold text-amber-700">مدين (مطالبات)</TableHead>
+                  <TableHead className="text-center text-xs font-bold text-emerald-600">دائن (مقبوضات)</TableHead>
+                  <TableHead className="text-center text-xs font-bold">الرصيد التراكمي</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payments.map((payment, idx) => (
-                  <TableRow key={payment.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="text-muted-foreground text-right">{idx + 1}</TableCell>
-                    <TableCell className="font-semibold flex items-center gap-1.5">
-                      <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span>{format(new Date(payment.date), "yyyy/MM/dd")}</span>
+                {chronologicalStatement.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs">
+                      لا توجد حركات مسجلة لهذا العميل
                     </TableCell>
-                    <TableCell>
-                      {payment.projects ? (
+                  </TableRow>
+                ) : (
+                  chronologicalStatement.map((row, idx) => (
+                    <TableRow key={row.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="text-muted-foreground text-xs">{idx + 1}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {format(new Date(row.date), "yyyy/MM/dd")}
+                      </TableCell>
+                      <TableCell>
                         <Badge
                           variant="outline"
-                          className={
-                            payment.projects.project_type === "contracting"
-                              ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
-                              : "border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10"
-                          }
+                          className={`text-[10px] font-bold ${
+                            row.type === "bill"
+                              ? "border-amber-500/30 text-amber-700 bg-amber-500/10"
+                              : "border-emerald-500/30 text-emerald-700 bg-emerald-500/10"
+                          }`}
                         >
-                          {payment.projects.name} ({payment.projects.project_type === "contracting" ? "مقاولات" : "تشطيب"})
+                          {row.type === "bill" ? "مطالبة منجز" : "سند قبض"}
                         </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">رصيد عام للزبون</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-green-600 dark:text-green-400 font-mono">
-                      {payment.amount.toLocaleString()} د.ل
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        {methodLabels[payment.payment_method] || payment.payment_method}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-semibold text-foreground">
-                      {payment.treasuries?.name || "---"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-                      {payment.notes || "---"}
-                    </TableCell>
-                    <TableCell className="text-left">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 cursor-pointer text-primary hover:text-primary/80"
-                        onClick={() => handlePrintReceipt(payment)}
-                      >
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="font-semibold text-xs text-foreground">
+                        {row.description}
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-bold text-xs text-amber-700 dark:text-amber-400" dir="ltr">
+                        {row.debit > 0 ? formatCurrencyLYD(row.debit) : "-"}
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400" dir="ltr">
+                        {row.credit > 0 ? formatCurrencyLYD(row.credit) : "-"}
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-black text-xs text-foreground" dir="ltr">
+                        {formatCurrencyLYD(row.balance)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>لم يتم تسجيل أي دفعات أو تسديدات مستلمة من هذا العميل حتى الآن</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        </TabsContent>
 
-      {/* Contracts Table */}
-      {contracts && contracts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>عقود العميل</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">العقد</TableHead>
-                  <TableHead className="text-right">رقم العقد</TableHead>
-                  <TableHead className="text-right">الحالة</TableHead>
-                  <TableHead className="text-center">القيمة</TableHead>
-                  <TableHead className="text-right">تاريخ البداية</TableHead>
-                  <TableHead className="text-left w-[100px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contracts.map((contract) => (
-                  <TableRow key={contract.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="font-semibold">{contract.title}</TableCell>
-                    <TableCell className="text-xs">{contract.contract_number}</TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[contract.status] || ""}>
-                        {statusLabels[contract.status] || contract.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {formatCurrencyLYD(contract.amount)}
-                    </TableCell>
-                    <TableCell>{contract.start_date}</TableCell>
-                    <TableCell className="text-left">
-                      <Button variant="ghost" size="sm" asChild className="cursor-pointer">
-                        <Link to={`/contracts/${contract.id}`}>
-                          <span>عرض</span>
-                          <ArrowUpRight className="h-4 w-4 mr-1" />
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+        {/* TAB 4: CLIENT CREDIT (الرصيد الدائن والتسويات) */}
+        <TabsContent value="credit" className="space-y-4 mt-1">
+          <ClientCreditPanel
+            clientId={id!}
+            projects={(projects || []).map((p) => ({
+              id: p.id,
+              name: p.name,
+              remaining: clientFinancials.projectRemainders[p.id] || 0,
+            }))}
+          />
+        </TabsContent>
+      </Tabs>
+
+      {/* Quick Edit Client Profile Dialog */}
+      <Dialog open={isEditClientOpen} onOpenChange={setIsEditClientOpen}>
+        <DialogContent className="max-w-md bg-background p-6 rounded-2xl border border-border shadow-2xl" dir="rtl">
+          <DialogHeader className="pb-3 border-b border-border/40">
+            <DialogTitle className="flex items-center gap-2 text-foreground font-extrabold text-base">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <Pencil className="h-4 w-4" />
+              </div>
+              <span>تعديل بيانات العميل</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              قم بتحديث معلومات الاتصال والعنوان لهذا العميل ثم اضغط حفظ
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateClientMutation.mutate();
+            }}
+            className="space-y-3.5 mt-2"
+          >
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">اسم العميل *</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+                className="h-9 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">رقم الهاتف</Label>
+                <Input
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  dir="ltr"
+                  placeholder="09..."
+                  className="h-9 text-xs rounded-xl font-mono text-right"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">المدينة</Label>
+                <Input
+                  value={editCity}
+                  onChange={(e) => setEditCity(e.target.value)}
+                  placeholder="طرابلس، مصراتة..."
+                  className="h-9 text-xs rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">البريد الإلكتروني</Label>
+              <Input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                dir="ltr"
+                placeholder="client@example.com"
+                className="h-9 text-xs rounded-xl text-right"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">العنوان التفصيلي</Label>
+              <Input
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                placeholder="الشارع، الحي، المعلم القريب..."
+                className="h-9 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">ملاحظات إضافية</Label>
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="أي شروط أو تفاصيل تعاقدية خاصة بالعميل..."
+                className="text-xs rounded-xl min-h-[70px]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/40">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditClientOpen(false)}
+                className="h-9 text-xs rounded-xl cursor-pointer"
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateClientMutation.isPending || !editName.trim()}
+                className="h-9 text-xs rounded-xl font-bold bg-primary text-primary-foreground cursor-pointer"
+              >
+                {updateClientMutation.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
