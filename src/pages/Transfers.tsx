@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { useToast } from "@/hooks/use-toast";
-import { HandCoins, ShieldCheck, Plus, Edit, Trash2, CheckSquare, BarChart2, Download, Loader2 } from "lucide-react";
+import { HandCoins, ShieldCheck, Plus, Edit, Trash2, CheckSquare, BarChart2, Download, Loader2, Printer } from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -29,6 +29,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 type TransferRow = Tables<"transfers">;
 type TransferInsert = TablesInsert<"transfers">;
@@ -42,6 +43,41 @@ const Transfers = () => {
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<TransferRow | null>(null);
   const [filter, setFilter] = React.useState<"all" | "active" | "closed">("all");
+
+  // Fetch company settings for printing
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handlePrintReceipt = (it: TransferRow) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `TRF-${it.id.slice(0, 8)}`,
+        date: it.date,
+        type: it.type === "loan" ? "advance" : "custody",
+        amount: Number(it.amount),
+        paidToOrBy: it.party_name || "المستفيد",
+        description: `${it.type === "loan" ? "سلفة مالية" : "عهدة مالية"} - ${
+          it.subtype === "partner" ? "سلف الشركاء" :
+          it.subtype === "employee" ? "سلف الموظفين" :
+          it.subtype === "other" ? "سلف للغير" :
+          it.subtype === "permanent" ? "عهدة دائمة" : "عهدة لمرة واحدة"
+        }`,
+        projectName: (it as any).projects?.name,
+        notes: it.notes || undefined,
+      },
+      companySettings
+    );
+  };
 
   // Fetch transfers
   const { data: items = [], isLoading } = useQuery({
@@ -307,7 +343,16 @@ const Transfers = () => {
                 <TableCell>{it.notes ?? "-"}</TableCell>
                 <TableCell>{it.status === "active" ? "نشطة" : "مغلقة"}</TableCell>
                 <TableCell>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 items-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      title={it.type === "loan" ? "طباعة سند صرف السلفة" : "طباعة سند صرف العهدة"}
+                      onClick={() => handlePrintReceipt(it)}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => openEditDialog(it)}><Edit className="h-4 w-4" /></Button>
                     {it.status === "active" && (
                       <Button size="sm" variant="secondary" onClick={() => handleClose(it.id)}><CheckSquare className="h-4 w-4" /></Button>

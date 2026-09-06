@@ -1,8 +1,8 @@
 {
   "summary": {
-    "runId": "AUTO-INV-1788618151857",
-    "startTime": "2026-09-05T14:22:31.857Z",
-    "endTime": "2026-09-05T14:22:34.798Z",
+    "runId": "AUTO-INV-1788693825928",
+    "startTime": "2026-09-06T11:23:45.928Z",
+    "endTime": "2026-09-06T11:23:49.844Z",
     "total": 87,
     "passed": 87,
     "failed": 0,
@@ -17,7 +17,7 @@
       "details": "Obligation: 100k, Paid: 30k, Remaining: 70k",
       "expected": "70000",
       "actual": "70000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.725Z"
     },
     {
       "id": "INV-02",
@@ -26,7 +26,7 @@
       "details": "Purchases: 20k, Paid: 5k, Remaining: 15k",
       "expected": "15000",
       "actual": "15000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.725Z"
     },
     {
       "id": "INV-03",
@@ -35,7 +35,7 @@
       "details": "Obligation: 10k, Paid: 4k, Remaining: 6k",
       "expected": "6000",
       "actual": "6000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.725Z"
     },
     {
       "id": "INV-04",
@@ -44,7 +44,7 @@
       "details": "All active treasuries verified with 0.00 LYD discrepancy",
       "expected": "0.00",
       "actual": "0.00",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.725Z"
     },
     {
       "id": "INV-05",
@@ -53,7 +53,7 @@
       "details": "Single deposit posting confirmed",
       "expected": "1",
       "actual": "1",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-06",
@@ -62,7 +62,7 @@
       "details": "Total supplier paid: 8000 LYD",
       "expected": "8000",
       "actual": "8000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-07",
@@ -71,7 +71,7 @@
       "details": "Single withdrawal posting confirmed",
       "expected": "1",
       "actual": "1",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-08",
@@ -80,7 +80,7 @@
       "details": "Direct and general expense transactions verified",
       "expected": "2",
       "actual": "2",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-09",
@@ -89,7 +89,7 @@
       "details": "Purchase creation without payment produces 0 cash movements",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-10",
@@ -98,16 +98,16 @@
       "details": "Progress record creation generates 0 immediate cash withdrawals",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-11",
       "name": "Internal Transfer Preserves Total Cash (Cash Neutral)",
       "status": "PASS",
       "details": "Total company cash remains perfectly neutral",
-      "expected": "50000",
-      "actual": "50000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "expected": "85000",
+      "actual": "85000",
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-12",
@@ -116,7 +116,7 @@
       "details": "All business domains operate in complete mathematical isolation",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-13",
@@ -125,7 +125,7 @@
       "details": "Gross profit: 68,000.00 LYD (Margin: 68.00%)",
       "expected": "68000",
       "actual": "68000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-14",
@@ -134,7 +134,7 @@
       "details": "Net Cash Flow: 16,000.00 LYD != Accrual Profit: 68,000.00 LYD",
       "expected": "16000",
       "actual": "16000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-15",
@@ -143,7 +143,7 @@
       "details": "Direct project expenses: 2000 LYD (1k general expense excluded)",
       "expected": "2000",
       "actual": "2000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-16",
@@ -152,7 +152,7 @@
       "details": "Client Obligation: 11,000.00 LYD (Incurred 10k + 10% Fee, Independent from 3k Paid)",
       "expected": "11000",
       "actual": "11000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-17",
@@ -161,7 +161,7 @@
       "details": "Direct calculation from purchase_payments and client_payments verified",
       "expected": "Authoritative",
       "actual": "Authoritative",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-18",
@@ -170,7 +170,7 @@
       "details": "Zero duplicate transaction rows found",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-19",
@@ -179,7 +179,7 @@
       "details": "All transaction rows have valid foreign references",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-20",
@@ -188,7 +188,7 @@
       "details": "Treasury Gen debited independently without affecting Treasury A",
       "expected": "PASS",
       "actual": "PASS",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-21",
@@ -197,7 +197,7 @@
       "details": "Zero discrepancies across all financial summary cards",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-22",
@@ -206,7 +206,7 @@
       "details": "Updated transaction amount reflects 4000 LYD",
       "expected": "4000",
       "actual": "4000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-23",
@@ -215,16 +215,16 @@
       "details": "All test payments and expenses deleted and ledgers restored",
       "expected": "Restored",
       "actual": "Restored",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "INV-24",
       "name": "Complete Test Dataset Cleanup & 100% Baseline Balance Restoration",
       "status": "PASS",
       "details": "Baseline treasury balances perfectly restored",
-      "expected": "35000",
-      "actual": "35000",
-      "timestamp": "2026-09-05T14:22:32.663Z"
+      "expected": "70000",
+      "actual": "70000",
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-01",
@@ -233,7 +233,7 @@
       "details": "Materials: 8000, Svc: 2000, Tech: 5000, Rent: 3000, Exp: 2000",
       "expected": "20000",
       "actual": "20000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-02",
@@ -242,7 +242,7 @@
       "details": "Fee = 2000 LYD (10% on 20,000)",
       "expected": "2000",
       "actual": "2000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-03",
@@ -251,7 +251,7 @@
       "details": "Obligation = 22000 LYD",
       "expected": "22000",
       "actual": "22000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-04",
@@ -260,7 +260,7 @@
       "details": "Client Paid = 0 LYD",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-05",
@@ -269,7 +269,7 @@
       "details": "Client Remaining = 22000 LYD",
       "expected": "22000",
       "actual": "22000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "FINISHING-06",
@@ -278,7 +278,7 @@
       "details": "Direct Project Expenses = 2000 LYD (1,500 general expense excluded)",
       "expected": "2000",
       "actual": "2000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.726Z"
     },
     {
       "id": "DEDUP-01",
@@ -287,7 +287,7 @@
       "details": "Technician Earned: 5000 LYD, Base: 20000 LYD",
       "expected": "20000",
       "actual": "20000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "DEDUP-02",
@@ -296,7 +296,7 @@
       "details": "Equipment Rentals: 3000 LYD, Base: 20000 LYD",
       "expected": "20000",
       "actual": "20000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "DEDUP-03",
@@ -305,7 +305,7 @@
       "details": "Rental: 1000 LYD, Base: 1000 LYD, Obligation: 1100 LYD",
       "expected": "1000",
       "actual": "1000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "DEDUP-04",
@@ -314,7 +314,7 @@
       "details": "Technician Earned: 5000 LYD, Base: 5000 LYD, Obligation: 5500 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-07",
@@ -323,7 +323,7 @@
       "details": "Supplier Paid: 10000 LYD, Client Obligation: 22000 LYD",
       "expected": "22000",
       "actual": "22000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-08",
@@ -332,7 +332,7 @@
       "details": "Client Obligation = 22000 LYD",
       "expected": "22000",
       "actual": "22000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-09",
@@ -341,7 +341,7 @@
       "details": "Base: 20000, Fee: 2000, Obligation: 22000",
       "expected": "22000",
       "actual": "22000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-10",
@@ -350,7 +350,7 @@
       "details": "Profit: 2000 LYD, Margin: 9.09%",
       "expected": "2000",
       "actual": "2000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-11",
@@ -359,7 +359,7 @@
       "details": "Cash In: 5000, Cash Out: 8000, Net: -3000",
       "expected": "-3000",
       "actual": "-3000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "FINISHING-12",
@@ -368,7 +368,7 @@
       "details": "Accrual Profit: 2000 LYD != Net Cash Flow: -3000 LYD",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-01",
@@ -377,7 +377,7 @@
       "details": "Paid: 5000 LYD, Remaining: 17000 LYD",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-02",
@@ -386,7 +386,7 @@
       "details": "Paid: 8000 LYD, Remaining: 14000 LYD",
       "expected": "14000",
       "actual": "14000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-03",
@@ -395,7 +395,7 @@
       "details": "Paid: 9000 LYD, Remaining: 13000 LYD",
       "expected": "13000",
       "actual": "13000",
-      "timestamp": "2026-09-05T14:22:32.664Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-04",
@@ -404,7 +404,7 @@
       "details": "Paid: 5000 LYD, Remaining: 17000 LYD",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-05",
@@ -413,7 +413,7 @@
       "details": "Client Paid: 5000 LYD, Client Remaining: 17000 LYD, Supplier Paid: 7500 LYD",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CLIENT-PROJECT-06",
@@ -422,7 +422,7 @@
       "details": "Client Paid: 5000 LYD, Client Remaining: 17000 LYD",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "NO-CROSS-SETTLEMENT-01",
@@ -431,7 +431,7 @@
       "details": "Client Paid: 12000, Client Rem: 10000, Sup Rem: 9000 (Expected: 9000), Tech Rem: 5000 (Expected: 5000)",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "NO-CROSS-SETTLEMENT-02",
@@ -440,7 +440,7 @@
       "details": "Supplier Paid: 10000, Client Paid: 5000 (Invariant 5000), Client Rem: 17000 (Invariant 17000)",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "NO-CROSS-SETTLEMENT-03",
@@ -449,7 +449,7 @@
       "details": "Technician Paid: 5000, Client Paid: 5000 (Invariant 5000), Client Rem: 17000 (Invariant 17000)",
       "expected": "17000",
       "actual": "17000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CREDIT-01",
@@ -458,7 +458,7 @@
       "details": "Project A Remaining: 0 LYD, Excess Generated: 5000 LYD, Client Available Credit: 5000 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.727Z"
     },
     {
       "id": "CREDIT-02",
@@ -467,7 +467,7 @@
       "details": "Project B Credit Applied: 5000 LYD, Project B Remaining: 7000 LYD, Client Available Credit: 0 LYD",
       "expected": "7000",
       "actual": "7000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-03",
@@ -476,7 +476,7 @@
       "details": "Validation Result: isValid=false, Error: حظر تطبيقي: لا يمكن استخدام رصيد العميل لصالح مشروع يتبع عميلاً آخر.",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-04",
@@ -485,7 +485,7 @@
       "details": "Total Created: 10000 LYD, Applied: 7000 LYD, Available: 3000 LYD",
       "expected": "3000",
       "actual": "3000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-05",
@@ -494,7 +494,7 @@
       "details": "Project C Remaining: 8000 LYD, Client Available Credit: 6000 LYD",
       "expected": "6000",
       "actual": "6000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-06",
@@ -503,7 +503,7 @@
       "details": "Project B Cash In: 0 LYD, Cash Received: 0 LYD",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-07",
@@ -512,7 +512,7 @@
       "details": "Supplier Remaining: 4000 LYD, Project B Client Remaining: 7000 LYD",
       "expected": "4000",
       "actual": "4000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-08",
@@ -521,7 +521,7 @@
       "details": "Client Available Credit: 5000 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-09",
@@ -530,7 +530,7 @@
       "details": "Client Available Credit: 5000 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:32.665Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-10",
@@ -539,7 +539,7 @@
       "details": "Can Reverse: false, Error Message: حظر أمان: لا يمكن حذف أو عكس سند القبض لأن رصيداً بقيمة (5000 د.ل) تم استخدامه مسبقاً في تسديد مشاريع أخرى. يجب إلغاء استخدام الرصيد في تلك المشاريع أولاً.",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:32.666Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-11",
@@ -548,7 +548,7 @@
       "details": "Target Type: contracting, Remaining: 7000 LYD",
       "expected": "7000",
       "actual": "7000",
-      "timestamp": "2026-09-05T14:22:32.666Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-12",
@@ -557,7 +557,7 @@
       "details": "Obligation: 5500 LYD, Credit Applied: 3000 LYD, Remaining: 2500 LYD",
       "expected": "2500",
       "actual": "2500",
-      "timestamp": "2026-09-05T14:22:32.666Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-13",
@@ -566,7 +566,7 @@
       "details": "Available: 3000 LYD = Created: 10000 - Applied: 7000",
       "expected": "3000",
       "actual": "3000",
-      "timestamp": "2026-09-05T14:22:32.666Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-14",
@@ -575,7 +575,7 @@
       "details": "Total Client Cash: 25000 LYD, Sum of Project Cash: 25000 LYD (NOT 30,000 LYD)",
       "expected": "25000",
       "actual": "25000",
-      "timestamp": "2026-09-05T14:22:32.666Z"
+      "timestamp": "2026-09-06T11:23:47.728Z"
     },
     {
       "id": "CREDIT-DB-01",
@@ -584,16 +584,16 @@
       "details": "Persisted Credit Created Amount: 5000 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:33.378Z"
+      "timestamp": "2026-09-06T11:23:48.534Z"
     },
     {
       "id": "CREDIT-DB-02",
       "name": "Credit Application Persists in DB with Zero Treasury Movement (Treasury Tx Delta: 0)",
       "status": "PASS",
-      "details": "Pre-App Tx Count: 19, Post-App Tx Count: 19, Delta: 0",
+      "details": "Pre-App Tx Count: 7, Post-App Tx Count: 7, Delta: 0",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:33.886Z"
+      "timestamp": "2026-09-06T11:23:48.942Z"
     },
     {
       "id": "CREDIT-DB-03",
@@ -602,7 +602,7 @@
       "details": "Cross-Client Rejection Result: isValid=false, Error: حظر تطبيقي: لا يمكن استخدام رصيد العميل لصالح مشروع يتبع عميلاً آخر.",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:33.886Z"
+      "timestamp": "2026-09-06T11:23:48.942Z"
     },
     {
       "id": "CREDIT-DB-04",
@@ -611,7 +611,7 @@
       "details": "Successful Operations: 1/2, Total Credit Consumed: 4000 LYD, Remaining Pool: 1000 LYD",
       "expected": "4000",
       "actual": "4000",
-      "timestamp": "2026-09-05T14:22:33.886Z"
+      "timestamp": "2026-09-06T11:23:48.942Z"
     },
     {
       "id": "CREDIT-DB-05",
@@ -620,7 +620,7 @@
       "details": "Restored Available Credit: 5000 LYD, Project B Remaining: 12,000 LYD",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.098Z"
     },
     {
       "id": "CREDIT-DB-06",
@@ -629,7 +629,7 @@
       "details": "Can Reverse: false, Error: حظر أمان: لا يمكن حذف أو عكس سند القبض لأن رصيداً بقيمة (5000 د.ل) تم استخدامه مسبقاً في تسديد مشاريع أخرى. يجب إلغاء استخدام الرصيد في تلك المشاريع أولاً.",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-07",
@@ -638,7 +638,7 @@
       "details": "Historical Credit Created: 5000 LYD, New Obligation: 23000 LYD (NOT Rewritten to 2,000 LYD)",
       "expected": "5000",
       "actual": "5000",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-08",
@@ -647,7 +647,7 @@
       "details": "Total Settled: 20000 LYD, Cash Applicable: 20000 LYD, Excess Generated: 5000 LYD",
       "expected": "20000",
       "actual": "20000",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-09",
@@ -656,7 +656,7 @@
       "details": "Cross-Client Receipt Attempt Result: حظر أمان: لا يمكن تسجيل دفعة لمشروع لا يتبع نفس العميل المذكور.",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-10",
@@ -665,7 +665,7 @@
       "details": "Over-Settlement Validation: isValid=false, Error: المبلغ المطلوب (5000 د.ل) يتجاوز المتبقي المستحق على المشروع المستهدف (1000 د.ل).",
       "expected": "false",
       "actual": "false",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-11",
@@ -674,7 +674,7 @@
       "details": "RLS Policy: Direct insert restricted to admin/accountant & security definer RPCs",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.051Z"
+      "timestamp": "2026-09-06T11:23:49.099Z"
     },
     {
       "id": "CREDIT-DB-12",
@@ -683,7 +683,7 @@
       "details": "Update Blocked Result: invalid input syntax for type uuid: \"e2e-cc-05-0000-0000-0000-000000000001\"",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-13",
@@ -692,7 +692,7 @@
       "details": "Trigger Policy: BEFORE DELETE ON client_credit_ledger raises exception",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-14",
@@ -701,7 +701,7 @@
       "details": "Calculated Raw Available Credit: 0 LYD (Invariant: Never Negative)",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-15",
@@ -710,7 +710,7 @@
       "details": "Idempotency Key & Unique Constraint Enforce Single Receipt Execution",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-16",
@@ -719,7 +719,7 @@
       "details": "record_client_payment_atomic derives remaining internally via get_project_authoritative_remaining",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-17",
@@ -728,7 +728,7 @@
       "details": "Treasury Transactions Count per Payment ID = Exactly 1",
       "expected": "1",
       "actual": "1",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "CREDIT-DB-18",
@@ -737,7 +737,7 @@
       "details": "Treasury balance restoration delta = Exact payment amount (0 double subtraction)",
       "expected": "true",
       "actual": "true",
-      "timestamp": "2026-09-05T14:22:34.213Z"
+      "timestamp": "2026-09-06T11:23:49.229Z"
     },
     {
       "id": "GOLDEN-01",
@@ -746,7 +746,7 @@
       "details": "Total discrepancy: 0 LYD",
       "expected": "0",
       "actual": "0",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "GOLDEN-02",
@@ -755,7 +755,7 @@
       "details": "Contracts: 30000 LYD, Collected: 20000 LYD, Remaining: 10000 LYD",
       "expected": "10000",
       "actual": "10000",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "GOLDEN-03",
@@ -764,7 +764,7 @@
       "details": "Purchases: 4000 LYD, Paid: 2500 LYD, Remaining: 1500 LYD",
       "expected": "1500",
       "actual": "1500",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "GOLDEN-04",
@@ -773,7 +773,7 @@
       "details": "Earned: 3000 LYD, Paid: 1000 LYD, Remaining: 2000 LYD",
       "expected": "2000",
       "actual": "2000",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "GOLDEN-05",
@@ -782,7 +782,7 @@
       "details": "Contract: 30000 LYD, Cost: 7000 LYD, Profit: 23000 LYD",
       "expected": "23000",
       "actual": "23000",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "GOLDEN-06",
@@ -791,24 +791,24 @@
       "details": "Client Receipts: 20,000 LYD - Supplier Paid: 2,500 LYD - Technician Paid: 1,000 LYD = 16,500 LYD",
       "expected": "16500",
       "actual": "16500",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     }
   ],
   "warnings": [
     {
       "id": "PHASE-16-FINDING-01",
       "message": "CHECK (amount > 0) is deferred to Phase 16 Database Hardening",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "PHASE-16-FINDING-02",
       "message": "Foreign Key deletion restrictions deferred to Phase 16 Database Hardening",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     },
     {
       "id": "PHASE-16-FINDING-03",
       "message": "Advisory / Row locks for high-concurrency posting deferred to Phase 16",
-      "timestamp": "2026-09-05T14:22:34.798Z"
+      "timestamp": "2026-09-06T11:23:49.844Z"
     }
   ]
 }

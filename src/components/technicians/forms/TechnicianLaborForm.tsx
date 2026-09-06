@@ -25,6 +25,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrencyLYD } from "@/lib/currency";
@@ -71,19 +72,7 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
     },
   });
 
-  const { data: projectItems = [] } = useQuery({
-    queryKey: ["project-items", projectId],
-    queryFn: async () => {
-      if (projectType === "finishing") return [];
-      const { data, error } = await supabase
-        .from("project_items")
-        .select("id, name, phase_id, quantity, unit_price")
-        .eq("project_id", projectId);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: projectType === "contracting",
-  });
+  // بند المشروع المرتبط: يتم تعيين الفنيين على بنود مقايسة المشروع حصراً داخل صفحة بنود المشروع (ProjectItems)
 
   const { data: technicians = [], refetch: refetchTechnicians } = useQuery({
     queryKey: ["technicians-list-active"],
@@ -101,9 +90,6 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
   const [phaseId, setPhaseId] = useState<string>(
     editingRecord?.phase_id || activePhaseId || "none"
   );
-  const [projectItemId, setProjectItemId] = useState<string>(
-    editingRecord?.project_item_id || ""
-  );
   const [technicianId, setTechnicianId] = useState<string>(
     editingRecord?.technician_id || ""
   );
@@ -119,26 +105,19 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
   const [rate, setRate] = useState<string>(
     String(editingRecord?.rate ?? editingRecord?.items?.[0]?.price ?? "")
   );
-  const [notes, setNotes] = useState<string>("");
+  const [notes, setNotes] = useState<string>(editingRecord?.notes || "");
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const workOperation = useOperationKey();
 
   // Effective Phase ID
   const effectivePhaseId = activePhaseId || (phaseId && phaseId !== "none" ? phaseId : null);
 
-  // Filtered Project Items (Contracting)
-  const filteredProjectItems = useMemo(() => {
-    if (projectType === "finishing") return [];
-    if (!effectivePhaseId) return projectItems;
-    return projectItems.filter((item) => item.phase_id === effectivePhaseId);
-  }, [projectItems, effectivePhaseId, projectType]);
-
   // Selected technician object
   const selectedTechnician = useMemo(() => {
     return technicians.find((t) => t.id === technicianId);
   }, [technicians, technicianId]);
 
-  // Auto-fill rate from technician rates or project item
+  // Auto-fill rate from technician rates
   useEffect(() => {
     if (!rate || rate === "0") {
       if (selectedTechnician) {
@@ -154,26 +133,16 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
     }
   }, [selectedTechnician]);
 
-  // Auto-fill rate from project item if contracting and still empty
-  useEffect(() => {
-    if (projectType === "contracting" && projectItemId && (!rate || rate === "0")) {
-      const item = projectItems.find((i) => i.id === projectItemId);
-      if (item && item.unit_price) {
-        setRate(String(item.unit_price));
-      }
-    }
-  }, [projectItemId, projectItems, projectType]);
-
   // Track Dirty State
   useEffect(() => {
     const isDirty = Boolean(
       technicianId ||
       workDescription ||
       (rate && rate !== "0") ||
-      (projectType === "contracting" && projectItemId)
+      notes
     );
     onDirtyChange?.(isDirty);
-  }, [technicianId, workDescription, rate, projectItemId, onDirtyChange, projectType]);
+  }, [technicianId, workDescription, rate, notes, onDirtyChange]);
 
   // Calculate Earned Total
   const calculatedEarnedAmount = useMemo(() => {
@@ -188,11 +157,9 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
       if (!technicianId) {
         throw new Error("يرجى اختيار الفني أو العامل");
       }
-      if (projectType === "contracting" && !projectItemId) {
-        throw new Error("يرجى اختيار بند المشروع المرتبط في مشاريع المقاولات");
-      }
-      if (projectType === "finishing" && !workDescription.trim()) {
-        throw new Error("يرجى كتابة بيان / وصف العمل المنفذ لمشروع التشطيبات");
+      
+      if (!workDescription.trim()) {
+        throw new Error("يرجى كتابة بيان / وصف العمل المنفذ (مثل: يوميات عمالة، أعمال حدادة، نظافة موقع...)");
       }
       const qtyNum = parseFloat(quantity);
       if (isNaN(qtyNum) || qtyNum <= 0) {
@@ -203,16 +170,14 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
         throw new Error("يرجى إدخال فئة سعر / أجر صحيح أكبر من الصفر");
       }
 
-      const fullNotes = workDescription.trim()
-        ? notes.trim()
-          ? `${workDescription.trim()} - ${notes.trim()}`
-          : workDescription.trim()
-        : notes.trim() || null;
+      const fullNotes = notes.trim()
+        ? `${workDescription.trim()} - ${notes.trim()}`
+        : workDescription.trim();
 
       const payload = {
         project_id: projectId,
         phase_id: effectivePhaseId || null,
-        project_item_id: projectType === "contracting" ? projectItemId : null,
+        project_item_id: null,
         technician_id: technicianId,
         quantity: qtyNum,
         title: workDescription.trim(),
@@ -347,61 +312,22 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
           </div>
         ) : null}
 
-        {/* Contracting: Mandatory Project Item */}
-        {projectType === "contracting" && (
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1">
-              <Package className="h-3.5 w-3.5" />
-              بند المشروع المرتبط <span className="text-destructive">*</span>
-            </Label>
-            {filteredProjectItems.length > 0 ? (
-              <Select
-                value={projectItemId}
-                onValueChange={setProjectItemId}
-                disabled={saveMutation.isPending}
-              >
-                <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="اختر بند المشروع التابع للمرحلة..." />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  {filteredProjectItems.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-600 text-xs flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>لا توجد بنود مشروع متاحة في هذه المرحلة. يرجى إضافة بنود أولاً.</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Finishing: Work Description */}
+        {/* Work Description */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">
-            {projectType === "finishing" ? (
-              <>
-                وصف / بيان العمل المنفذ <span className="text-destructive">*</span>
-              </>
-            ) : (
-              "تفاصيل / ملاحظات إضافية على الإنجاز (اختياري)"
-            )}
+          <Label className="text-xs font-bold text-foreground flex items-center gap-1">
+            <FileText className="h-3.5 w-3.5 text-primary" />
+            بيان / وصف العمل المنفذ <span className="text-destructive">*</span>
           </Label>
           <Input
             value={workDescription}
             onChange={(e) => setWorkDescription(e.target.value)}
-            placeholder={
-              projectType === "finishing"
-                ? "مثال: دهان صالون الاستقبال، تركيب جبس الأسقف، تمديد كابلات الإضاءة..."
-                : "مثال: صب الأعمدة، تسليح السقف..."
-            }
+            placeholder="مثال: يوميات عمالة، أعمال حدادة، مصنعية تركيب، نظافة وتشوين موقع..."
             className="text-right"
             disabled={saveMutation.isPending}
           />
+          <p className="text-[11px] text-muted-foreground">
+            اكتب وصفاً مختصراً للعمل المنفذ ليظهر بوضوح في كشف حساب الفني وسجل فواتير العمالة.
+          </p>
         </div>
 
         {/* Work Date */}
@@ -414,6 +340,20 @@ export const TechnicianLaborForm: React.FC<TechnicianLaborFormProps> = ({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            className="text-right"
+            disabled={saveMutation.isPending}
+          />
+        </div>
+
+        {/* Notes (Optional) */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            ملاحظات إضافية (اختياري)
+          </Label>
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="أي تفاصيل أو ملاحظات إضافية..."
             className="text-right"
             disabled={saveMutation.isPending}
           />

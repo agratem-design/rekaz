@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Wallet, ShoppingCart, Wrench, User, Calendar, Building2, FileText } from "lucide-react";
+import { ArrowRight, Wallet, ShoppingCart, Wrench, User, Calendar, Building2, FileText, Printer } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 const CustodyDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,6 +71,19 @@ const CustodyDetail = () => {
     enabled: !!id
   });
 
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   if (custodyLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -101,6 +115,72 @@ const CustodyDetail = () => {
   const spentPercentage = custody.amount > 0 
     ? Math.min((custody.spent_amount / custody.amount) * 100, 100) 
     : 0;
+
+  const handlePrintCustody = () => {
+    if (!custody) return;
+    openReceiptPrintWindow(
+      {
+        receipt_number: `CUST-${custody.id.slice(0, 8).toUpperCase()}`,
+        type: "custody",
+        amount: Number(custody.amount) || 0,
+        date: custody.date || new Date().toISOString(),
+        recipient_name: holderName || "المسؤول عن العهدة",
+        payment_method: "نقد",
+        notes: [
+          custody.project?.name ? `المشروع: ${custody.project.name}` : null,
+          `المصروف: ${formatCurrencyLYD(custody.spent_amount || 0)}`,
+          `المتبقي: ${formatCurrencyLYD(custody.remaining_amount || 0)}`,
+          custody.notes || null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+      companySettings
+    );
+  };
+
+  const handlePrintPurchase = (purchase: any) => {
+    openReceiptPrintWindow(
+      {
+        receipt_number: purchase.invoice_number
+          ? `INV-${purchase.invoice_number}`
+          : `PUR-${purchase.id.slice(0, 8).toUpperCase()}`,
+        type: "payment",
+        amount: Number(purchase.paid_amount || purchase.total_amount) || 0,
+        date: purchase.date || new Date().toISOString(),
+        recipient_name: purchase.supplier?.name || "المورد",
+        payment_method: "عهدة مالية",
+        notes: [
+          `شراء مرتبط بعهدة: ${holderName || ""}`,
+          purchase.invoice_number ? `فاتورة رقم: ${purchase.invoice_number}` : null,
+          purchase.notes || null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+      companySettings
+    );
+  };
+
+  const handlePrintRental = (rental: any) => {
+    openReceiptPrintWindow(
+      {
+        receipt_number: `RNT-${rental.id.slice(0, 8).toUpperCase()}`,
+        type: "rental_payment",
+        amount: Number(rental.total_amount) || 0,
+        date: rental.start_date || new Date().toISOString(),
+        recipient_name: rental.equipment?.name || "معدة مستأجرة",
+        payment_method: "عهدة مالية",
+        notes: [
+          `إيجار معدة مرتبط بعهدة: ${holderName || ""}`,
+          rental.notes || null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+      companySettings
+    );
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -137,7 +217,18 @@ const CustodyDetail = () => {
               <p className="text-muted-foreground">عهدة {holderName}</p>
             </div>
           </div>
-          {getStatusBadge(custody.status)}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintCustody}
+              className="gap-1.5"
+            >
+              <Printer className="h-4 w-4 text-purple-600" />
+              طباعة سند العهدة
+            </Button>
+            {getStatusBadge(custody.status)}
+          </div>
         </div>
 
         {/* Custody Info Cards */}
@@ -277,6 +368,7 @@ const CustodyDetail = () => {
                     <TableHead>رقم الفاتورة</TableHead>
                     <TableHead>المبلغ</TableHead>
                     <TableHead>الحالة</TableHead>
+                    <TableHead className="w-[80px]">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -294,6 +386,17 @@ const CustodyDetail = () => {
                            purchase.status === 'partial' ? 'جزئي' : 
                            purchase.status === 'due' ? 'مستحق' : purchase.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-purple-50"
+                          onClick={() => handlePrintPurchase(purchase)}
+                          title="طباعة إيصال الشراء"
+                        >
+                          <Printer className="h-4 w-4 text-purple-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -329,6 +432,7 @@ const CustodyDetail = () => {
                     <TableHead>السعر اليومي</TableHead>
                     <TableHead>المبلغ الإجمالي</TableHead>
                     <TableHead>الحالة</TableHead>
+                    <TableHead className="w-[80px]">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -347,6 +451,17 @@ const CustodyDetail = () => {
                         <Badge variant={rental.status === 'active' ? 'default' : 'secondary'}>
                           {rental.status === 'active' ? 'نشط' : 'منتهي'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-purple-50"
+                          onClick={() => handlePrintRental(rental)}
+                          title="طباعة سند الإيجار"
+                        >
+                          <Printer className="h-4 w-4 text-purple-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

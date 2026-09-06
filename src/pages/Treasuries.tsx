@@ -524,6 +524,27 @@ const Treasuries = () => {
     }, companySettings);
   };
 
+  const handlePrintLoanReceipt = (item: any) => {
+    const isLoan = item.type === "loan";
+    openReceiptPrintWindow(
+      {
+        receipt_number: `TRF-${item.id.slice(0, 8).toUpperCase()}`,
+        type: isLoan ? "advance" : "custody",
+        amount: Number(item.amount) || 0,
+        date: item.date || new Date().toISOString(),
+        recipient_name: item.party_name || (isLoan ? "المستلف" : "المسؤول عن العهدة"),
+        payment_method: "نقد",
+        notes: [
+          item.projects?.name ? `المشروع: ${item.projects.name}` : null,
+          item.notes || null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+      companySettings
+    );
+  };
+
   // طباعة كشف الفترة (الحركات المفلترة) بالنمط الموحد للطباعة
   const handlePrintPeriodStatement = () => {
     const periodLabel = txPeriodPreset === "all" ? "جميع الفترات"
@@ -1406,9 +1427,20 @@ const Treasuries = () => {
                       <span className="text-[10px] text-muted-foreground block">مبلغ السلفة</span>
                       <span className="text-base font-extrabold text-rose-600">{formatCurrencyLYD(Number(loan.amount))}</span>
                     </div>
-                    <Badge variant="outline" className="text-[10px] border-rose-500/20 text-rose-700 dark:text-rose-400 bg-rose-500/5">
-                      {loan.subtype === "partner" ? "شريك" : loan.subtype === "employee" ? "موظف" : "للغير"}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] border-rose-500/20 text-rose-700 dark:text-rose-400 bg-rose-500/5">
+                        {loan.subtype === "partner" ? "شريك" : loan.subtype === "employee" ? "موظف" : "للغير"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        onClick={() => handlePrintLoanReceipt(loan)}
+                        title="طباعة إيصال السلفة"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1441,9 +1473,20 @@ const Treasuries = () => {
                       <span className="text-[10px] text-muted-foreground block">مبلغ العهدة</span>
                       <span className="text-base font-extrabold text-purple-600">{formatCurrencyLYD(Number(adv.amount))}</span>
                     </div>
-                    <Badge variant="outline" className="text-[10px] border-purple-500/20 text-purple-700 dark:text-purple-400 bg-purple-500/5">
-                      نشطة
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] border-purple-500/20 text-purple-700 dark:text-purple-400 bg-purple-500/5">
+                        نشطة
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        onClick={() => handlePrintLoanReceipt(adv)}
+                        title="طباعة إيصال العهدة"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

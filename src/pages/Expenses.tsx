@@ -9,11 +9,12 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, Download, FileText, Users, BarChart2, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Download, FileText, Users, BarChart2, Loader2, Printer } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 type ExpenseRow = Tables<"expenses">;
 type ExpenseInsert = TablesInsert<"expenses">;
@@ -108,6 +109,39 @@ export default function Expenses() {
       return data;
     },
   });
+
+  const handlePrintExpenseReceipt = (e: ExpenseRow) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `EXP-${e.id.slice(0, 8)}`,
+        date: e.date,
+        type: "expense",
+        amount: Number(e.amount),
+        paidToOrBy: (e as any).recipient || (e as any).projects?.name || "المستفيد",
+        description: e.description,
+        paymentMethod: e.payment_method,
+        projectName: (e as any).projects?.name,
+        notes: e.notes || undefined,
+      },
+      settings
+    );
+  };
+
+  const handlePrintPurchaseReceipt = (p: PurchaseRow) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.slice(0, 8)}`,
+        date: p.date,
+        type: "payment",
+        amount: Number(p.total_amount),
+        paidToOrBy: (p as any).suppliers?.name || (p as any).title || "المورد",
+        description: `فاتورة مشتريات: ${(p as any).title || p.invoice_number || ''}`,
+        projectName: (p as any).projects?.name,
+        notes: p.notes || undefined,
+      },
+      settings
+    );
+  };
 
   const treasuryParents = React.useMemo(() => treasuries.filter(t => !(t as any).parent_id), [treasuries]);
   const allTreasuries = React.useMemo(() => treasuries.filter(t => (t as any).parent_id), [treasuries]);
@@ -466,7 +500,16 @@ export default function Expenses() {
                    p.status === "due" ? "مستحقة" : "قيد المعالجة"}
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 items-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      title="طباعة إيصال / فاتورة الشراء"
+                      onClick={() => handlePrintPurchaseReceipt(p)}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => { setEditingPurchase(p); setPurchaseDialogOpen(true); }}>
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -514,7 +557,16 @@ export default function Expenses() {
                    e.payment_method === "installments" ? "أقساط" : "شيك"}
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 items-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      title="طباعة سند الصرف"
+                      onClick={() => handlePrintExpenseReceipt(e)}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => { setEditingExpense(e); setExpenseDialogOpen(true); }}>
                       <Edit className="h-4 w-4" />
                     </Button>

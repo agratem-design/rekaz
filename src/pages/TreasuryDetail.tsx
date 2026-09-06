@@ -149,6 +149,29 @@ const TreasuryDetail = () => {
     }, companySettings);
   };
 
+  const handlePrintPurchaseReceipt = (p: any) => {
+    const paidAmount = Number(p.paid_amount) || 0;
+    const commission = Number(p.commission) || 0;
+    const totalPaid = paidAmount + commission;
+
+    openReceiptPrintWindow({
+      receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.slice(0, 8).toUpperCase()}`,
+      date: p.date || new Date().toISOString(),
+      type: "payment",
+      amount: totalPaid > 0 ? totalPaid : Number(p.total_amount) || 0,
+      paidToOrBy: p.suppliers?.name || "المورد",
+      description: [
+        p.projects?.name ? `مشروع: ${p.projects.name}` : null,
+        p.project_phases?.name ? `المرحلة: ${p.project_phases.name}` : null,
+        p.invoice_number ? `فاتورة رقم: ${p.invoice_number}` : null,
+        p.notes || null,
+      ].filter(Boolean).join(" - ") || "سداد مشتريات",
+      projectName: p.projects?.name,
+      treasuryName: treasury?.name || undefined,
+      notes: p.projects?.clients?.name ? `الزبون: ${p.projects.clients.name}` : undefined,
+    }, companySettings);
+  };
+
   // Fetch transactions
   const { data: transactions, isLoading: loadingTx } = useQuery({
     queryKey: ["treasury_transactions", id],
@@ -848,6 +871,7 @@ const TreasuryDetail = () => {
                         <TableHead>المبلغ المدفوع</TableHead>
                         <TableHead>الإجمالي</TableHead>
                         <TableHead>ملاحظات</TableHead>
+                        <TableHead className="w-16 text-center">إجراءات</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -871,6 +895,17 @@ const TreasuryDetail = () => {
                             <TableCell className="text-red-600 font-bold">-{formatCurrencyLYD(totalPaid)}</TableCell>
                             <TableCell>{formatCurrencyLYD(Number(p.total_amount))}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{p.notes || "-"}</TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                onClick={() => handlePrintPurchaseReceipt(p)}
+                                title="طباعة إيصال السداد"
+                              >
+                                <Printer className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}

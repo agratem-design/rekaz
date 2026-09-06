@@ -938,13 +938,30 @@ export function openPrintWindow(
 }
 
 export interface ReceiptPrintData {
-  receiptNumber: string;
+  receiptNumber?: string;
+  receipt_number?: string;
   date: string;
-  type: "payment" | "deposit" | "withdrawal" | "salary" | "expense" | "transfer" | "client_receipt";
+  type:
+    | "payment"
+    | "deposit"
+    | "withdrawal"
+    | "salary"
+    | "expense"
+    | "transfer"
+    | "client_receipt"
+    | "advance"
+    | "advance_repayment"
+    | "custody"
+    | "custody_settlement"
+    | "technician_deposit"
+    | "technician_refund"
+    | "rental_payment";
   amount: number;
-  paidToOrBy: string; // Name of person paid to/by
-  description: string;
+  paidToOrBy?: string; // Name of person paid to/by
+  recipient_name?: string;
+  description?: string;
   paymentMethod?: string;
+  payment_method?: string;
   treasuryName?: string;
   projectName?: string;
   notes?: string;
@@ -969,27 +986,39 @@ export function openReceiptPrintWindow(
     expense: "سند صرف مصروف",
     transfer: "إشعار تحويل مالي",
     client_receipt: "سند قبض مالي",
+    advance: "سند صرف سلفة موظف",
+    advance_repayment: "سند استرداد سلفة موظف",
+    custody: "سند صرف عهدة مالية",
+    custody_settlement: "سند تسوية عهدة مالية",
+    technician_deposit: "إيصال استلام تأمين / وديعة فني",
+    technician_refund: "سند رد تأمين / وديعة فني",
+    rental_payment: "سند صرف إيجار معدات",
   };
-  
+
   let typeLabel = typeLabelMap[receipt.type] || "سند مالي";
   if (receipt.isCancelled) {
     typeLabel = `${typeLabel} (ملغي)`;
   }
   
+  const receiptNum = receipt.receiptNumber || receipt.receipt_number || "—";
+  const paidTo = receipt.paidToOrBy || receipt.recipient_name || "—";
+  const desc = receipt.description || receipt.notes || "حركة مالية";
+  const rawMethod = receipt.paymentMethod || receipt.payment_method;
+
   // Format currency
   const amountFormatted = new Intl.NumberFormat('ar-LY', { style: 'currency', currency: 'LYD' }).format(receipt.amount);
-  const paymentMethodLabel = receipt.paymentMethod === "transfer" 
+  const paymentMethodLabel = rawMethod === "transfer" 
     ? "تحويل مصرفي" 
-    : receipt.paymentMethod === "check" 
+    : rawMethod === "check" 
     ? "شيك مصرفي" 
-    : "نقدي";
+    : rawMethod || "نقدي";
   
   const receiptHTML = `
     <!DOCTYPE html>
     <html dir="rtl" lang="ar">
     <head>
       <meta charset="UTF-8">
-      <title>${typeLabel} - ${receipt.receiptNumber}</title>
+      <title>${typeLabel} - ${receiptNum}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
       <style>
@@ -1191,7 +1220,7 @@ export function openReceiptPrintWindow(
           </div>
           <div class="receipt-title-box">
             <h1 class="receipt-title">${typeLabel}</h1>
-            <div class="receipt-meta">رقم السند: ${receipt.receiptNumber} | التاريخ: ${receipt.date}</div>
+            <div class="receipt-meta">رقم السند: ${receiptNum} | التاريخ: ${receipt.date}</div>
           </div>
         </div>
         
@@ -1202,13 +1231,21 @@ export function openReceiptPrintWindow(
           </div>
           
           <div class="detail-item full-width-detail">
-            <span class="detail-label">${receipt.type === 'payment' || receipt.type === 'salary' || receipt.type === 'expense' || receipt.type === 'withdrawal' ? 'صرفنا إلى السيد/ة:' : 'استلمنا من السيد/ة:'}</span>
-            <span class="detail-value" style="font-weight: 700; font-size: 12pt;">${receipt.paidToOrBy}</span>
+            <span class="detail-label">${
+              ['payment', 'salary', 'expense', 'withdrawal', 'advance', 'custody', 'technician_refund', 'rental_payment'].includes(receipt.type)
+                ? 'صرفنا إلى السيد/ة:'
+                : receipt.type === 'transfer'
+                ? 'المحول إليه / الحساب:'
+                : receipt.type === 'custody_settlement'
+                ? 'المسؤول عن العهدة:'
+                : 'استلمنا من السيد/ة:'
+            }</span>
+            <span class="detail-value" style="font-weight: 700; font-size: 12pt;">${paidTo}</span>
           </div>
           
           <div class="detail-item full-width-detail">
             <span class="detail-label">وذلك عن:</span>
-            <span class="detail-value">${receipt.description}</span>
+            <span class="detail-value">${desc}</span>
           </div>
           
           ${receipt.projectName ? `

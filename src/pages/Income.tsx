@@ -8,11 +8,12 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, Download, PieChart as PieIcon, BarChart2, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Download, PieChart as PieIcon, BarChart2, Loader2, Printer } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 type IncomeRow = Tables<"income">;
 type IncomeInsert = TablesInsert<"income">;
@@ -27,6 +28,37 @@ export default function Income() {
   const [filterType, setFilterType] = React.useState<"all" | "service" | "indirect" | "treasury" | "received" | "expected">("all");
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<IncomeRow | null>(null);
+
+  // Fetch company settings for printing
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handlePrintReceipt = (item: any) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `INC-${item.id.slice(0, 8)}`,
+        date: item.date,
+        type: item.type === "treasury" ? "deposit" : "client_receipt",
+        amount: Number(item.amount),
+        paidToOrBy: (item as any).clients?.name || (item.type === "treasury" ? "تعزيز الخزينة" : "إيراد عام"),
+        description: item.subtype || (item.type === "service" ? "إيراد خدمات" : item.type === "treasury" ? "تعزيز رصيد خزينة" : "إيراد غير مباشر"),
+        projectName: (item as any).projects?.name,
+        paymentMethod: item.payment_method,
+        notes: item.notes || undefined,
+      },
+      companySettings
+    );
+  };
 
   // Fetch income with projects and clients
   const { data: items = [], isLoading } = useQuery({
@@ -328,7 +360,16 @@ export default function Income() {
                 </TableCell>
                 <TableCell>{it.status === "received" ? "مستلمة" : "متوقعة"}</TableCell>
                 <TableCell>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 items-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      title="طباعة إيصال القبض"
+                      onClick={() => handlePrintReceipt(it)}
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(it)}><Edit className="h-4 w-4" /></Button>
                     <Button size="sm" variant="destructive" onClick={() => handleDelete(it.id)}><Trash2 className="h-4 w-4" /></Button>
                   </div>

@@ -36,11 +36,13 @@ import {
   Building2,
   FolderOpen,
   Eye,
+  Printer,
 } from "lucide-react";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 interface CustodyRecord {
   id: string;
@@ -78,6 +80,39 @@ export default function Custody() {
     status: "active",
     notes: "",
   });
+
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handlePrintCustodyReceipt = (record: CustodyRecord) => {
+    const holderName = record.holder_type === "engineer" 
+      ? record.engineer?.name 
+      : record.employee?.name;
+
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `CUST-${record.id.slice(0, 8)}`,
+        date: record.date,
+        type: "custody",
+        amount: Number(record.amount),
+        paidToOrBy: holderName || "المستلم",
+        description: `سند صرف عهدة مالية: ${record.project?.name || 'عهدة عامة'} (${record.holder_type === 'engineer' ? 'مهندس' : 'موظف'})`,
+        projectName: record.project?.name,
+        notes: record.notes || undefined,
+      },
+      companySettings
+    );
+  };
 
   // Fetch all custody records
   const { data: custodyRecords = [], isLoading } = useQuery({
@@ -661,6 +696,15 @@ export default function Custody() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePrintCustodyReceipt(record)}
+                        title="طباعة سند صرف العهدة"
+                        className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

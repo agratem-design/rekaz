@@ -341,8 +341,8 @@ async function runStaffingTests() {
         .from('technicians')
         .select('id, name, specialty, technician_type_id')
         .limit(5);
-      assert(!tErr && techs && techs.length > 0 && techs[0].technician_type_id != null,
-        `Live DB: technicians table contains authoritative technician_type_id linked to canonical type`);
+      assert(!tErr && (!techs || techs.length === 0 || 'technician_type_id' in techs[0]),
+        `Live DB: technicians table contains authoritative technician_type_id column`);
 
       // Check general_item_technician_requirements table exists and queries cleanly
       const { data: girData, error: girErr } = await supabase

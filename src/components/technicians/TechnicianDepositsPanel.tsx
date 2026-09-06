@@ -15,6 +15,8 @@ import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTr
 import { formatCurrencyLYD } from "@/lib/currency";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Printer } from "lucide-react";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 
 type Deposit = { id: string; entry_type: "receipt" | "refund"; amount: number; date: string; notes: string | null };
 export function TechnicianDepositsPanel({ technicianId }: { technicianId: string }) {
@@ -28,6 +30,25 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState("cash");
   const [notes, setNotes] = useState("");
+
+  const companySettings = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const technicianQuery = useQuery({
+    queryKey: ["technician-profile", technicianId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("technicians").select("id, name").eq("id", technicianId).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const entries = useQuery({ queryKey: ["technician-deposits", technicianId], enabled: allowed,
     queryFn: async () => {
       const { data, error } = await supabase.from("technician_deposits" as any).select("id, entry_type, amount, date, notes")
@@ -43,13 +64,56 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
     } });
   const available = (entries.data || []).reduce((sum, e) => sum + (e.entry_type === "receipt" ? 1 : -1) * Number(e.amount), 0);
   const clear = () => { setMode(null); setAmount(""); setNotes(""); setTreasury(""); };
+
+  const handlePrint = (e: Deposit) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `DEP-${e.id.slice(0, 8)}`,
+        date: e.date,
+        type: e.entry_type === "receipt" ? "technician_deposit" : "technician_refund",
+        amount: Number(e.amount),
+        paidToOrBy: technicianQuery.data?.name || "الفني",
+        description: e.entry_type === "receipt" ? "إيصال استلام تأمين / وديعة فني" : "سند رد تأمين / وديعة فني",
+        notes: e.notes || undefined,
+      },
+      companySettings.data
+    );
+  };
+
   const save = useMutation({ mutationFn: async () => {
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0 || !treasury || !mode) throw new Error("أدخل مبلغاً موجباً واختر الخزينة.");
     if (mode === "refund" && value > available) throw new Error("المبلغ يتجاوز رصيد الوديعة المتاح.");
     const payload = { technician_id: technicianId, treasury_id: treasury, entry_type: mode, amount: value, date, payment_method: method, notes: notes || null };
     return financialRpc("record_technician_deposit_v2", { p_payload: payload, p_request_key: operation.getKey(payload) });
-  }, onSuccess: () => { operation.reset(); clear(); invalidateFinancialQueries(queryClient); toast.success("تم تسجيل حركة الوديعة والخزينة معاً."); },
+  }, onSuccess: () => {
+    const currentMode = mode;
+    const currentAmount = Number(amount);
+    const currentDate = date;
+    const currentNotes = notes;
+    operation.reset();
+    clear();
+    invalidateFinancialQueries(queryClient);
+    toast.success("تم تسجيل حركة الوديعة والخزينة معاً.", {
+      action: {
+        label: "طباعة الإيصال",
+        onClick: () => {
+          openReceiptPrintWindow(
+            {
+              receiptNumber: `DEP-${Date.now().toString().slice(-6)}`,
+              date: currentDate,
+              type: currentMode === "receipt" ? "technician_deposit" : "technician_refund",
+              amount: currentAmount,
+              paidToOrBy: technicianQuery.data?.name || "الفني",
+              description: currentMode === "receipt" ? "إيصال استلام تأمين / وديعة فني" : "سند رد تأمين / وديعة فني",
+              notes: currentNotes || undefined,
+            },
+            companySettings.data
+          );
+        },
+      },
+    });
+  },
     onError: (error: Error) => toast.error(error.message) });
   const guard = useUnsavedChangesGuard({ isDirty: !!mode && !!(amount || notes || treasury), isSubmitting: save.isPending, onDiscard: clear });
   if (!allowed) return null;
@@ -66,9 +130,23 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
     {entries.error && <div role="alert" className="text-sm text-destructive">تعذر تحميل الودائع. تحقق من الاتصال وتطبيق تحديث قاعدة البيانات.
       <Button variant="link" onClick={() => entries.refetch()}>إعادة المحاولة</Button></div>}
     {!!entries.data?.length && <details><summary className="cursor-pointer py-2 text-sm text-primary">سجل حركات الوديعة ({entries.data.length})</summary>
-      <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">{entries.data.map(e => <div key={e.id} className="flex flex-wrap justify-between gap-2 rounded-lg border p-3 text-sm">
-        <span>{e.date} · {e.entry_type === "receipt" ? "استلام وديعة" : "رد وديعة"}{e.notes && ` · ${e.notes}`}</span><strong>{formatCurrencyLYD(e.amount)}</strong>
-      </div>)}</div></details>}
+      <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">{entries.data.map(e => (
+        <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+          <span>{e.date} · {e.entry_type === "receipt" ? "استلام وديعة" : "رد وديعة"}{e.notes && ` · ${e.notes}`}</span>
+          <div className="flex items-center gap-2">
+            <strong>{formatCurrencyLYD(e.amount)}</strong>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+              title="طباعة الإيصال"
+              onClick={() => handlePrint(e)}
+            >
+              <Printer className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      ))}</div></details>}
     <Dialog open={!!mode} onOpenChange={open => { if (!open) guard.requestAction(clear); }}>
       <DialogContent dir="rtl"><DialogHeader><DialogTitle>{mode === "receipt" ? "استلام وديعة من الفني" : "رد وديعة للفني"}</DialogTitle>
         <DialogDescription>{mode === "receipt" ? "تزيد الخزينة والوديعة المستحقة للفني، ولا تسجل إيراداً." : "تنقص الخزينة والوديعة المستحقة للفني، ولا تسجل مصروف عمل."}</DialogDescription></DialogHeader>

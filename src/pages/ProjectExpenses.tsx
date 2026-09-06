@@ -54,7 +54,7 @@ import { Plus, ArrowRight, Pencil, Trash2, Coins, Printer, Layers, Wallet, Landm
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
-import { openPrintWindow } from "@/lib/printStyles";
+import { openPrintWindow, openReceiptPrintWindow } from "@/lib/printStyles";
 import { getElementLabels } from "@/lib/printLabels";
 
 const expenseTypes = [
@@ -182,6 +182,24 @@ const ProjectExpenses = () => {
       return data;
     },
   });
+
+  const handlePrintExpenseReceipt = (expense: any) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `EXP-${expense.id.slice(0, 8)}`,
+        date: expense.date,
+        type: "expense",
+        amount: Number(expense.amount),
+        paidToOrBy: project?.name || "المشروع",
+        description: expense.description,
+        paymentMethod: expense.payment_method,
+        treasuryName: expense.treasuries?.name,
+        projectName: project?.name,
+        notes: expense.notes || undefined,
+      },
+      companySettings
+    );
+  };
 
   // Fetch all active treasuries (with parent info)
   const { data: allTreasuriesRaw = [] } = useQuery({
@@ -672,7 +690,16 @@ const ProjectExpenses = () => {
                       {formatCurrencyLYD(expense.amount)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 items-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePrintExpenseReceipt(expense)}
+                          title="طباعة سند صرف المصروف"
+                          className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

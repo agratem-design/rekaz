@@ -48,7 +48,7 @@ import { formatCurrencyLYD } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { openPrintWindow, generatePrintStyles, getPrintValues } from "@/lib/printStyles";
+import { openPrintWindow, generatePrintStyles, getPrintValues, openReceiptPrintWindow } from "@/lib/printStyles";
 import { getElementLabels } from "@/lib/printLabels";
 import html2pdf from "html2pdf.js";
 
@@ -533,6 +533,36 @@ const ProjectEquipmentRentals = () => {
 
   const totalRentalCost = rentals.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
   const totalDamageCost = rentals.reduce((sum, r) => sum + Number(r.damage_cost || 0), 0);
+
+  const handlePrintRentalReceipt = (rental: EquipmentRental) => {
+    const fundLabel =
+      rental.fund_source === "custody"
+        ? "عهدة المشروع"
+        : rental.fund_source === "client"
+        ? "حساب الزبون"
+        : "الخزينة";
+
+    openReceiptPrintWindow(
+      {
+        receipt_number: `RNT-${rental.id.slice(0, 8).toUpperCase()}`,
+        type: "rental_payment",
+        amount: Number(rental.total_amount) || 0,
+        date: rental.start_date || new Date().toISOString(),
+        recipient_name: rental.equipment?.name || "معدة مستأجرة",
+        payment_method: fundLabel,
+        notes: [
+          project?.name ? `المشروع: ${project.name}` : null,
+          `السعر اليومي: ${formatCurrencyLYD(rental.daily_rate)}`,
+          rental.end_date ? `تاريخ الإرجاع: ${format(parseISO(rental.end_date), "dd/MM/yyyy")}` : null,
+          rental.damage_cost > 0 ? `تكلفة أضرار: ${formatCurrencyLYD(rental.damage_cost)}` : null,
+          rental.notes || null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+      companySettings
+    );
+  };
 
   const buildPrintableEl = (innerHtml: string): HTMLDivElement => {
     const wrapper = document.createElement("div");
@@ -1121,6 +1151,15 @@ const ProjectEquipmentRentals = () => {
                             <RotateCcw className="h-4 w-4 text-green-600" />
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="hover:bg-purple-50"
+                          onClick={() => handlePrintRentalReceipt(rental)}
+                          title="طباعة سند الإيجار"
+                        >
+                          <Printer className="h-4 w-4 text-purple-600" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(rental)}>
                           <Pencil className="h-4 w-4" />
                         </Button>

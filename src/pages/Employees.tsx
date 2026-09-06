@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import { openSalarySlipPrintWindow } from "@/lib/salarySlipPrint";
+import { openReceiptPrintWindow } from "@/lib/printStyles";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -374,6 +375,39 @@ export default function Employees() {
       return data;
     },
   });
+
+  const handlePrintAdvanceReceipt = (adv: AdvanceRecord) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `ADV-${adv.id.slice(0, 8)}`,
+        date: adv.disbursement_date,
+        type: "advance",
+        amount: Number(adv.amount),
+        paidToOrBy: adv.employee?.name || "الموظف",
+        description: `سند صرف سلفة مالية للموظف: ${adv.employee?.name || ''}`,
+        treasuryName: adv.treasury?.name,
+        notes: adv.notes || undefined,
+      },
+      companySettings
+    );
+  };
+
+  const handlePrintCustodyReceipt = (c: CustodyRecord) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `CUST-${c.id.slice(0, 8)}`,
+        date: c.date,
+        type: "custody",
+        amount: Number(c.amount),
+        paidToOrBy: c.employee?.name || "الموظف",
+        description: `سند صرف عهدة مالية: ${c.project?.name || 'عهدة عامة'}`,
+        projectName: c.project?.name,
+        treasuryName: c.treasury?.name,
+        notes: c.notes || undefined,
+      },
+      companySettings
+    );
+  };
 
   // KPI Calculations
   const totalEmployeesCount = employees.length;
@@ -1313,6 +1347,15 @@ export default function Employees() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handlePrintAdvanceReceipt(adv)}
+                              title="طباعة سند صرف السلفة"
+                              className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </Button>
                             {adv.remaining_amount > 0 && (
                               <Button
                                 size="sm"
@@ -1419,6 +1462,15 @@ export default function Employees() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handlePrintCustodyReceipt(c)}
+                              title="طباعة سند صرف العهدة"
+                              className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </Button>
                             {c.remaining_amount > 0 && (
                               <Button
                                 size="sm"

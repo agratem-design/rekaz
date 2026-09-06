@@ -7,7 +7,7 @@ import { AccountSection, PartyAccountHeader, AccountSummaryGrid } from "@/compon
 import { financialRpc, invalidateFinancialQueries } from "@/lib/financialMutations";
 import { HierarchicalTreasurySelect } from "@/components/treasury/HierarchicalTreasurySelect";
 import { openSalarySlipPrintWindow } from "@/lib/salarySlipPrint";
-import { openPrintWindow } from "@/lib/printStyles";
+import { openPrintWindow, openReceiptPrintWindow } from "@/lib/printStyles";
 import { formatCurrencyLYD } from "@/lib/currency";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -400,6 +400,39 @@ export default function EmployeeDetail() {
     },
   });
 
+  const handlePrintAdvanceReceipt = (adv: AdvanceRecord) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `ADV-${adv.id.slice(0, 8)}`,
+        date: adv.disbursement_date,
+        type: "advance",
+        amount: Number(adv.amount),
+        paidToOrBy: employee?.name || "الموظف",
+        description: `سند صرف سلفة مالية للموظف: ${employee?.name || ''}`,
+        treasuryName: adv.treasury?.name,
+        notes: adv.notes || undefined,
+      },
+      companySettings
+    );
+  };
+
+  const handlePrintCustodyReceipt = (c: CustodyRecord) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: `CUST-${c.id.slice(0, 8)}`,
+        date: c.date,
+        type: "custody",
+        amount: Number(c.amount),
+        paidToOrBy: employee?.name || "الموظف",
+        description: `سند صرف عهدة مالية: ${c.project?.name || 'عهدة عامة'}`,
+        projectName: c.project?.name,
+        treasuryName: c.treasury?.name,
+        notes: c.notes || undefined,
+      },
+      companySettings
+    );
+  };
+
   // KPI calculations
   const basicSalary = employee?.salary || 0;
   const totalRemainingAdvances = advances
@@ -432,10 +465,31 @@ export default function EmployeeDetail() {
         p_date: vars.disbursement_date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-advances", id] });
-      toast.success("تم صرف السلفة وخصم المبلغ من الخزينة بنجاح");
+      const advanceAmount = parseFloat(vars.amount);
+      const treasuryName = treasuries.find(t => t.id === vars.treasury_id)?.name;
+      toast.success("تم صرف السلفة وخصم المبلغ من الخزينة بنجاح", {
+        action: {
+          label: "طباعة السند",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `ADV-${Date.now().toString().slice(-6)}`,
+                date: vars.disbursement_date || new Date().toISOString().split("T")[0],
+                type: "advance",
+                amount: advanceAmount,
+                paidToOrBy: employee?.name || "الموظف",
+                description: `سند صرف سلفة مالية للموظف: ${employee?.name || ''}`,
+                treasuryName,
+                notes: vars.notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       setIsAdvanceDialogOpen(false);
       setAdvanceForm({
         amount: "",
@@ -466,11 +520,32 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-advances", id] });
       queryClient.invalidateQueries({ queryKey: ["employee-repayments", id] });
-      toast.success("تم سداد السلفة وإيداع المبلغ في الخزينة بنجاح");
+      const repayAmt = parseFloat(vars.amount);
+      const treasuryName = treasuries.find(t => t.id === vars.treasury_id)?.name;
+      toast.success("تم سداد السلفة وإيداع المبلغ في الخزينة بنجاح", {
+        action: {
+          label: "طباعة الإيصال",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `REP-${Date.now().toString().slice(-6)}`,
+                date: vars.date || new Date().toISOString().split("T")[0],
+                type: "advance_repayment",
+                amount: repayAmt,
+                paidToOrBy: employee?.name || "الموظف",
+                description: `سند استرداد / سداد سلفة الموظف: ${employee?.name || ''}`,
+                treasuryName,
+                notes: vars.notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       setIsRepayDialogOpen(false);
       setSelectedAdvance(null);
       setRepayForm({
@@ -523,10 +598,33 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-custodies", id] });
-      toast.success("تم صرف العهدة وخصمها من الخزينة بنجاح");
+      const custodyAmt = parseFloat(vars.amount);
+      const treasuryName = treasuries.find(t => t.id === vars.treasury_id)?.name;
+      const projectName = projects.find(p => p.id === vars.project_id)?.name;
+      toast.success("تم صرف العهدة وخصمها من الخزينة بنجاح", {
+        action: {
+          label: "طباعة السند",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `CUST-${Date.now().toString().slice(-6)}`,
+                date: vars.date || new Date().toISOString().split("T")[0],
+                type: "custody",
+                amount: custodyAmt,
+                paidToOrBy: employee?.name || "الموظف",
+                description: `سند صرف عهدة مالية للموظف: ${employee?.name || ''}`,
+                projectName,
+                treasuryName,
+                notes: vars.notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       setIsCustodyDialogOpen(false);
       setCustodyForm({
         amount: "",
@@ -557,10 +655,31 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-custodies", id] });
-      toast.success("تم رد العهدة النقدية وإيداعها في الخزينة بنجاح");
+      const returnAmt = parseFloat(vars.amount);
+      const treasuryName = treasuries.find(t => t.id === vars.treasury_id)?.name;
+      toast.success("تم رد العهدة النقدية وإيداعها في الخزينة بنجاح", {
+        action: {
+          label: "طباعة السند",
+          onClick: () => {
+            openReceiptPrintWindow(
+              {
+                receiptNumber: `SET-${Date.now().toString().slice(-6)}`,
+                date: vars.date || new Date().toISOString().split("T")[0],
+                type: "custody_settlement",
+                amount: returnAmt,
+                paidToOrBy: employee?.name || "الموظف",
+                description: `سند رد فائض عهدة مالية من الموظف: ${employee?.name || ''}`,
+                treasuryName,
+                notes: vars.notes || undefined,
+              },
+              companySettings
+            );
+          },
+        },
+      });
       setIsReturnCustodyDialogOpen(false);
       setSelectedCustody(null);
       setReturnCustodyForm({
@@ -1146,24 +1265,36 @@ export default function EmployeeDetail() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-left">
-                        {a.remaining_amount > 0 && (
+                        <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedAdvance(a);
-                              setRepayForm((prev) => ({
-                                ...prev,
-                                amount: a.remaining_amount.toString(),
-                              }));
-                              setIsRepayDialogOpen(true);
-                            }}
-                            className="h-7 px-2 text-xs font-bold gap-1 border-primary/30 text-primary cursor-pointer"
+                            variant="ghost"
+                            onClick={() => handlePrintAdvanceReceipt(a)}
+                            title="طباعة سند صرف السلفة"
+                            className="h-7 px-2 text-xs font-bold gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
                           >
-                            <Banknote className="h-3 w-3" />
-                            <span>سداد دفعة</span>
+                            <Printer className="h-3.5 w-3.5" />
+                            <span>سند</span>
                           </Button>
-                        )}
+                          {a.remaining_amount > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedAdvance(a);
+                                setRepayForm((prev) => ({
+                                  ...prev,
+                                  amount: a.remaining_amount.toString(),
+                                }));
+                                setIsRepayDialogOpen(true);
+                              }}
+                              className="h-7 px-2 text-xs font-bold gap-1 border-primary/30 text-primary cursor-pointer"
+                            >
+                              <Banknote className="h-3 w-3" />
+                              <span>سداد دفعة</span>
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1245,6 +1376,16 @@ export default function EmployeeDetail() {
                       </TableCell>
                       <TableCell className="text-left">
                         <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handlePrintCustodyReceipt(c)}
+                            title="طباعة سند صرف العهدة"
+                            className="h-7 px-2 text-xs font-bold gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            <span>سند</span>
+                          </Button>
                           {c.remaining_amount > 0 && (
                             <Button
                               size="sm"

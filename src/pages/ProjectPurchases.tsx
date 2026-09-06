@@ -52,7 +52,7 @@ import { ArrowRight, Plus, Pencil, Trash2, ShoppingCart, FileText, Printer, Aler
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
-import { openPrintWindow, generatePrintStyles, getPrintValues } from "@/lib/printStyles";
+import { openPrintWindow, openReceiptPrintWindow, generatePrintStyles, getPrintValues } from "@/lib/printStyles";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import html2pdf from "html2pdf.js";
@@ -262,7 +262,22 @@ const ProjectPurchases = () => {
   });
   const companySettings = settings;
 
-  // (Custody query removed - all purchases now go through treasury)
+  const handlePrintPurchaseReceipt = (purchase: Purchase) => {
+    openReceiptPrintWindow(
+      {
+        receiptNumber: purchase.invoice_number ? `INV-${purchase.invoice_number}` : `PUR-${purchase.id.slice(0, 8)}`,
+        date: purchase.date,
+        type: "payment",
+        amount: Number(purchase.total_amount),
+        paidToOrBy: purchase.suppliers?.name || purchase.title || "المورد",
+        description: `فاتورة مشتريات: ${purchase.title || purchase.invoice_number || ''}`,
+        projectName: project?.name,
+        treasuryName: allTreasuries.find(t => t.id === purchase.treasury_id)?.name,
+        notes: purchase.notes || undefined,
+      },
+      settings
+    );
+  };
 
   // Fetch project phases for move dialog (with treasury info)
   const { data: projectPhases } = useQuery({
@@ -448,11 +463,45 @@ const ProjectPurchases = () => {
         });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["project-purchases", projectId] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
-      toast({ title: "تم تسجيل الدفعة بنجاح" });
+
+      const purchaseSnapshot = selectedPurchaseForPay;
+      const treasuryName = allTreasuries.find(t => t.id === variables.treasury_id)?.name;
+
+      toast({
+        title: "تم تسجيل الدفعة بنجاح",
+        description: `المبلغ: ${formatCurrencyLYD(parseFloat(variables.amount))}`,
+        action: (
+          <Button
+            variant="outline"
+            size="sm"
+            className="cursor-pointer font-bold"
+            onClick={() => {
+              openReceiptPrintWindow(
+                {
+                  receiptNumber: `PAY-${purchaseSnapshot?.invoice_number || purchaseSnapshot?.id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                  date: variables.date,
+                  type: "payment",
+                  amount: parseFloat(variables.amount),
+                  paidToOrBy: purchaseSnapshot?.suppliers?.name || purchaseSnapshot?.title || "المورد",
+                  description: `سداد دفعة مشتريات: ${purchaseSnapshot?.title || purchaseSnapshot?.invoice_number || ''}`,
+                  projectName: project?.name,
+                  treasuryName: treasuryName,
+                  paymentMethod: variables.payment_method,
+                  notes: variables.notes || undefined,
+                },
+                settings
+              );
+            }}
+          >
+            طباعة السند
+          </Button>
+        ),
+      });
+
       setPayDialogOpen(false);
       setPayFormData({
         amount: "",
@@ -1655,6 +1704,15 @@ const ProjectPurchases = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePrintPurchaseReceipt(purchase)}
+                          title="طباعة إيصال / سند المشترى"
+                          className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

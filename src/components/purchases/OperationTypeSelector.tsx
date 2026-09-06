@@ -36,7 +36,7 @@ export const OperationTypeSelector: React.FC<OperationTypeSelectorProps> = ({
     {
       type: "labor",
       title: "عمل فني / عمالة يومية",
-      description: "تسجيل استحقاق عمل فني، مصنعية، أو يوميات عمالة للمشروع",
+      description: "تسجيل فواتير المصنعيات، أجور الفنيين، واليوميات المباشرة للمشروع",
       icon: <Users className="h-6 w-6 text-amber-600 dark:text-amber-400" />,
     },
     {
