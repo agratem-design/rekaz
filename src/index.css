@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --color-brand-50: #eef6f4;
+  --color-brand-100: #d5e9e4;
+  --color-brand-500: #1f7a68;
+  --color-brand-600: #186453;
+  --color-brand-700: #134f42;
+}
+
+@layer base {
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+  body { @apply bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100; }
+  .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+}
