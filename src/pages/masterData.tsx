@@ -1,8 +1,42 @@
-import { HardHat, LayoutGrid, Ruler, Shapes, Tags, Truck, UserCog, Users, Wrench } from 'lucide-react'
+import { Banknote, HardHat, LayoutGrid, Printer, Ruler, Shapes, Tags, Truck, UserCog, Users, Wallet, Wrench } from 'lucide-react'
+import { useAuth } from '@/auth/AuthProvider'
 import { CrudPage, type CrudConfig, type Row } from '@/components/CrudPage'
-import { Badge, Money } from '@/components/ui'
+import { Badge, Button, Money, StatCard } from '@/components/ui'
+import { formatMoney } from '@/lib/format'
 import { options, rateUnitLabels } from '@/lib/labels'
 import type { AppRole } from '@/lib/supabase'
+import { openPrint } from '@/print/open'
+import { useClientBalanceMap } from './clients/clientData'
+
+function ClientStats({ rows }: { rows: Row[] }) {
+  const { hasRole } = useAuth()
+  const sum = (k: string) => rows.reduce((a, r) => a + Number(r[k] ?? 0), 0)
+  if (!hasRole('admin', 'accountant'))
+    return (
+      <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <StatCard icon={Users} label="عدد الزبائن" value={<span className="num">{rows.length}</span>} />
+      </div>
+    )
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+      <StatCard icon={Users} label="عدد الزبائن" value={<span className="num">{rows.length}</span>} />
+      <StatCard icon={Banknote} label="المقبوض من الزبائن" value={<Money value={sum('total_collected')} />} tone="blue" />
+      <StatCard icon={Wallet} label="الذمم المستحقة" value={<Money value={sum('total_due')} />} tone="red" hint="المتبقي على المشاريع غير المسددة" />
+      <StatCard icon={Wallet} label="أرصدة دائنة وزيادات" value={<Money value={sum('available_credit') + sum('total_overpaid_on_projects')} />} tone="sand" />
+    </div>
+  )
+}
+
+function PrintAllClients() {
+  const { hasRole } = useAuth()
+  if (!hasRole('admin', 'accountant')) return null
+  return (
+    <Button variant="secondary" onClick={() => openPrint('clients-statement', 'all')}>
+      <Printer className="size-4" />
+      طباعة الكشف الإجمالي
+    </Button>
+  )
+}
 
 const FIN: AppRole[] = ['admin', 'accountant']
 const ADMIN: AppRole[] = ['admin']
@@ -38,7 +72,31 @@ export const configs: Record<string, CrudConfig> = {
     description: 'دليل الزبائن. افتح الزبون لعرض كشف حسابه لكل مشروع.',
     icon: Users,
     avatar: true,
-    columns: [{ key: 'name', label: 'الاسم' }, phone, { key: 'city', label: 'المدينة', hideBelow: 'md' }],
+    columns: [
+      { key: 'name', label: 'الاسم' },
+      phone,
+      { key: 'city', label: 'المدينة', hideBelow: 'lg' },
+      { key: 'total_obligation', label: 'إجمالي الأعمال', align: 'end', hideBelow: 'md', render: (r) => (r.total_obligation === undefined ? <span className="text-faint">—</span> : <Money value={r.total_obligation as number} />) },
+      { key: 'total_collected', label: 'المسدد', align: 'end', hideBelow: 'sm', render: (r) => (r.total_collected === undefined ? <span className="text-faint">—</span> : <Money value={r.total_collected as number} />) },
+      {
+        key: 'total_due',
+        label: 'المتبقي',
+        align: 'end',
+        render: (r) =>
+          r.total_due === undefined ? (
+            <span className="text-faint">—</span>
+          ) : (
+            <span className="inline-flex flex-col items-end">
+              <Money value={r.total_due as number} className={Number(r.total_due) > 0 ? 'font-semibold text-red-700 dark:text-red-400' : 'text-muted'} />
+              {Number(r.available_credit) > 0 && <span className="text-[10px] text-sand-600">رصيد دائن {formatMoney(r.available_credit as number)}</span>}
+              {Number(r.total_overpaid_on_projects) > 0 && <span className="text-[10px] text-sand-600">زيادة مدفوعة {formatMoney(r.total_overpaid_on_projects as number)}</span>}
+            </span>
+          ),
+      },
+    ],
+    useExtra: useClientBalanceMap,
+    stats: (rows) => <ClientStats rows={rows} />,
+    headerActions: <PrintAllClients />,
     fields: [
       { key: 'name', label: 'اسم الزبون', required: true, section: 'البيانات الأساسية', placeholder: 'الاسم الكامل أو اسم الجهة' },
       { key: 'city', label: 'المدينة', section: 'البيانات الأساسية' },

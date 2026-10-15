@@ -47,6 +47,10 @@ export type CrudConfig = {
   searchKeys?: string[]
   defaults?: Record<string, unknown>
   detailPath?: (row: Row) => string
+  // بيانات إضافية تُدمج في كل صف (مثل الأرصدة من العروض)؛ الإعداد ثابت لكل صفحة فاستدعاء الخطاف آمن
+  useExtra?: () => Map<string, Record<string, unknown>> | undefined
+  stats?: (rows: Row[]) => ReactNode
+  headerActions?: ReactNode
 }
 
 // كل الجداول الأساسية تتبع نفس النمط، فنستدعي القاعدة دون أنواع مولدة لكل جدول
@@ -79,6 +83,7 @@ export function CrudPage({ config }: { config: CrudConfig }) {
       return data as Row[]
     },
   })
+  const extra = config.useExtra?.()
 
   const lookupTables = useMemo(() => [...new Set(config.fields.flatMap((f) => (f.lookup ? [f.lookup] : [])))], [config.fields])
   const lookups = useQuery({
@@ -161,7 +166,7 @@ export function CrudPage({ config }: { config: CrudConfig }) {
   }
   const submit = () => validate() && save.mutate()
 
-  const all = rows.data ?? []
+  const all = useMemo(() => (rows.data ?? []).map((r) => (extra?.has(r.id) ? { ...extra.get(r.id), ...r } : r)), [rows.data, extra])
   const keys = config.searchKeys ?? ['name']
   const filtered = all.filter((r) => {
     const q = search.trim()
@@ -207,13 +212,26 @@ export function CrudPage({ config }: { config: CrudConfig }) {
 
   return (
     <div>
-      <PageHeader title={config.title} description={config.description} actions={addButton} />
+      <PageHeader
+        title={config.title}
+        description={config.description}
+        actions={
+          <>
+            {config.headerActions}
+            {addButton}
+          </>
+        }
+      />
 
-      <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
-        <StatCard icon={Icon} label={`عدد ${config.title}`} value={<span className="num">{rows.isLoading ? '…' : all.length}</span>} />
-        {hasStatus && <StatCard icon={CheckCircle2} label="نشط / مستخدم" value={<span className="num">{rows.isLoading ? '…' : activeCount}</span>} tone="blue" />}
-        {hasStatus && <StatCard icon={CirclePause} label="موقوف" value={<span className="num">{rows.isLoading ? '…' : all.length - activeCount}</span>} tone="sand" />}
-      </div>
+      {config.stats ? (
+        config.stats(all)
+      ) : (
+        <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+          <StatCard icon={Icon} label={`عدد ${config.title}`} value={<span className="num">{rows.isLoading ? '…' : all.length}</span>} />
+          {hasStatus && <StatCard icon={CheckCircle2} label="نشط / مستخدم" value={<span className="num">{rows.isLoading ? '…' : activeCount}</span>} tone="blue" />}
+          {hasStatus && <StatCard icon={CirclePause} label="موقوف" value={<span className="num">{rows.isLoading ? '…' : all.length - activeCount}</span>} tone="sand" />}
+        </div>
+      )}
 
       <DataTable
         rows={filtered}

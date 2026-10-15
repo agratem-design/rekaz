@@ -110,6 +110,198 @@ const loaders: Record<string, (id: string) => Promise<Loaded>> = {
     }
   },
 
+  // ───────────── كشف حساب زبون (لكل مشروع على حدة + الرصيد الدائن منفصلاً) ─────────────
+  async 'client-statement'(id) {
+    const [c, b, f, r] = await Promise.all([
+      supabase.from('clients').select('*').eq('id', id).single(),
+      supabase.from('client_balances').select('*').eq('client_id', id).maybeSingle(),
+      supabase.from('project_financials').select('*').eq('client_id', id).order('name'),
+      supabase.from('client_receipts').select('*, projects(name)').eq('client_id', id).eq('status', 'posted').order('receipt_date'),
+    ])
+    for (const x of [c, b, f, r]) if (x.error) throw x.error
+    const client = c.data!
+    const bal = b.data
+    return {
+      title: 'كشف حساب زبون',
+      render: (company, s) => (
+        <PrintDocument company={company} settings={s} title="كشف حساب زبون" date={formatDate(new Date().toISOString())} subtitle={client.name}>
+          <InfoGrid
+            cols={3}
+            items={[
+              { label: 'الزبون', value: client.name },
+              { label: 'الهاتف', value: client.phone ? <span className="num">{client.phone}</span> : null },
+              { label: 'المدينة', value: client.city },
+            ]}
+          />
+          <PrintSection title="المشاريع">
+            <PrintTable
+              columns={[
+                { label: 'المشروع', render: (p) => p.name },
+                { label: 'الالتزام', align: 'end', render: (p) => <span className="num">{formatMoney(p.client_obligation)}</span> },
+                { label: 'المقبوض', align: 'end', render: (p) => <span className="num">{formatMoney(p.collected)}</span> },
+                { label: 'المتبقي', align: 'end', render: (p) => <span className="num">{Number(p.client_remaining) < 0 ? `زيادة ${formatMoney(-Number(p.client_remaining))}` : formatMoney(p.client_remaining)}</span> },
+              ]}
+              rows={f.data ?? []}
+              totals={[
+                { label: 'إجمالي الالتزام', value: formatMoney(bal?.total_obligation) },
+                { label: 'إجمالي المقبوض', value: formatMoney(bal?.total_collected) },
+                ...(Number(bal?.total_overpaid_on_projects) > 0 ? [{ label: 'زيادات مدفوعة على مشاريع', value: formatMoney(bal?.total_overpaid_on_projects) }] : []),
+                ...(Number(bal?.available_credit) > 0 ? [{ label: 'رصيد دائن متاح', value: formatMoney(bal?.available_credit) }] : []),
+                { label: 'المتبقي المستحق', value: formatMoney(bal?.total_due) },
+              ]}
+            />
+          </PrintSection>
+          <PrintSection title="الدفعات المستلمة">
+            {r.data?.length ? (
+              <PrintTable
+                columns={[
+                  { label: 'رقم', width: '14mm', align: 'center', render: (x) => <span className="num">{x.receipt_no}</span> },
+                  { label: 'التاريخ', width: '24mm', render: (x) => <span className="num">{formatDate(x.receipt_date)}</span> },
+                  { label: 'المشروع', render: (x) => x.projects?.name ?? 'رصيد دائن (بلا مشروع)' },
+                  { label: 'الطريقة', width: '24mm', render: (x) => paymentMethodLabels[x.method] },
+                  { label: 'المبلغ', align: 'end', width: '30mm', render: (x) => <span className="num">{formatMoney(x.amount)}</span> },
+                ]}
+                rows={r.data}
+                totals={[{ label: 'مجموع الدفعات', value: formatMoney(r.data.reduce((a, x) => a + Number(x.amount), 0)) }]}
+              />
+            ) : (
+              <p style={{ margin: 0 }}>لا توجد دفعات مسجلة.</p>
+            )}
+          </PrintSection>
+          <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+        </PrintDocument>
+      ),
+    }
+  },
+
+  // ───────────── الكشف الإجمالي للزبائن ─────────────
+  async 'clients-statement'() {
+    const [b, c] = await Promise.all([supabase.from('client_balances').select('*').order('name'), supabase.from('clients').select('id, phone')])
+    if (b.error) throw b.error
+    if (c.error) throw c.error
+    const phone = new Map(c.data.map((x) => [x.id, x.phone]))
+    const rows = b.data
+    const sum = (k: 'total_obligation' | 'total_collected' | 'total_due' | 'available_credit') => rows.reduce((a, x) => a + Number(x[k] ?? 0), 0)
+    return {
+      title: 'الكشف الإجمالي للزبائن',
+      render: (company, s) => (
+        <PrintDocument company={company} settings={s} title="كشف الزبائن الإجمالي" date={formatDate(new Date().toISOString())} subtitle={`${rows.length} زبون`}>
+          <PrintTable
+            columns={[
+              { label: 'م', width: '9mm', align: 'center', render: (_x, i) => <span className="num">{i + 1}</span> },
+              { label: 'الزبون', render: (x) => x.name },
+              { label: 'الهاتف', width: '28mm', render: (x) => <span className="num">{phone.get(x.client_id!) ?? ''}</span> },
+              { label: 'إجمالي الأعمال', align: 'end', render: (x) => <span className="num">{formatMoney(x.total_obligation)}</span> },
+              { label: 'المسدد', align: 'end', render: (x) => <span className="num">{formatMoney(x.total_collected)}</span> },
+              { label: 'المتبقي', align: 'end', render: (x) => <span className="num">{formatMoney(x.total_due)}</span> },
+              { label: 'رصيد دائن', align: 'end', render: (x) => <span className="num">{formatMoney(x.available_credit)}</span> },
+            ]}
+            rows={rows}
+            totals={[
+              { label: 'إجمالي الأعمال', value: formatMoney(sum('total_obligation')) },
+              { label: 'إجمالي المسدد', value: formatMoney(sum('total_collected')) },
+              { label: 'الأرصدة الدائنة', value: formatMoney(sum('available_credit')) },
+              { label: 'إجمالي الذمم المستحقة', value: formatMoney(sum('total_due')) },
+            ]}
+          />
+        </PrintDocument>
+      ),
+    }
+  },
+
+  // ───────────── كشف مشروع ─────────────
+  async 'project-statement'(id) {
+    const [p, f, c, items, r] = await Promise.all([
+      supabase.from('projects').select('*, clients(name)').eq('id', id).single(),
+      supabase.from('project_financials').select('*').eq('project_id', id).maybeSingle(),
+      supabase.from('project_costs').select('*').eq('project_id', id).maybeSingle(),
+      supabase.from('project_items').select('*').eq('project_id', id).order('order_index'),
+      supabase.from('client_receipts').select('*').eq('project_id', id).eq('status', 'posted').order('receipt_date'),
+    ])
+    for (const x of [p, f, c, items, r]) if (x.error) throw x.error
+    const pr = p.data!
+    const fin = f.data
+    const costs = c.data
+    return {
+      title: 'كشف مشروع',
+      render: (company, s) => (
+        <PrintDocument company={company} settings={s} title="الكشف المالي للمشروع" date={formatDate(new Date().toISOString())} subtitle={pr.name}>
+          <InfoGrid
+            items={[
+              { label: 'المشروع', value: pr.name },
+              { label: 'الزبون', value: pr.clients?.name },
+              { label: 'النوع', value: pr.project_type === 'contracting' ? 'مقاولات (سعر ثابت)' : `تشطيبات (التكلفة + ${pr.finishing_percentage ?? 0}%)` },
+              { label: 'الموقع', value: pr.location },
+            ]}
+          />
+          {items.data && items.data.length > 0 && (
+            <PrintSection title="بنود المقايسة">
+              <PrintTable
+                columns={[
+                  { label: 'م', width: '9mm', align: 'center', render: (_x, i) => <span className="num">{i + 1}</span> },
+                  { label: 'البند', render: (x) => x.name },
+                  { label: 'الكمية', align: 'center', render: (x) => <span className="num">{formatMoney(x.quantity)}</span> },
+                  { label: 'سعر الوحدة', align: 'end', render: (x) => <span className="num">{formatMoney(x.unit_price)}</span> },
+                  { label: 'الإجمالي', align: 'end', render: (x) => <span className="num">{formatMoney(x.total_price)}</span> },
+                  { label: 'الإنجاز', align: 'center', width: '16mm', render: (x) => <span className="num">{Number(x.progress)}%</span> },
+                ]}
+                rows={items.data}
+                totals={[{ label: 'إجمالي البنود', value: formatMoney(fin?.items_total) }]}
+              />
+            </PrintSection>
+          )}
+          {costs && (
+            <PrintSection title="التكاليف المباشرة">
+              <PrintTable
+                columns={[
+                  { label: 'البيان', render: (x: [string, number]) => x[0] },
+                  { label: 'المبلغ', align: 'end', width: '40mm', render: (x) => <span className="num">{formatMoney(x[1])}</span> },
+                ]}
+                rows={[
+                  ['المواد', Number(costs.materials)],
+                  ['خدمات الموردين', Number(costs.services)],
+                  ['المرتجعات (تُطرح)', -Number(costs.returns)],
+                  ['أجور الفنيين', Number(costs.labor)],
+                  ['مصروفات المشروع', Number(costs.expenses)],
+                ]}
+                totals={[{ label: 'إجمالي التكلفة المباشرة', value: formatMoney(costs.direct_cost) }]}
+              />
+            </PrintSection>
+          )}
+          <PrintSection title="الملخص المالي">
+            <PrintTable
+              columns={[
+                { label: 'البيان', render: (x: [string, number | null | undefined]) => x[0] },
+                { label: 'المبلغ', align: 'end', width: '40mm', render: (x) => <span className="num">{formatMoney(x[1])}</span> },
+              ]}
+              rows={[
+                [pr.project_type === 'contracting' ? 'قيمة المشروع' : 'إجمالي استحقاق الزبون', fin?.client_obligation],
+                ...(pr.project_type === 'finishing' ? ([['أتعاب الشركة', fin?.company_fee]] as [string, number | null | undefined][]) : []),
+                ['المحصّل من الزبون', fin?.collected],
+                [Number(fin?.client_remaining) < 0 ? 'زيادة مدفوعة' : 'المتبقي على الزبون', Math.abs(Number(fin?.client_remaining ?? 0))],
+                ...(pr.project_type === 'contracting' ? ([['الربح حتى تاريخه', fin?.gross_profit_to_date]] as [string, number | null | undefined][]) : []),
+              ]}
+            />
+          </PrintSection>
+          {r.data && r.data.length > 0 && (
+            <PrintSection title="إيصالات القبض">
+              <PrintTable
+                columns={[
+                  { label: 'رقم', width: '14mm', align: 'center', render: (x) => <span className="num">{x.receipt_no}</span> },
+                  { label: 'التاريخ', render: (x) => <span className="num">{formatDate(x.receipt_date)}</span> },
+                  { label: 'الطريقة', render: (x) => paymentMethodLabels[x.method] },
+                  { label: 'المبلغ', align: 'end', render: (x) => <span className="num">{formatMoney(x.amount)}</span> },
+                ]}
+                rows={r.data}
+              />
+            </PrintSection>
+          )}
+          <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+        </PrintDocument>
+      ),
+    }
+  },
+
   // ───────────── العقد ─────────────
   async contract(id) {
     const [c, items, clauses] = await Promise.all([
@@ -181,7 +373,7 @@ const loaders: Record<string, (id: string) => Promise<Loaded>> = {
               />
             </PrintSection>
           )}
-          <AmountBox amount={amount} label="قيمة العقد" />
+          {amount > 0 && <AmountBox amount={amount} label="قيمة العقد" />}
           {k.notes && (
             <PrintSection title="ملاحظات">
               <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{k.notes}</p>

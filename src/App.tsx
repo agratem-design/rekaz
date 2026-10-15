@@ -9,16 +9,28 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { TreasuriesPage } from './pages/TreasuriesPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { UsersPage } from './pages/UsersPage'
-import { AuditPage } from './pages/AuditPage'
 import {
   CatalogPage, ClientsListPage, EmployeesPage, EngineersPage, ExpenseCategoriesPage, SuppliersPage, TechniciansPage, TechnicianTypesPage, UnitsPage,
 } from './pages/masterData'
 import { UserX } from 'lucide-react'
+import { ProjectsPage } from './pages/projects/ProjectsPage'
 
-const pages: Record<string, () => React.ReactElement> = {
+// الشاشات الأثقل تُحمَّل عند الحاجة فقط
+const named = <K extends string>(p: Promise<Record<K, React.ComponentType>>, k: K) => p.then((m) => ({ default: m[k] }))
+const ProjectWorkspace = lazy(() => named(import('./pages/projects/ProjectWorkspace'), 'ProjectWorkspace'))
+const ContractsPage = lazy(() => named(import('./pages/contracts/ContractsList'), 'ContractsPage'))
+const ReceiptsPage = lazy(() => named(import('./pages/receipts/ReceiptsPage'), 'ReceiptsPage'))
+const ClientDetailPage = lazy(() => named(import('./pages/clients/ClientDetailPage'), 'ClientDetailPage'))
+const SettingsPage = lazy(() => named(import('./pages/SettingsPage'), 'SettingsPage'))
+const UsersPage = lazy(() => named(import('./pages/UsersPage'), 'UsersPage'))
+const AuditPage = lazy(() => named(import('./pages/AuditPage'), 'AuditPage'))
+
+const pages: Record<string, React.ComponentType> = {
   '/': DashboardPage,
+  '/projects/contracting': () => <ProjectsPage key="contracting" type="contracting" />,
+  '/projects/finishing': () => <ProjectsPage key="finishing" type="finishing" />,
+  '/contracts': ContractsPage,
+  '/receipts': ReceiptsPage,
   '/clients': ClientsListPage,
   '/suppliers': SuppliersPage,
   '/technicians': TechniciansPage,
@@ -97,6 +109,8 @@ export default function App() {
             />
           )
         })}
+        <Route path="/projects/:id/:tab?" element={<ProjectWorkspace />} />
+        <Route path="/clients/:id" element={<ClientDetailPage />} />
         <Route path="*" element={<ComingSoonPage />} />
       </Route>
     </Routes>

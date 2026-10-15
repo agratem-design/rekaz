@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, Menu, Moon, Search, Sun, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { navSections, type NavItem } from '@/nav'
 import { roleLabels } from '@/lib/labels'
 import { supabase } from '@/lib/supabase'
-import { Avatar, Button, cn } from './ui'
+import { Avatar, Button, Spinner, cn } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { useTheme } from './theme'
 
@@ -161,7 +161,9 @@ export function AppLayout() {
         </header>
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
-            <Outlet />
+            <Suspense fallback={<Spinner />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>
