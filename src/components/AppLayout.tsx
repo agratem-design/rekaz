@@ -67,7 +67,7 @@ export function AppLayout() {
           <div className="truncate text-[11px] text-brand-300">{company?.tagline || 'منظومة إدارة المقاولات'}</div>
         </div>
       </div>
-      <div className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 [scrollbar-color:#24433a_transparent]">
+      <div className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 [scrollbar-color:#4a3223_transparent]">
         {navSections.map((section) => {
           const items = section.items.filter(visible)
           if (!items.length) return null

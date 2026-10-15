@@ -25,7 +25,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ variant = 'primary', size = 'md', loading, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
   const styles = {
-    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-400 dark:text-brand-950',
+    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 dark:bg-sand-400 dark:hover:bg-sand-300 dark:text-brand-950',
     secondary: 'border border-line-strong bg-surface text-ink shadow-sm hover:bg-surface-2',
     ghost: 'text-muted hover:bg-surface-2 hover:text-ink',
     soft: 'bg-accent-soft text-brand-700 hover:bg-brand-100 dark:text-brand-200 dark:hover:bg-brand-900',
@@ -161,7 +161,7 @@ export function PageHeader({ title, description, actions, crumbs }: { title: Rea
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          {title && <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>}
           {description && <p className="mt-1 text-sm text-muted">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -184,7 +184,7 @@ export type Tone = 'neutral' | 'green' | 'red' | 'amber' | 'blue' | 'brand' | 's
 
 const toneClasses: Record<Tone, string> = {
   neutral: 'bg-stone-100 text-stone-700 ring-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-700',
-  green: 'bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900',
+  green: 'bg-olive-50 text-olive-800 ring-olive-200 dark:bg-olive-950/50 dark:text-olive-300 dark:ring-olive-900',
   red: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-900',
   amber: 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-900',
   blue: 'bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900',
@@ -232,7 +232,7 @@ export function Money({ value, className, currency = true, signed }: { value: nu
 
 export function ProgressBar({ value, max = 100, tone = 'brand', className, label }: { value: number; max?: number; tone?: 'brand' | 'sand' | 'red' | 'green'; className?: string; label?: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
-  const color = { brand: 'bg-brand-500', sand: 'bg-sand-400', red: 'bg-red-500', green: 'bg-emerald-500' }[tone]
+  const color = { brand: 'bg-brand-500', sand: 'bg-sand-400', red: 'bg-red-500', green: 'bg-olive-500' }[tone]
   return (
     <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-stone-200/70 dark:bg-stone-800', className)} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
       <div className={cn('h-full rounded-full transition-[width]', color)} style={{ width: `${pct}%` }} />
@@ -366,7 +366,7 @@ export function FilterChips<T extends string>({ options, value, onChange }: { op
           onClick={() => onChange(o.value)}
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition',
-            value === o.value ? 'border-brand-600 bg-brand-600 text-white dark:border-brand-400 dark:bg-brand-500 dark:text-brand-950' : 'border-line-strong bg-surface text-muted hover:text-ink',
+            value === o.value ? 'border-brand-600 bg-brand-600 text-white dark:border-sand-400 dark:bg-sand-400 dark:text-brand-950' : 'border-line-strong bg-surface text-muted hover:text-ink',
           )}
         >
           {o.label}

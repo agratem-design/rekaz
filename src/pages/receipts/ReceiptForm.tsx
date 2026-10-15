@@ -262,7 +262,7 @@ export function PrintOptions({ kind, id, title, message, onClose }: { kind: stri
       }
     >
       <div className="flex gap-3 p-5 text-sm">
-        <CheckCircle2 className="size-6 shrink-0 text-emerald-600" />
+        <CheckCircle2 className="size-6 shrink-0 text-olive-600" />
         <div>{message}</div>
       </div>
     </Modal>

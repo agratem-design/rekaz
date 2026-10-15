@@ -48,19 +48,14 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
   return (
     <div className="space-y-5">
       {finance && f && (
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+        // القيمة والمحصّل والمتبقي في رأس مساحة العمل؛ هنا مصدر القيمة والتكلفة والربح
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
           {contracting ? (
-            <StatCard icon={Scale} label="قيمة المشروع" value={<Money value={f.client_obligation} />} hint={Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقايسة'} />
+            <StatCard icon={Scale} label="مصدر قيمة المشروع" value={<Money value={f.client_obligation} />} hint={Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقايسة'} />
           ) : (
             <StatCard icon={Scale} label="إجمالي استحقاق الزبون" value={<Money value={f.client_obligation} />} hint={`التكلفة + نسبة ${p.finishing_percentage ?? 0}%`} />
           )}
-          <StatCard icon={Banknote} label="المحصّل من الزبون" value={<Money value={f.collected} />} tone="blue" />
-          <StatCard
-            icon={CircleDollarSign}
-            label={remaining < 0 ? 'زيادة مدفوعة' : 'المتبقي على الزبون'}
-            value={<Money value={Math.abs(remaining)} />}
-            tone={remaining < 0 ? 'sand' : remaining > 0 ? 'red' : 'brand'}
-          />
+          <StatCard icon={Banknote} label="التكلفة المباشرة" value={<Money value={f.direct_cost} />} tone="blue" hint="مواد وخدمات وعمالة ومصروفات" />
           {contracting ? (
             <StatCard icon={TrendingUp} label="الربح حتى تاريخه" value={<Money value={f.gross_profit_to_date} />} hint="المكتسب حسب الإنجاز − التكلفة" tone="sand" />
           ) : (

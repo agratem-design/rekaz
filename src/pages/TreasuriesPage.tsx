@@ -357,7 +357,7 @@ function Statement({ treasuryId }: { treasuryId: string }) {
           </span>
         )}
         <span>
-          وارد <Money value={totalIn} className="font-semibold text-emerald-700 dark:text-emerald-400" />
+          وارد <Money value={totalIn} className="font-semibold text-olive-700 dark:text-olive-400" />
         </span>
         <span>
           صادر <Money value={totalOut} className="font-semibold" />
@@ -393,7 +393,7 @@ function Statement({ treasuryId }: { treasuryId: string }) {
                   {e.memo && e.memo !== sourceLabels[e.source_type] && <div className="text-xs text-muted">{e.memo}</div>}
                 </td>
                 <td className="py-2.5 text-left">
-                  <Money value={e.signed} signed className={e.signed > 0 ? 'text-emerald-700 dark:text-emerald-400' : undefined} />
+                  <Money value={e.signed} signed className={e.signed > 0 ? 'text-olive-700 dark:text-olive-400' : undefined} />
                 </td>
                 <td className="px-5 py-2.5 text-left">
                   <Money value={e.running} />

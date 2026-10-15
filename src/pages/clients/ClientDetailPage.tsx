@@ -235,7 +235,7 @@ export function ClientDetailPage() {
                       {e.notes && <span className="block text-xs text-muted">{e.notes}</span>}
                     </span>
                     {reversed.has(e.id) && <Badge tone="red">معكوس</Badge>}
-                    <Money value={e.amount} signed className={Number(e.amount) > 0 ? 'font-semibold text-emerald-700 dark:text-emerald-400' : 'font-semibold'} />
+                    <Money value={e.amount} signed className={Number(e.amount) > 0 ? 'font-semibold text-olive-700 dark:text-olive-400' : 'font-semibold'} />
                     {(e.kind === 'application' || e.kind === 'from_project') && !reversed.has(e.id) && (
                       <Button
                         variant="ghost"

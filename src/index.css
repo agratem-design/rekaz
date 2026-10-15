@@ -7,26 +7,41 @@
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
   --font-display: "Readex Pro", "IBM Plex Sans Arabic", system-ui, sans-serif;
 
-  --color-brand-50: #eef7f4;
-  --color-brand-100: #d6ece5;
-  --color-brand-200: #aed8cb;
-  --color-brand-300: #7dbdaa;
-  --color-brand-400: #4c9c86;
-  --color-brand-500: #1f7a68;
-  --color-brand-600: #186453;
-  --color-brand-700: #134f42;
-  --color-brand-800: #0f3f35;
-  --color-brand-900: #0b302a;
-  --color-brand-950: #071f1b;
+  /* بني فاخر: إسبريسو/جوز للأساسي */
+  --color-brand-50: #f8f3ed;
+  --color-brand-100: #efe4d6;
+  --color-brand-200: #dfc9af;
+  --color-brand-300: #c6a582;
+  --color-brand-400: #a07850;
+  --color-brand-500: #7a573a;
+  --color-brand-600: #5a3e2b;
+  --color-brand-700: #4a3223;
+  --color-brand-800: #3b2a1e;
+  --color-brand-900: #2c1f16;
+  --color-brand-950: #1d140e;
 
-  --color-sand-50: #fbf8f1;
-  --color-sand-100: #f4ecda;
-  --color-sand-200: #e9d9b5;
-  --color-sand-300: #dbc28d;
-  --color-sand-400: #c8a96a;
-  --color-sand-500: #b08f4f;
-  --color-sand-600: #8f733e;
-  --color-sand-700: #6e5830;
+  /* ذهبي/كراميل للتمييز (نفس ذهبي قالب الطباعة #B4A078) */
+  --color-sand-50: #fbf7ef;
+  --color-sand-100: #f3e9d5;
+  --color-sand-200: #e6d3ad;
+  --color-sand-300: #d4b98a;
+  --color-sand-400: #b4a078;
+  --color-sand-500: #9c8660;
+  --color-sand-600: #7d6a4a;
+  --color-sand-700: #5f5038;
+
+  /* زيتوني هادئ لحالات النجاح، مميز عن البني */
+  --color-olive-50: #f3f4ea;
+  --color-olive-100: #e4e7cf;
+  --color-olive-200: #c9cfa3;
+  --color-olive-300: #a9b277;
+  --color-olive-400: #8a9455;
+  --color-olive-500: #6f7a3e;
+  --color-olive-600: #5a6432;
+  --color-olive-700: #474f29;
+  --color-olive-800: #363c21;
+  --color-olive-900: #262a18;
+  --color-olive-950: #171a0e;
 
   --shadow-card: 0 1px 2px rgb(20 30 25 / 0.04), 0 1px 3px rgb(20 30 25 / 0.06);
   --shadow-pop: 0 10px 30px -8px rgb(10 20 15 / 0.25);
@@ -52,31 +67,31 @@
 }
 
 :root {
-  --canvas: #f6f5f1;
-  --surface: #ffffff;
-  --surface-2: #f9f8f5;
-  --line: #e7e4dc;
-  --line-strong: #d6d2c6;
-  --ink: #1c2420;
-  --muted: #5f675f;
-  --faint: #8d938a;
-  --accent: #186453;
+  --canvas: #f8f4ec; /* عاجي دافئ */
+  --surface: #fffdf9;
+  --surface-2: #f6efe4;
+  --line: #ebe1d2;
+  --line-strong: #dccdb7;
+  --ink: #2a1f17;
+  --muted: #6e5f52;
+  --faint: #9b8b7c;
+  --accent: #5a3e2b;
   --accent-ink: #ffffff;
-  --accent-soft: #e6f2ee;
+  --accent-soft: #f2e8db;
 }
 
 .dark {
-  --canvas: #0c1210;
-  --surface: #131b18;
-  --surface-2: #18221e;
-  --line: #24302b;
-  --line-strong: #33423b;
-  --ink: #e8ece9;
-  --muted: #a3ada6;
-  --faint: #76817a;
-  --accent: #4fae95;
-  --accent-ink: #06130f;
-  --accent-soft: #14302a;
+  --canvas: #16100b; /* شوكولاتة داكنة */
+  --surface: #1f1711;
+  --surface-2: #281e16;
+  --line: #372a1f;
+  --line-strong: #4b3a2c;
+  --ink: #f2eae0;
+  --muted: #c0ae9b;
+  --faint: #8d7b6a;
+  --accent: #d4b98a;
+  --accent-ink: #1d140e;
+  --accent-soft: #33261b;
 }
 
 @keyframes panel-in {
@@ -102,7 +117,7 @@
   h1, h2, h3, .font-display { font-family: var(--font-display); }
   .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  ::selection { background: var(--color-sand-200); color: #1c2420; }
+  ::selection { background: var(--color-sand-200); color: #2a1f17; }
   * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 }
 
