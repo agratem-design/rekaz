@@ -1,7 +1,8 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthProvider'
 import { AppLayout } from './components/AppLayout'
-import { Spinner } from './components/ui'
+import { Button, Card, EmptyState, Spinner } from './components/ui'
 import { allNavItems } from './nav'
 import type { AppRole } from './lib/supabase'
 import { LoginPage } from './pages/LoginPage'
@@ -12,12 +13,13 @@ import { SettingsPage } from './pages/SettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import {
-  CatalogPage, ClientsPage, EmployeesPage, EngineersPage, ExpenseCategoriesPage, SuppliersPage, TechniciansPage, TechnicianTypesPage, UnitsPage,
+  CatalogPage, ClientsListPage, EmployeesPage, EngineersPage, ExpenseCategoriesPage, SuppliersPage, TechniciansPage, TechnicianTypesPage, UnitsPage,
 } from './pages/masterData'
+import { UserX } from 'lucide-react'
 
 const pages: Record<string, () => React.ReactElement> = {
   '/': DashboardPage,
-  '/clients': ClientsPage,
+  '/clients': ClientsListPage,
   '/suppliers': SuppliersPage,
   '/technicians': TechniciansPage,
   '/employees': EmployeesPage,
@@ -32,6 +34,8 @@ const pages: Record<string, () => React.ReactElement> = {
   '/settings': SettingsPage,
 }
 
+const PrintPage = lazy(() => import('./print/PrintPage'))
+
 function Guard({ roles, children }: { roles?: AppRole[]; children: React.ReactElement }) {
   const { hasRole } = useAuth()
   if (roles && !hasRole(...roles)) return <Navigate to="/" replace />
@@ -39,7 +43,7 @@ function Guard({ roles, children }: { roles?: AppRole[]; children: React.ReactEl
 }
 
 export default function App() {
-  const { session, loading, roles } = useAuth()
+  const { session, loading, roles, profile, signOut } = useAuth()
 
   if (loading) return <Spinner />
   if (!session)
@@ -48,16 +52,36 @@ export default function App() {
         <Route path="*" element={<LoginPage />} />
       </Routes>
     )
-  if (!roles.length)
+  if (!roles.length || profile?.is_active === false)
     return (
-      <div className="flex min-h-dvh items-center justify-center p-4 text-center text-sm text-stone-600">
-        حسابك لا يملك أي دور بعد. اطلب من المدير تحديد صلاحياتك.
+      <div className="flex min-h-dvh items-center justify-center p-4">
+        <Card className="max-w-sm">
+          <EmptyState
+            icon={UserX}
+            title={profile?.is_active === false ? 'حسابك موقوف' : 'حسابك بلا صلاحيات'}
+            action={
+              <Button variant="secondary" onClick={() => signOut()}>
+                تسجيل الخروج
+              </Button>
+            }
+          >
+            {profile?.is_active === false ? 'تواصل مع المدير لإعادة تفعيل حسابك.' : 'اطلب من المدير تحديد دورك في المنظومة.'}
+          </EmptyState>
+        </Card>
       </div>
     )
 
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route
+        path="/print/:kind/:id"
+        element={
+          <Suspense fallback={<Spinner />}>
+            <PrintPage />
+          </Suspense>
+        }
+      />
       <Route element={<AppLayout />}>
         {allNavItems.map((item) => {
           const Page = (!item.stage && pages[item.path]) || ComingSoonPage

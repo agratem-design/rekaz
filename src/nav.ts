@@ -1,5 +1,5 @@
 import {
-  Banknote, Boxes, Building2, ClipboardList, FileSignature, FileText, HardHat, Home, Landmark, LayoutGrid,
+  Banknote, Boxes, Building2, ClipboardList, FileSignature, FileText, HardHat, LayoutDashboard, Landmark, LayoutGrid,
   Package, Paintbrush, Receipt, Ruler, ScrollText, Settings, Shapes, ShoppingCart, Tags, Truck, UserCog, Users, Wallet, Wrench, ArrowLeftRight, type LucideIcon,
 } from 'lucide-react'
 import type { AppRole } from './lib/supabase'
@@ -10,6 +10,7 @@ export type NavItem = {
   icon: LucideIcon
   roles?: AppRole[] // بدون قيمة = كل الموظفين
   stage?: string // المرحلة التي تُبنى فيها الشاشة إن لم تكن جاهزة
+  keywords?: string // كلمات إضافية للبحث السريع
 }
 
 export type NavSection = { title: string; items: NavItem[] }
@@ -17,35 +18,36 @@ export type NavSection = { title: string; items: NavItem[] }
 const FIN: AppRole[] = ['admin', 'accountant']
 const SITE: AppRole[] = ['admin', 'engineer', 'supervisor']
 
+// الأسماء مأخوذة من النظام السابق حتى لا يتغير على المستخدم ما اعتاده (docs/old-flows.md)
 export const navSections: NavSection[] = [
-  { title: 'الرئيسية', items: [{ path: '/', label: 'لوحة المؤشرات', icon: Home }] },
+  { title: 'الرئيسية', items: [{ path: '/', label: 'لوحة التحكم', icon: LayoutDashboard, keywords: 'الرئيسية المؤشرات' }] },
   {
     title: 'المشاريع والعقود',
     items: [
-      { path: '/projects/contracting', label: 'مشاريع المقاولات', icon: Building2, stage: 'ب' },
-      { path: '/projects/finishing', label: 'مشاريع التشطيبات', icon: Paintbrush, stage: 'ب' },
-      { path: '/contracts', label: 'العقود', icon: FileSignature, roles: ['admin'], stage: 'ب' },
+      { path: '/projects/contracting', label: 'مشاريع المقاولات', icon: Building2 },
+      { path: '/projects/finishing', label: 'مشاريع التشطيبات', icon: Paintbrush },
+      { path: '/contracts', label: 'سجل العقود', icon: FileSignature, roles: ['admin'], keywords: 'العقود' },
     ],
   },
   {
     title: 'أطراف التعامل',
     items: [
-      { path: '/clients', label: 'الزبائن', icon: Users },
+      { path: '/clients', label: 'الزبائن', icon: Users, keywords: 'العملاء كشف حساب' },
       { path: '/suppliers', label: 'الموردون', icon: Truck },
-      { path: '/technicians', label: 'الفنيون', icon: Wrench },
-      { path: '/employees', label: 'الموظفون', icon: UserCog, roles: FIN },
+      { path: '/technicians', label: 'الفنيون', icon: Wrench, keywords: 'العمال' },
+      { path: '/employees', label: 'الموظفون', icon: UserCog, roles: FIN, keywords: 'الرواتب' },
       { path: '/engineers', label: 'المهندسون', icon: HardHat },
     ],
   },
   {
     title: 'المالية',
     items: [
-      { path: '/treasuries', label: 'الخزائن', icon: Landmark, roles: FIN },
-      { path: '/receipts', label: 'القبض من الزبائن', icon: Banknote, roles: FIN, stage: 'ب' },
-      { path: '/purchases', label: 'المشتريات والسداد', icon: ShoppingCart, roles: FIN, stage: 'ج' },
-      { path: '/expenses', label: 'المصروفات', icon: Receipt, roles: FIN, stage: 'ج' },
+      { path: '/treasuries', label: 'الخزائن والحسابات', icon: Landmark, roles: FIN, keywords: 'الخزينة البنك' },
+      { path: '/receipts', label: 'إيصالات المقبوضات', icon: Banknote, roles: FIN, keywords: 'القبض الدفعات التسديد' },
+      { path: '/purchases', label: 'مركز الفواتير', icon: ShoppingCart, roles: FIN, stage: 'ج', keywords: 'المشتريات السداد' },
+      { path: '/expenses', label: 'المصروفات العامة', icon: Receipt, roles: FIN, stage: 'ج' },
       { path: '/transfers', label: 'التحويلات', icon: ArrowLeftRight, roles: FIN, stage: 'ج' },
-      { path: '/custodies', label: 'العُهد', icon: Wallet, roles: FIN, stage: 'ج' },
+      { path: '/custodies', label: 'العهد المالية', icon: Wallet, roles: FIN, stage: 'ج' },
     ],
   },
   {
@@ -56,19 +58,18 @@ export const navSections: NavSection[] = [
       { path: '/technician-types', label: 'تخصصات الفنيين', icon: Shapes },
       { path: '/expense-categories', label: 'فئات المصروفات', icon: Tags, roles: FIN },
       { path: '/equipment', label: 'المعدات', icon: Package, roles: SITE, stage: 'د' },
-      { path: '/inventory', label: 'المخزون', icon: Boxes, roles: SITE, stage: 'د' },
+      { path: '/inventory', label: 'المخازن', icon: Boxes, roles: SITE, stage: 'د', keywords: 'المخزون' },
     ],
   },
   {
     title: 'التقارير والإدارة',
     items: [
       { path: '/reports', label: 'التقارير', icon: FileText, stage: 'هـ' },
-      { path: '/users', label: 'المستخدمون', icon: ClipboardList, roles: ['admin'] },
-      { path: '/audit', label: 'سجل العمليات', icon: ScrollText, roles: ['admin'] },
-      { path: '/settings', label: 'الإعدادات', icon: Settings, roles: ['admin'] },
+      { path: '/users', label: 'إدارة المستخدمين', icon: ClipboardList, roles: ['admin'], keywords: 'الصلاحيات' },
+      { path: '/audit', label: 'سجل التعديلات والرقابة', icon: ScrollText, roles: ['admin'], keywords: 'سجل العمليات' },
+      { path: '/settings', label: 'الإعدادات', icon: Settings, roles: ['admin'], keywords: 'تصميم الطباعة الهوية' },
     ],
   },
 ]
 
 export const allNavItems = navSections.flatMap((s) => s.items)
-

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AuthProvider } from './auth/AuthProvider'
 import App from './App'
+import { DialogHost } from './components/dialog'
 import './index.css'
 import './components/theme'
 
@@ -17,8 +18,9 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <HashRouter>
           <App />
+          <DialogHost />
         </HashRouter>
-        <Toaster dir="rtl" position="top-center" richColors />
+        <Toaster dir="rtl" position="top-center" richColors closeButton toastOptions={{ style: { fontFamily: 'inherit' } }} />
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,

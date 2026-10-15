@@ -1,4 +1,5 @@
-import { CrudPage, type CrudConfig } from '@/components/CrudPage'
+import { HardHat, LayoutGrid, Ruler, Shapes, Tags, Truck, UserCog, Users, Wrench } from 'lucide-react'
+import { CrudPage, type CrudConfig, type Row } from '@/components/CrudPage'
 import { Badge, Money } from '@/components/ui'
 import { options, rateUnitLabels } from '@/lib/labels'
 import type { AppRole } from '@/lib/supabase'
@@ -8,39 +9,60 @@ const ADMIN: AppRole[] = ['admin']
 const SITE_WRITE: AppRole[] = ['admin', 'accountant', 'engineer', 'supervisor']
 const CATALOG: AppRole[] = ['admin', 'supervisor']
 
-const contact = [
-  { key: 'phone', label: 'الهاتف' },
-  { key: 'email', label: 'البريد', type: 'email' as const },
-  { key: 'address', label: 'العنوان' },
+const contact = (section = 'بيانات التواصل') => [
+  { key: 'phone', label: 'الهاتف', type: 'tel' as const, section },
+  { key: 'email', label: 'البريد', type: 'email' as const, section },
+  { key: 'address', label: 'العنوان', section },
 ]
 
-const active = { key: 'is_active', label: 'الحالة', render: (r: Record<string, unknown>) => (r.is_active ? <Badge tone="green">نشط</Badge> : <Badge>موقوف</Badge>) }
+const active = {
+  key: 'is_active',
+  label: 'الحالة',
+  render: (r: Row) =>
+    r.is_active ? (
+      <Badge tone="green" dot>
+        نشط
+      </Badge>
+    ) : (
+      <Badge dot>موقوف</Badge>
+    ),
+}
 
-const configs: Record<string, CrudConfig> = {
+const phone = { key: 'phone', label: 'الهاتف', hideBelow: 'sm' as const, render: (r: Row) => (r.phone ? <span className="num">{String(r.phone)}</span> : <span className="text-faint">—</span>) }
+
+export const configs: Record<string, CrudConfig> = {
   clients: {
     table: 'clients',
     title: 'الزبائن',
     singular: 'زبون',
-    columns: [
-      { key: 'name', label: 'الاسم' },
-      { key: 'phone', label: 'الهاتف' },
-      { key: 'city', label: 'المدينة' },
+    description: 'دليل الزبائن. افتح الزبون لعرض كشف حسابه لكل مشروع.',
+    icon: Users,
+    avatar: true,
+    columns: [{ key: 'name', label: 'الاسم' }, phone, { key: 'city', label: 'المدينة', hideBelow: 'md' }],
+    fields: [
+      { key: 'name', label: 'اسم الزبون', required: true, section: 'البيانات الأساسية', placeholder: 'الاسم الكامل أو اسم الجهة' },
+      { key: 'city', label: 'المدينة', section: 'البيانات الأساسية' },
+      ...contact(),
+      { key: 'notes', label: 'ملاحظات', type: 'textarea', section: 'ملاحظات' },
     ],
-    fields: [{ key: 'name', label: 'الاسم', required: true }, { key: 'city', label: 'المدينة' }, ...contact, { key: 'notes', label: 'ملاحظات', type: 'textarea' }],
     writeRoles: FIN,
     deleteRoles: ADMIN,
     searchKeys: ['name', 'phone', 'city'],
+    detailPath: (r) => `/clients/${r.id}`,
   },
   suppliers: {
     table: 'suppliers',
     title: 'الموردون',
     singular: 'مورد',
-    columns: [
-      { key: 'name', label: 'الاسم' },
-      { key: 'category', label: 'المجال' },
-      { key: 'phone', label: 'الهاتف' },
+    icon: Truck,
+    avatar: true,
+    columns: [{ key: 'name', label: 'الاسم' }, { key: 'category', label: 'المجال' }, phone],
+    fields: [
+      { key: 'name', label: 'اسم المورد', required: true, section: 'البيانات الأساسية' },
+      { key: 'category', label: 'المجال', hint: 'مثل: حديد، إسمنت، كهرباء', section: 'البيانات الأساسية' },
+      ...contact(),
+      { key: 'notes', label: 'ملاحظات', type: 'textarea', section: 'ملاحظات' },
     ],
-    fields: [{ key: 'name', label: 'الاسم', required: true }, { key: 'category', label: 'المجال', hint: 'مثل: حديد، إسمنت، كهرباء' }, ...contact, { key: 'notes', label: 'ملاحظات', type: 'textarea' }],
     writeRoles: FIN,
     deleteRoles: ADMIN,
     searchKeys: ['name', 'phone', 'category'],
@@ -49,32 +71,36 @@ const configs: Record<string, CrudConfig> = {
     table: 'technicians',
     title: 'الفنيون',
     singular: 'فني',
+    icon: Wrench,
+    avatar: true,
     columns: [
       { key: 'name', label: 'الاسم' },
-      { key: 'technician_type_id', label: 'التخصص', render: (r, lk) => lk.technician_types?.get(r.technician_type_id as string) ?? '—' },
-      { key: 'phone', label: 'الهاتف' },
+      { key: 'technician_type_id', label: 'التخصص', render: (r, lk) => lk.technician_types?.get(r.technician_type_id as string) ?? <span className="text-faint">—</span> },
+      phone,
       {
         key: 'default_rate',
         label: 'السعر الافتراضي',
+        align: 'end',
+        hideBelow: 'md',
         render: (r) =>
           r.default_rate ? (
-            <>
-              <Money value={r.default_rate as number} /> {rateUnitLabels[r.default_rate_unit as keyof typeof rateUnitLabels] ?? ''}
-            </>
+            <span className="whitespace-nowrap">
+              <Money value={r.default_rate as number} /> <span className="text-xs text-muted">{rateUnitLabels[r.default_rate_unit as keyof typeof rateUnitLabels] ?? ''}</span>
+            </span>
           ) : (
-            '—'
+            <span className="text-faint">—</span>
           ),
       },
       active,
     ],
     fields: [
-      { key: 'name', label: 'الاسم', required: true },
-      { key: 'technician_type_id', label: 'التخصص', lookup: 'technician_types' },
-      { key: 'phone', label: 'الهاتف' },
-      { key: 'default_rate', label: 'السعر الافتراضي (د.ل)', type: 'number' },
-      { key: 'default_rate_unit', label: 'طريقة الحساب', type: 'select', options: options(rateUnitLabels) },
-      { key: 'is_active', label: 'نشط', type: 'checkbox' },
-      { key: 'notes', label: 'ملاحظات', type: 'textarea' },
+      { key: 'name', label: 'اسم الفني', required: true, section: 'البيانات الأساسية' },
+      { key: 'technician_type_id', label: 'التخصص', lookup: 'technician_types', section: 'البيانات الأساسية' },
+      { key: 'phone', label: 'الهاتف', type: 'tel', section: 'البيانات الأساسية' },
+      { key: 'default_rate', label: 'السعر الافتراضي (د.ل)', type: 'number', section: 'التسعير' },
+      { key: 'default_rate_unit', label: 'طريقة الحساب', type: 'select', options: options(rateUnitLabels), section: 'التسعير' },
+      { key: 'is_active', label: 'نشط', type: 'checkbox', section: 'الحالة' },
+      { key: 'notes', label: 'ملاحظات', type: 'textarea', section: 'الحالة' },
     ],
     defaults: { is_active: true },
     writeRoles: SITE_WRITE,
@@ -85,23 +111,25 @@ const configs: Record<string, CrudConfig> = {
     table: 'employees',
     title: 'الموظفون',
     singular: 'موظف',
+    icon: UserCog,
+    avatar: true,
     columns: [
       { key: 'name', label: 'الاسم' },
       { key: 'position', label: 'الوظيفة' },
-      { key: 'department', label: 'القسم' },
-      { key: 'base_salary', label: 'الراتب الأساسي', render: (r) => <Money value={r.base_salary as number} /> },
+      { key: 'department', label: 'القسم', hideBelow: 'md' },
+      { key: 'base_salary', label: 'الراتب الأساسي', align: 'end', render: (r) => <Money value={r.base_salary as number} /> },
       active,
     ],
     fields: [
-      { key: 'name', label: 'الاسم', required: true },
-      { key: 'position', label: 'الوظيفة' },
-      { key: 'department', label: 'القسم' },
-      { key: 'base_salary', label: 'الراتب الأساسي (د.ل)', type: 'number' },
-      { key: 'hire_date', label: 'تاريخ التعيين', type: 'date' },
-      { key: 'phone', label: 'الهاتف' },
-      { key: 'email', label: 'البريد', type: 'email' },
-      { key: 'is_active', label: 'على رأس العمل', type: 'checkbox' },
-      { key: 'notes', label: 'ملاحظات', type: 'textarea' },
+      { key: 'name', label: 'اسم الموظف', required: true, section: 'البيانات الوظيفية' },
+      { key: 'position', label: 'الوظيفة', section: 'البيانات الوظيفية' },
+      { key: 'department', label: 'القسم', section: 'البيانات الوظيفية' },
+      { key: 'base_salary', label: 'الراتب الأساسي (د.ل)', type: 'number', section: 'البيانات الوظيفية' },
+      { key: 'hire_date', label: 'تاريخ التعيين', type: 'date', section: 'البيانات الوظيفية' },
+      { key: 'phone', label: 'الهاتف', type: 'tel', section: 'بيانات التواصل' },
+      { key: 'email', label: 'البريد', type: 'email', section: 'بيانات التواصل' },
+      { key: 'is_active', label: 'على رأس العمل', type: 'checkbox', section: 'الحالة' },
+      { key: 'notes', label: 'ملاحظات', type: 'textarea', section: 'الحالة' },
     ],
     defaults: { is_active: true, base_salary: 0 },
     writeRoles: FIN,
@@ -112,18 +140,16 @@ const configs: Record<string, CrudConfig> = {
     table: 'engineers',
     title: 'المهندسون',
     singular: 'مهندس',
-    columns: [
-      { key: 'name', label: 'الاسم' },
-      { key: 'specialty', label: 'التخصص' },
-      { key: 'phone', label: 'الهاتف' },
-    ],
+    icon: HardHat,
+    avatar: true,
+    columns: [{ key: 'name', label: 'الاسم' }, { key: 'specialty', label: 'التخصص' }, phone],
     fields: [
-      { key: 'name', label: 'الاسم', required: true },
-      { key: 'specialty', label: 'التخصص' },
-      { key: 'license_number', label: 'رقم القيد' },
-      { key: 'phone', label: 'الهاتف' },
-      { key: 'email', label: 'البريد', type: 'email' },
-      { key: 'notes', label: 'ملاحظات', type: 'textarea' },
+      { key: 'name', label: 'اسم المهندس', required: true, section: 'البيانات المهنية' },
+      { key: 'specialty', label: 'التخصص', section: 'البيانات المهنية' },
+      { key: 'license_number', label: 'رقم القيد', section: 'البيانات المهنية' },
+      { key: 'phone', label: 'الهاتف', type: 'tel', section: 'بيانات التواصل' },
+      { key: 'email', label: 'البريد', type: 'email', section: 'بيانات التواصل' },
+      { key: 'notes', label: 'ملاحظات', type: 'textarea', section: 'بيانات التواصل' },
     ],
     writeRoles: ADMIN,
     deleteRoles: ADMIN,
@@ -133,8 +159,9 @@ const configs: Record<string, CrudConfig> = {
     table: 'technician_types',
     title: 'تخصصات الفنيين',
     singular: 'تخصص',
-    description: 'القائمة الوحيدة لتخصصات الفنيين في كل المنظومة',
-    columns: [{ key: 'name', label: 'التخصص' }, { key: 'code', label: 'الرمز' }, active],
+    description: 'القائمة الوحيدة لتخصصات الفنيين في كل المنظومة. التخصص غير المستخدم يُوقف ولا يُحذف حفاظاً على السجل.',
+    icon: Shapes,
+    columns: [{ key: 'name', label: 'التخصص' }, { key: 'code', label: 'الرمز', render: (r) => <span className="num text-xs text-muted">{String(r.code ?? '')}</span> }, active],
     fields: [
       { key: 'name', label: 'التخصص', required: true },
       { key: 'code', label: 'الرمز', required: true, hint: 'حروف إنجليزية بلا مسافات، مثل: tiler' },
@@ -147,6 +174,8 @@ const configs: Record<string, CrudConfig> = {
     table: 'expense_categories',
     title: 'فئات المصروفات',
     singular: 'فئة',
+    description: 'الفئة غير المستخدمة تُوقف ولا تُحذف حفاظاً على السجل.',
+    icon: Tags,
     columns: [{ key: 'name', label: 'الفئة' }, active],
     fields: [
       { key: 'name', label: 'الفئة', required: true },
@@ -159,6 +188,7 @@ const configs: Record<string, CrudConfig> = {
     table: 'measurement_units',
     title: 'وحدات القياس',
     singular: 'وحدة',
+    icon: Ruler,
     columns: [
       { key: 'name', label: 'الوحدة' },
       { key: 'symbol', label: 'الرمز' },
@@ -174,21 +204,22 @@ const configs: Record<string, CrudConfig> = {
     table: 'catalog_items',
     title: 'البنود العامة',
     singular: 'بند',
-    description: 'بنود جاهزة تُستخدم عند إضافة بنود المقايسة للمشاريع',
+    description: 'بنود جاهزة تُستورد إلى مقايسة المشروع بسعرها ووحدتها.',
+    icon: LayoutGrid,
     columns: [
       { key: 'name', label: 'البند' },
-      { key: 'category', label: 'الفئة' },
-      { key: 'unit_id', label: 'الوحدة', render: (r, lk) => lk.measurement_units?.get(r.unit_id as string) ?? '—' },
-      { key: 'default_unit_price', label: 'سعر الوحدة', render: (r) => (r.default_unit_price ? <Money value={r.default_unit_price as number} /> : '—') },
+      { key: 'category', label: 'الفئة', hideBelow: 'md' },
+      { key: 'unit_id', label: 'الوحدة', render: (r, lk) => lk.measurement_units?.get(r.unit_id as string) ?? <span className="text-faint">—</span> },
+      { key: 'default_unit_price', label: 'سعر الوحدة', align: 'end', render: (r) => (r.default_unit_price ? <Money value={r.default_unit_price as number} /> : <span className="text-faint">—</span>) },
       active,
     ],
     fields: [
-      { key: 'name', label: 'البند', required: true },
-      { key: 'category', label: 'الفئة' },
-      { key: 'unit_id', label: 'وحدة القياس', lookup: 'measurement_units' },
-      { key: 'default_unit_price', label: 'سعر الوحدة الافتراضي (د.ل)', type: 'number' },
-      { key: 'description', label: 'الوصف', type: 'textarea' },
-      { key: 'is_active', label: 'مستخدم', type: 'checkbox' },
+      { key: 'name', label: 'اسم البند', required: true, section: 'البند' },
+      { key: 'category', label: 'الفئة', section: 'البند', hint: 'مثل: خرسانة، مباني، لياسة' },
+      { key: 'description', label: 'الوصف', type: 'textarea', section: 'البند' },
+      { key: 'unit_id', label: 'وحدة القياس', lookup: 'measurement_units', section: 'التسعير' },
+      { key: 'default_unit_price', label: 'سعر الوحدة الافتراضي (د.ل)', type: 'number', section: 'التسعير' },
+      { key: 'is_active', label: 'مستخدم', type: 'checkbox', section: 'التسعير' },
     ],
     defaults: { is_active: true },
     writeRoles: CATALOG,
@@ -197,7 +228,7 @@ const configs: Record<string, CrudConfig> = {
   },
 }
 
-export const ClientsPage = () => <CrudPage key="clients" config={configs.clients} />
+export const ClientsListPage = () => <CrudPage key="clients" config={configs.clients} />
 export const SuppliersPage = () => <CrudPage key="suppliers" config={configs.suppliers} />
 export const TechniciansPage = () => <CrudPage key="technicians" config={configs.technicians} />
 export const EmployeesPage = () => <CrudPage key="employees" config={configs.employees} />

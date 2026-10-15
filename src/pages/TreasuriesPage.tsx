@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, ScrollText } from 'lucide-react'
+import { Banknote, Building, Landmark, Pencil, Plus, ScrollText, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
-import { Badge, Button, Card, ErrorState, Field, Input, Money, PageHeader, Select, Spinner, Textarea } from '@/components/ui'
+import { Badge, Button, Card, CardsSkeleton, Checkbox, EmptyState, ErrorState, Field, Input, Money, PageHeader, Section, Select, Spinner, StatCard, Textarea, cn } from '@/components/ui'
 import { formatDate } from '@/lib/format'
 import { domainLabels, options, treasuryKindLabels } from '@/lib/labels'
 import { errorMessage, supabase, type Tables, type Views } from '@/lib/supabase'
@@ -12,7 +12,7 @@ import { errorMessage, supabase, type Tables, type Views } from '@/lib/supabase'
 type Treasury = Tables<'treasuries'>
 type Form = Partial<Treasury> & { opening?: string }
 
-const sourceLabels: Record<string, string> = {
+export const sourceLabels: Record<string, string> = {
   opening_balance: 'رصيد افتتاحي',
   client_receipt: 'قبض من زبون',
   supplier_payment: 'دفعة لمورد',
@@ -33,6 +33,7 @@ export function TreasuriesPage() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<Form | null>(null)
   const [dirty, setDirty] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
   const [statementOf, setStatementOf] = useState<Views<'treasury_balances'> | null>(null)
 
   const list = useQuery({
@@ -49,7 +50,7 @@ export function TreasuriesPage() {
   const save = useMutation({
     mutationFn: async (f: Form) => {
       const row = {
-        name: f.name!,
+        name: f.name!.trim(),
         domain: f.domain!,
         kind: f.kind ?? 'cash',
         parent_id: f.parent_id || null,
@@ -83,83 +84,131 @@ export function TreasuriesPage() {
     onError: (e) => toast.error(errorMessage(e)),
   })
 
-  if (list.isLoading) return <Spinner />
-  if (list.error) return <ErrorState message={errorMessage(list.error)} />
+  const header = (
+    <PageHeader
+      title="الخزائن والحسابات"
+      description="الرصيد محسوب من الحركات المسجلة فقط، ولا يُعدَّل يدوياً"
+      actions={
+        canWrite && (
+          <Button
+            onClick={() => {
+              setEditing({ kind: 'cash', is_active: true })
+              setDirty(false)
+              setNameError(null)
+            }}
+          >
+            <Plus className="size-4" />
+            خزينة جديدة
+          </Button>
+        )
+      }
+    />
+  )
+
+  if (list.isLoading)
+    return (
+      <div>
+        {header}
+        <CardsSkeleton count={3} />
+      </div>
+    )
+  if (list.error)
+    return (
+      <div>
+        {header}
+        <ErrorState message={errorMessage(list.error)} onRetry={() => list.refetch()} />
+      </div>
+    )
   const rows = list.data ?? []
   const roots = rows.filter((t) => !t.parent_id)
+  const total = rows.reduce((a, t) => a + t.balance, 0)
   const set = (patch: Form) => {
     setEditing((e) => ({ ...e, ...patch }))
     setDirty(true)
+    if (patch.name !== undefined) setNameError(null)
+  }
+  const submit = () => {
+    if (!editing?.name?.trim()) return setNameError('اسم الخزينة مطلوب')
+    if (!editing.domain) return toast.error('اختر القطاع')
+    save.mutate(editing)
   }
 
   return (
     <div>
-      <PageHeader
-        title="الخزائن"
-        description="الرصيد محسوب من الحركات المسجلة فقط، ولا يُعدَّل يدوياً"
-        actions={
-          canWrite && (
-            <Button
-              onClick={() => {
-                setEditing({ kind: 'cash', is_active: true })
-                setDirty(false)
-              }}
-            >
-              <Plus className="size-4" />
-              خزينة جديدة
-            </Button>
-          )
-        }
-      />
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        {roots.map((root) => {
-          const children = rows.filter((t) => t.parent_id === root.id)
-          const total = root.balance + children.reduce((a, c) => a + c.balance, 0)
-          return (
-            <Card key={root.id}>
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{root.name}</div>
-                  <Badge tone="blue">{domainLabels[root.domain]}</Badge>
-                </div>
-                <div className="text-left">
-                  <div className="text-xs text-stone-500">مجموع القطاع</div>
-                  <Money value={total} className="text-lg font-bold" />
-                </div>
-              </div>
-              {[root, ...children].map((t) => (
-                <div key={t.id} className="flex items-center gap-2 border-t border-stone-100 py-2 text-sm dark:border-stone-800">
-                  <div className="flex-1">
-                    {t.id === root.id ? 'الخزينة الرئيسية' : t.name}
-                    <span className="mr-2 text-xs text-stone-500">
-                      {treasuryKindLabels[t.kind]}
-                      {t.bank_name ? ` · ${t.bank_name}` : ''}
-                    </span>
-                    {!t.is_active && <Badge>موقوفة</Badge>}
-                  </div>
-                  <Money value={t.balance} />
-                  <Button variant="ghost" className="size-8 px-0" aria-label="كشف الحركات" onClick={() => setStatementOf(t.view)}>
-                    <ScrollText className="size-4" />
-                  </Button>
-                  {canWrite && (
-                    <Button
-                      variant="ghost"
-                      className="size-8 px-0"
-                      aria-label="تعديل"
-                      onClick={() => {
-                        setEditing(t)
-                        setDirty(false)
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </Card>
-          )
-        })}
+      {header}
+      <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <StatCard icon={Landmark} label="إجمالي الأرصدة" value={<Money value={total} />} />
+        <StatCard icon={Wallet} label="الخزائن النقدية" value={<span className="num">{rows.filter((r) => r.kind === 'cash').length}</span>} tone="sand" />
+        <StatCard icon={Building} label="الحسابات المصرفية" value={<span className="num">{rows.filter((r) => r.kind === 'bank').length}</span>} tone="blue" />
       </div>
+
+      {!roots.length ? (
+        <Card>
+          <EmptyState icon={Landmark} title="لا توجد خزائن بعد" action={canWrite && <Button onClick={() => setEditing({ kind: 'cash', is_active: true })}>خزينة جديدة</Button>}>
+            أنشئ خزينة رئيسية لكل قطاع، ثم أضف تحتها الفروع والحسابات المصرفية.
+          </EmptyState>
+        </Card>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {roots.map((root) => {
+            const children = rows.filter((t) => t.parent_id === root.id)
+            const sectorTotal = root.balance + children.reduce((a, c) => a + c.balance, 0)
+            return (
+              <Card key={root.id} className="p-0">
+                <div className="flex items-start justify-between gap-3 border-b border-line p-4">
+                  <div>
+                    <div className="font-display text-base font-semibold">{root.name}</div>
+                    <div className="mt-1">
+                      <Badge tone="brand">{domainLabels[root.domain]}</Badge>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs text-muted">مجموع القطاع</div>
+                    <Money value={sectorTotal} className="font-display text-xl font-semibold" />
+                  </div>
+                </div>
+                <ul className="divide-y divide-line">
+                  {[root, ...children].map((t) => (
+                    <li key={t.id} className="group flex items-center gap-3 px-4 py-2.5 text-sm">
+                      <span className={cn('rounded-md p-1.5', t.kind === 'bank' ? 'bg-sky-50 text-sky-600 dark:bg-sky-950/50' : 'bg-sand-50 text-sand-600 dark:bg-sand-700/20')}>
+                        {t.kind === 'bank' ? <Building className="size-3.5" /> : <Banknote className="size-3.5" />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{t.id === root.id ? 'الخزينة الرئيسية' : t.name}</div>
+                        <div className="text-xs text-muted">
+                          {treasuryKindLabels[t.kind]}
+                          {t.bank_name ? ` · ${t.bank_name}` : ''}
+                          {!t.is_active && ' · موقوفة'}
+                        </div>
+                      </div>
+                      <Money value={t.balance} className="font-medium" />
+                      <Button variant="ghost" size="icon" className="size-8" aria-label="كشف الحركات" title="كشف الحركات" onClick={() => setStatementOf(t.view)}>
+                        <ScrollText className="size-4" />
+                      </Button>
+                      {canWrite && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          aria-label="تعديل"
+                          title="تعديل"
+                          onClick={() => {
+                            setEditing(t)
+                            setDirty(false)
+                            setNameError(null)
+                          }}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       <SidePanel
         open={editing !== null}
@@ -168,10 +217,10 @@ export function TreasuriesPage() {
         onClose={() => setEditing(null)}
         footer={
           <>
-            <Button loading={save.isPending} onClick={() => editing && save.mutate(editing)}>
+            <Button loading={save.isPending} onClick={submit}>
               حفظ
             </Button>
-            <Button variant="secondary" onClick={() => confirmDiscard(dirty) && setEditing(null)}>
+            <Button variant="secondary" onClick={async () => (await confirmDiscard(dirty)) && setEditing(null)}>
               إلغاء
             </Button>
           </>
@@ -179,75 +228,74 @@ export function TreasuriesPage() {
       >
         {editing && (
           <>
-            <Field label="الاسم" required>
-              <Input value={editing.name ?? ''} onChange={(e) => set({ name: e.target.value })} />
-            </Field>
-            <Field label="تتبع خزينة رئيسية" hint="اتركه فارغاً لخزينة رئيسية لقطاع">
-              <Select
-                value={editing.parent_id ?? ''}
-                onChange={(e) => {
-                  const parent = roots.find((r) => r.id === e.target.value)
-                  set({ parent_id: e.target.value || null, ...(parent ? { domain: parent.domain } : {}) })
-                }}
-              >
-                <option value="">— خزينة رئيسية —</option>
-                {roots
-                  .filter((r) => r.id !== editing.id)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
+            <Section title="البيانات الأساسية">
+              <Field label="الاسم" required error={nameError}>
+                <Input value={editing.name ?? ''} onChange={(e) => set({ name: e.target.value })} aria-invalid={Boolean(nameError)} />
+              </Field>
+              <Field label="تتبع خزينة رئيسية" hint="اتركه فارغاً لخزينة رئيسية لقطاع">
+                <Select
+                  value={editing.parent_id ?? ''}
+                  onChange={(e) => {
+                    const parent = roots.find((r) => r.id === e.target.value)
+                    set({ parent_id: e.target.value || null, ...(parent ? { domain: parent.domain } : {}) })
+                  }}
+                >
+                  <option value="">— خزينة رئيسية —</option>
+                  {roots
+                    .filter((r) => r.id !== editing.id)
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              <Field label="القطاع" required hint="عمليات المشروع لا تستخدم إلا خزائن قطاعه">
+                <Select value={editing.domain ?? ''} disabled={Boolean(editing.parent_id)} onChange={(e) => set({ domain: e.target.value as Treasury['domain'] })}>
+                  <option value="">— اختر —</option>
+                  {options(domainLabels).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
                     </option>
                   ))}
-              </Select>
-            </Field>
-            <Field label="القطاع" required hint="عمليات المشروع لا تستخدم إلا خزائن قطاعه">
-              <Select value={editing.domain ?? ''} disabled={Boolean(editing.parent_id)} onChange={(e) => set({ domain: e.target.value as Treasury['domain'] })}>
-                <option value="">— اختر —</option>
-                {options(domainLabels).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="النوع">
-              <Select value={editing.kind ?? 'cash'} onChange={(e) => set({ kind: e.target.value as Treasury['kind'] })}>
-                {options(treasuryKindLabels).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {editing.kind === 'bank' && (
-              <>
-                <Field label="المصرف">
-                  <Input value={editing.bank_name ?? ''} onChange={(e) => set({ bank_name: e.target.value })} />
-                </Field>
-                <Field label="رقم الحساب">
-                  <Input dir="ltr" value={editing.account_number ?? ''} onChange={(e) => set({ account_number: e.target.value })} />
-                </Field>
-              </>
-            )}
-            {!editing.id && (
-              <Field label="الرصيد الافتتاحي (د.ل)" hint="يُسجَّل كحركة افتتاحية ولا يمكن تغييره لاحقاً">
-                <Input type="number" step="0.001" dir="ltr" value={editing.opening ?? ''} onChange={(e) => set({ opening: e.target.value })} />
+                </Select>
               </Field>
-            )}
-            <Field label="ملاحظات">
-              <Textarea value={editing.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} />
-            </Field>
-            {editing.id && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-brand-600" checked={editing.is_active ?? true} onChange={(e) => set({ is_active: e.target.checked })} />
-                مستخدمة
-              </label>
-            )}
+            </Section>
+            <Section title="نوع الحساب">
+              <Field label="النوع">
+                <Select value={editing.kind ?? 'cash'} onChange={(e) => set({ kind: e.target.value as Treasury['kind'] })}>
+                  {options(treasuryKindLabels).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {editing.kind === 'bank' && (
+                <>
+                  <Field label="المصرف">
+                    <Input value={editing.bank_name ?? ''} onChange={(e) => set({ bank_name: e.target.value })} />
+                  </Field>
+                  <Field label="رقم الحساب">
+                    <Input dir="ltr" value={editing.account_number ?? ''} onChange={(e) => set({ account_number: e.target.value })} />
+                  </Field>
+                </>
+              )}
+              {!editing.id && (
+                <Field label="الرصيد الافتتاحي (د.ل)" hint="يُسجَّل كحركة افتتاحية ولا يمكن تغييره لاحقاً">
+                  <Input type="number" step="0.001" inputMode="decimal" dir="ltr" value={editing.opening ?? ''} onChange={(e) => set({ opening: e.target.value })} />
+                </Field>
+              )}
+            </Section>
+            <Section title="ملاحظات">
+              <Textarea value={editing.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} aria-label="ملاحظات" />
+              {editing.id && <Checkbox label="مستخدمة" checked={editing.is_active ?? true} onChange={(v) => set({ is_active: v })} />}
+            </Section>
           </>
         )}
       </SidePanel>
 
-      <SidePanel open={statementOf !== null} title={`كشف ${statementOf?.name ?? ''}`} onClose={() => setStatementOf(null)}>
+      <SidePanel open={statementOf !== null} size="lg" title={`كشف ${statementOf?.name ?? ''}`} description="كل الحركات والرصيد بعد كل حركة" onClose={() => setStatementOf(null)}>
         {statementOf && <Statement treasuryId={statementOf.treasury_id!} />}
       </SidePanel>
     </div>
@@ -255,22 +303,17 @@ export function TreasuriesPage() {
 }
 
 function Statement({ treasuryId }: { treasuryId: string }) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['treasury_entries', treasuryId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('treasury_entries')
-        .select('*')
-        .eq('treasury_id', treasuryId)
-        .order('entry_date')
-        .order('created_at')
+      const { data, error } = await supabase.from('treasury_entries').select('*').eq('treasury_id', treasuryId).order('entry_date').order('created_at')
       if (error) throw error
       return data
     },
   })
   if (isLoading) return <Spinner />
-  if (error) return <ErrorState message={errorMessage(error)} />
-  if (!data?.length) return <p className="text-sm text-stone-500">لا توجد حركات</p>
+  if (error) return <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
+  if (!data?.length) return <EmptyState icon={ScrollText} title="لا توجد حركات" />
   let running = 0
   const lines = data.map((e) => {
     const signed = e.direction === 'in' ? Number(e.amount) : -Number(e.amount)
@@ -278,32 +321,34 @@ function Statement({ treasuryId }: { treasuryId: string }) {
     return { ...e, signed, running }
   })
   return (
-    <table className="w-full text-sm">
-      <thead className="text-stone-500">
-        <tr>
-          <th className="py-1 text-right font-medium">التاريخ</th>
-          <th className="py-1 text-right font-medium">البيان</th>
-          <th className="py-1 text-left font-medium">المبلغ</th>
-          <th className="py-1 text-left font-medium">الرصيد</th>
-        </tr>
-      </thead>
-      <tbody>
-        {lines.reverse().map((e) => (
-          <tr key={e.id} className="border-t border-stone-100 align-top dark:border-stone-800">
-            <td className="py-1.5 pl-3 num whitespace-nowrap">{formatDate(e.entry_date)}</td>
-            <td>
-              {sourceLabels[e.source_type] ?? e.source_type}
-              {e.memo && e.memo !== sourceLabels[e.source_type] && <div className="text-xs text-stone-500">{e.memo}</div>}
-            </td>
-            <td className="text-left">
-              <Money value={e.signed} />
-            </td>
-            <td className="text-left">
-              <Money value={e.running} />
-            </td>
+    <div className="-mx-5 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-surface-2 text-xs text-muted">
+          <tr>
+            <th className="px-5 py-2 text-right font-semibold">التاريخ</th>
+            <th className="py-2 text-right font-semibold">البيان</th>
+            <th className="py-2 text-left font-semibold">المبلغ</th>
+            <th className="px-5 py-2 text-left font-semibold">الرصيد</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {lines.reverse().map((e) => (
+            <tr key={e.id} className="border-t border-line align-top">
+              <td className="num px-5 py-2.5 whitespace-nowrap text-muted">{formatDate(e.entry_date)}</td>
+              <td className="py-2.5">
+                {sourceLabels[e.source_type] ?? e.source_type}
+                {e.memo && e.memo !== sourceLabels[e.source_type] && <div className="text-xs text-muted">{e.memo}</div>}
+              </td>
+              <td className="py-2.5 text-left">
+                <Money value={e.signed} signed className={e.signed > 0 ? 'text-emerald-700 dark:text-emerald-400' : undefined} />
+              </td>
+              <td className="px-5 py-2.5 text-left">
+                <Money value={e.running} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
