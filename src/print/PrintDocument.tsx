@@ -37,7 +37,7 @@ export function PrintDocument({
   } as CSSProperties
 
   return (
-    <article dir="rtl" className="print-root pd relative mx-auto bg-white text-[#1b1f1d] shadow-pop" style={vars}>
+    <article dir="rtl" className={`print-root pd relative mx-auto bg-white text-[#1b1f1d] shadow-pop${compact ? ' pd-voucher' : ''}`} style={vars}>
       <style>{printCss}</style>
       {cancelled && (
         <>
@@ -204,9 +204,11 @@ const printCss = `
 .pd-info-item { display: flex; gap: 3mm; border-bottom: 1px dashed var(--p-border); padding-bottom: 1mm; }
 .pd-info-item dt { color: #6b726c; min-width: 26mm; flex-shrink: 0; }
 .pd-info-item dd { margin: 0; font-weight: 600; }
-.pd-amount { border: 1.5px solid var(--p-title); border-radius: 3mm; overflow: hidden; }
-.pd-amount-row { display: flex; justify-content: space-between; align-items: center; padding: 3mm 5mm; background: var(--p-tot-bg); color: var(--p-tot-fg); font-weight: 700; font-size: 12pt; }
-.pd-amount-value { font-size: 17pt; }
+.pd-voucher { outline: 2px solid var(--p-th-bg); outline-offset: -8mm; border-radius: 2mm; padding: 16mm 16mm 14mm; }
+.pd-amount { border: 1.5px solid var(--p-th-bg); border-radius: 3mm; overflow: hidden; }
+.pd-amount-row { display: flex; justify-content: space-between; align-items: center; padding: 3mm 5mm; background: #fdfbf7; color: var(--p-title); font-weight: 700; font-size: 12pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pd-amount-value { font-size: 17pt; color: #15803d; }
+.pd-words { border-top: 1px dashed var(--p-border); }
 .pd-amount-value small { font-size: 9pt; font-weight: 500; }
 .pd-words { padding: 2.5mm 5mm; font-weight: 600; }
 .pd-table { width: 100%; border-collapse: collapse; }
@@ -233,6 +235,7 @@ const printCss = `
 .pd-clause-no { flex-shrink: 0; width: 7mm; height: 7mm; border-radius: 50%; background: var(--p-title); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
   .pd { width: auto; min-height: 0; padding: 0; }
+  .pd-voucher { padding: 8mm; outline-offset: -2mm; }
   @page { size: A4; margin: 12mm 12mm 16mm; @bottom-center { content: "صفحة " counter(page) " من " counter(pages); font-size: 8pt; color: #888; } }
 }
 `

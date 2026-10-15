@@ -18,22 +18,23 @@ export type PrintSettings = {
   footer_note: string
 }
 
-export const printFonts = ['IBM Plex Sans Arabic', 'Readex Pro', 'Tajawal', 'Cairo', 'Almarai', 'Amiri']
+export const printFonts = ['Tajawal', 'Cairo', 'Almarai', 'Amiri', 'Changa', 'IBM Plex Sans Arabic', 'Readex Pro']
 
+// الافتراضي = هوية الطباعة في النظام السابق (ذهبي #B4A078 وعناوين #7A5A10 وخط Tajawal) — docs/old-print.md
 export const defaultPrintSettings: PrintSettings = {
-  print_section_title_color: '#134f42',
-  print_table_header_color: '#134f42',
+  print_section_title_color: '#7A5A10',
+  print_table_header_color: '#B4A078',
   print_header_text_color: '#ffffff',
-  print_table_border_color: '#d6d2c6',
-  print_totals_bg_color: '#f4ecda',
-  print_totals_text_color: '#134f42',
-  print_font_family: 'IBM Plex Sans Arabic',
-  print_table_font_size: 10.5,
+  print_table_border_color: '#c9bc9c',
+  print_totals_bg_color: '#B4A078',
+  print_totals_text_color: '#ffffff',
+  print_font_family: 'Tajawal',
+  print_table_font_size: 11,
   header_show_logo: true,
   header_show_tagline: true,
   header_show_contact: true,
-  contract_title_text: 'عقد مقاولة',
-  contract_accent_color: '#b08f4f',
+  contract_title_text: 'عـقـد مـقـاولـة',
+  contract_accent_color: '#c6973f',
   footer_note: '',
 }
 

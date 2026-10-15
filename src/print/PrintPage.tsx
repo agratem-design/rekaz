@@ -75,13 +75,13 @@ const loaders: Record<string, (id: string) => Promise<Loaded>> = {
     if (error) throw error
     const number = String(r.receipt_no)
     return {
-      title: 'سند قبض',
+      title: 'سند قبض مالي',
       number,
       render: (company, s) => (
         <PrintDocument
           company={company}
           settings={s}
-          title="سند قبض"
+          title="سند قبض مالي"
           number={number}
           date={formatDate(r.receipt_date)}
           compact
@@ -89,7 +89,7 @@ const loaders: Record<string, (id: string) => Promise<Loaded>> = {
         >
           <InfoGrid
             items={[
-              { label: 'استلمنا من', value: r.clients?.name, wide: true },
+              { label: 'استلمنا من السيد/ة', value: r.clients?.name, wide: true },
               { label: 'وذلك عن', value: r.projects ? `دفعة على مشروع «${r.projects.name}»` : 'دفعة مقدمة على حساب الزبون (رصيد دائن)', wide: true },
               { label: 'طريقة الدفع', value: paymentMethodLabels[r.method] },
               { label: 'المرجع', value: r.reference },
