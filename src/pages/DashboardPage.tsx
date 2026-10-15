@@ -17,7 +17,7 @@ async function load(finance: boolean) {
     finance ? supabase.from('treasury_balances').select('*').order('name') : null,
     finance ? supabase.from('client_balances').select('total_due, total_overpaid_on_projects') : null,
     finance ? supabase.from('supplier_balances').select('balance_due, unallocated_advance') : null,
-    supabase.from('technician_balances').select('balance_due'),
+    finance ? supabase.from('technician_balances').select('balance_due') : null,
     finance ? supabase.from('custody_balances').select('remaining').eq('is_closed', false) : null,
   ])
   for (const r of [projects, staffing, treasuries, clients, suppliers, techs, custodies]) if (r?.error) throw r.error
@@ -28,7 +28,7 @@ async function load(finance: boolean) {
     clientDue: sum((clients?.data ?? []).map((c) => c.total_due)),
     clientOverpaid: sum((clients?.data ?? []).map((c) => c.total_overpaid_on_projects)),
     supplierDue: sum((suppliers?.data ?? []).map((s) => Math.max(Number(s.balance_due), 0))),
-    techDue: sum((techs.data ?? []).map((t) => Math.max(Number(t.balance_due), 0))),
+    techDue: sum((techs?.data ?? []).map((t) => Math.max(Number(t.balance_due), 0))),
     openCustodies: custodies?.data?.length ?? 0,
   }
 }
@@ -89,7 +89,7 @@ export function DashboardPage() {
         {finance && <StatCard icon={Landmark} label="إجمالي الخزائن" value={<Money value={sum(data.treasuries.map((t) => t.balance))} />} to="/treasuries" hint={`${data.treasuries.length} خزينة وحساب`} />}
         {finance && <StatCard icon={Users} label="مستحق على الزبائن" value={<Money value={data.clientDue} />} to="/clients" tone="sand" />}
         {finance && <StatCard icon={Truck} label="مستحق للموردين" value={<Money value={data.supplierDue} />} to="/suppliers" tone="blue" />}
-        <StatCard icon={Wrench} label="مستحق للفنيين" value={<Money value={data.techDue} />} to="/technicians" tone="blue" />
+        {finance && <StatCard icon={Wrench} label="مستحق للفنيين" value={<Money value={data.techDue} />} to="/technicians" tone="blue" />}
         <StatCard icon={Building2} label="مشاريع قائمة" value={<span className="num">{data.projects.length}</span>} to="/projects/contracting" />
       </div>
 

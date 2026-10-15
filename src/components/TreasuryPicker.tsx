@@ -46,11 +46,11 @@ export function TreasuryPicker({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label={`${label} الرئيسية`} required={required} error={!value ? error : null} hint={domain ? `خزائن قطاع ${domainLabels[domain]} فقط` : undefined}>
+      <Field label={`${label} الرئيسية`} required={required} error={error} hint={domain ? `خزائن قطاع ${domainLabels[domain]} فقط` : undefined}>
         <Select
           value={root}
           disabled={isLoading}
-          aria-invalid={Boolean(error && !value)}
+          aria-invalid={Boolean(error)}
           onChange={(e) => {
             const r = e.target.value
             setRoot(r)
@@ -67,7 +67,7 @@ export function TreasuryPicker({
         </Select>
       </Field>
       <Field label="الحساب / الفرع" required={required}>
-        <Select value={value} disabled={!root} onChange={(e) => onChange(e.target.value)} aria-invalid={Boolean(error && !value)}>
+        <Select value={value} disabled={!root} onChange={(e) => onChange(e.target.value)} aria-invalid={Boolean(error)}>
           <option value="">{root ? '— اختر الحساب —' : 'اختر الرئيسية أولاً'}</option>
           {branches.map((t) => (
             <option key={t.id} value={t.id}>

@@ -44,10 +44,10 @@ export const navSections: NavSection[] = [
     items: [
       { path: '/treasuries', label: 'الخزائن والحسابات', icon: Landmark, roles: FIN, keywords: 'الخزينة البنك' },
       { path: '/receipts', label: 'إيصالات المقبوضات', icon: Banknote, roles: FIN, keywords: 'القبض الدفعات التسديد' },
-      { path: '/purchases', label: 'مركز الفواتير', icon: ShoppingCart, roles: FIN, stage: 'ج', keywords: 'المشتريات السداد' },
-      { path: '/expenses', label: 'المصروفات العامة', icon: Receipt, roles: FIN, stage: 'ج' },
-      { path: '/transfers', label: 'التحويلات', icon: ArrowLeftRight, roles: FIN, stage: 'ج' },
-      { path: '/custodies', label: 'العهد المالية', icon: Wallet, roles: FIN, stage: 'ج' },
+      { path: '/purchases', label: 'مركز الفواتير', icon: ShoppingCart, roles: FIN, keywords: 'المشتريات السداد الموردين سند صرف' },
+      { path: '/expenses', label: 'المصروفات العامة', icon: Receipt, roles: FIN, keywords: 'مصروف' },
+      { path: '/transfers', label: 'التحويلات', icon: ArrowLeftRight, roles: FIN, keywords: 'تحويل' },
+      { path: '/custodies', label: 'العهد المالية', icon: Wallet, roles: FIN, keywords: 'عهدة' },
     ],
   },
   {

@@ -7,7 +7,8 @@ import { errorMessage, supabase } from '@/lib/supabase'
 import { formatDate, formatMoney } from '@/lib/format'
 import { contractStatusLabels, paymentMethodLabels } from '@/lib/labels'
 import { AmountBox, InfoGrid, PrintDocument, PrintSection, PrintTable, Signatures } from './PrintDocument'
-import { ensurePrintFont, resolvePrintSettings, type Company } from './printSettings'
+import { ensurePrintFont, resolvePrintSettings } from './printSettings'
+import { financeLoaders, type Loader } from './financeDocs'
 
 // صفحة طباعة مستقلة (بلا شريط جانبي): /print/:kind/:id  — ?auto=1 يفتح نافذة الطباعة مباشرة
 export default function PrintPage() {
@@ -21,7 +22,8 @@ export default function PrintPage() {
       return data
     },
   })
-  const doc = useQuery({ queryKey: ['print', kind, id], queryFn: () => loaders[kind]?.(id) ?? Promise.reject(new Error('نوع مستند غير معروف')) })
+  const all = { ...loaders, ...financeLoaders }
+  const doc = useQuery({ queryKey: ['print', kind, id, params.toString()], queryFn: () => all[kind]?.(id, params) ?? Promise.reject(new Error('نوع مستند غير معروف')) })
   const settings = resolvePrintSettings(company.data)
 
   useEffect(() => ensurePrintFont(settings.print_font_family), [settings.print_font_family])
@@ -62,9 +64,7 @@ export default function PrintPage() {
   )
 }
 
-type Loaded = { title: string; number?: string; render: (company: Company, s: ReturnType<typeof resolvePrintSettings>) => React.ReactNode }
-
-const loaders: Record<string, (id: string) => Promise<Loaded>> = {
+const loaders: Record<string, Loader> = {
   // ───────────── سند قبض من زبون ─────────────
   async receipt(id) {
     const { data: r, error } = await supabase

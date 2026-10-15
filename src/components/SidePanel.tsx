@@ -40,7 +40,12 @@ export function SidePanel({
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    // عند تراكب لوحتين يُغلق Escape العليا فقط
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const panels = document.querySelectorAll('aside.side-panel')
+      if (panels[panels.length - 1] === panelRef.current) close()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })

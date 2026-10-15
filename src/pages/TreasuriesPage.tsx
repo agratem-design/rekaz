@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Building, Landmark, Pencil, Plus, ScrollText, Wallet } from 'lucide-react'
+import { Banknote, Building, Landmark, Pencil, Plus, Printer, ScrollText, Wallet } from 'lucide-react'
+import { openPrint, sourcePrintKind } from '@/print/open'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
@@ -311,44 +312,98 @@ function Statement({ treasuryId }: { treasuryId: string }) {
       return data
     },
   })
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [source, setSource] = useState('')
   if (isLoading) return <Spinner />
   if (error) return <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />
   if (!data?.length) return <EmptyState icon={ScrollText} title="لا توجد حركات" />
+  // الرصيد بعد كل حركة يُحسب على كل الحركات، ثم تُطبَّق الفلاتر على العرض
   let running = 0
   const lines = data.map((e) => {
     const signed = e.direction === 'in' ? Number(e.amount) : -Number(e.amount)
     running += signed
     return { ...e, signed, running }
   })
+  const opening = from ? lines.filter((l) => l.entry_date < from).reduce((a, l) => a + l.signed, 0) : 0
+  const shown = lines.filter((l) => (!from || l.entry_date >= from) && (!to || l.entry_date <= to) && (!source || l.source_type === source))
+  const sources = [...new Set(lines.map((l) => l.source_type))]
+  const totalIn = shown.filter((l) => l.signed > 0).reduce((a, l) => a + l.signed, 0)
+  const totalOut = shown.filter((l) => l.signed < 0).reduce((a, l) => a - l.signed, 0)
   return (
-    <div className="-mx-5 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-surface-2 text-xs text-muted">
-          <tr>
-            <th className="px-5 py-2 text-right font-semibold">التاريخ</th>
-            <th className="py-2 text-right font-semibold">البيان</th>
-            <th className="py-2 text-left font-semibold">المبلغ</th>
-            <th className="px-5 py-2 text-left font-semibold">الرصيد</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.reverse().map((e) => (
-            <tr key={e.id} className="border-t border-line align-top">
-              <td className="num px-5 py-2.5 whitespace-nowrap text-muted">{formatDate(e.entry_date)}</td>
-              <td className="py-2.5">
-                {sourceLabels[e.source_type] ?? e.source_type}
-                {e.memo && e.memo !== sourceLabels[e.source_type] && <div className="text-xs text-muted">{e.memo}</div>}
-              </td>
-              <td className="py-2.5 text-left">
-                <Money value={e.signed} signed className={e.signed > 0 ? 'text-emerald-700 dark:text-emerald-400' : undefined} />
-              </td>
-              <td className="px-5 py-2.5 text-left">
-                <Money value={e.running} />
-              </td>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="من تاريخ">
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label="إلى تاريخ">
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+        <Field label="نوع الحركة" className="col-span-2">
+          <Select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">كل الحركات</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {sourceLabels[s] ?? s}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg bg-surface-2 px-4 py-2 text-sm">
+        {from && (
+          <span>
+            رصيد أول المدة <Money value={opening} className="font-semibold" />
+          </span>
+        )}
+        <span>
+          وارد <Money value={totalIn} className="font-semibold text-emerald-700 dark:text-emerald-400" />
+        </span>
+        <span>
+          صادر <Money value={totalOut} className="font-semibold" />
+        </span>
+        <Button variant="ghost" size="sm" className="ms-auto" onClick={() => openPrint('treasury-statement', treasuryId, false, { ...(from && { from }), ...(to && { to }), ...(source && { source }) })}>
+          <Printer className="size-3.5" />
+          طباعة الكشف
+        </Button>
+      </div>
+      <div className="-mx-5 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-surface-2 text-xs text-muted">
+            <tr>
+              <th className="px-5 py-2 text-right font-semibold">التاريخ</th>
+              <th className="py-2 text-right font-semibold">البيان</th>
+              <th className="py-2 text-left font-semibold">المبلغ</th>
+              <th className="px-5 py-2 text-left font-semibold">الرصيد</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {[...shown].reverse().map((e) => (
+              <tr key={e.id} className="border-t border-line align-top">
+                <td className="num px-5 py-2.5 whitespace-nowrap text-muted">{formatDate(e.entry_date)}</td>
+                <td className="py-2.5">
+                  {sourcePrintKind[e.source_type] ? (
+                    <button type="button" className="text-right hover:text-brand-700 hover:underline dark:hover:text-brand-300" title="عرض المستند المصدر" onClick={() => openPrint(sourcePrintKind[e.source_type], e.source_id)}>
+                      {sourceLabels[e.source_type] ?? e.source_type}
+                    </button>
+                  ) : (
+                    (sourceLabels[e.source_type] ?? e.source_type)
+                  )}
+                  {e.reverses_entry_id && <span className="ms-1 text-xs text-red-600">(قيد عكسي)</span>}
+                  {e.memo && e.memo !== sourceLabels[e.source_type] && <div className="text-xs text-muted">{e.memo}</div>}
+                </td>
+                <td className="py-2.5 text-left">
+                  <Money value={e.signed} signed className={e.signed > 0 ? 'text-emerald-700 dark:text-emerald-400' : undefined} />
+                </td>
+                <td className="px-5 py-2.5 text-left">
+                  <Money value={e.running} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!shown.length && <EmptyState title="لا توجد حركات مطابقة" />}
+      </div>
     </div>
   )
 }

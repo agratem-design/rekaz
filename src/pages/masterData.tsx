@@ -6,7 +6,7 @@ import { formatMoney } from '@/lib/format'
 import { options, rateUnitLabels } from '@/lib/labels'
 import type { AppRole } from '@/lib/supabase'
 import { openPrint } from '@/print/open'
-import { useClientBalanceMap } from './clients/clientData'
+import { useBalanceMap, useClientBalanceMap } from './clients/clientData'
 
 function ClientStats({ rows }: { rows: Row[] }) {
   const { hasRole } = useAuth()
@@ -114,7 +114,29 @@ export const configs: Record<string, CrudConfig> = {
     singular: 'مورد',
     icon: Truck,
     avatar: true,
-    columns: [{ key: 'name', label: 'الاسم' }, { key: 'category', label: 'المجال' }, phone],
+    columns: [
+      { key: 'name', label: 'الاسم' },
+      { key: 'category', label: 'المجال', hideBelow: 'md' },
+      phone,
+      { key: 'invoiced', label: 'الفواتير', align: 'end', hideBelow: 'md', render: (r) => (r.invoiced === undefined ? <span className="text-faint">—</span> : <Money value={Number(r.invoiced) - Number(r.returned ?? 0)} />) },
+      { key: 'paid', label: 'المدفوع', align: 'end', hideBelow: 'sm', render: (r) => (r.paid === undefined ? <span className="text-faint">—</span> : <Money value={r.paid as number} />) },
+      {
+        key: 'balance_due',
+        label: 'المستحق',
+        align: 'end',
+        render: (r) =>
+          r.balance_due === undefined ? (
+            <span className="text-faint">—</span>
+          ) : (
+            <span className="inline-flex flex-col items-end">
+              <Money value={Math.max(Number(r.balance_due), 0)} className={Number(r.balance_due) > 0 ? 'font-semibold text-red-700 dark:text-red-400' : 'text-muted'} />
+              {Number(r.unallocated_advance) > 0 && <span className="text-[10px] text-sand-600">مقدم {formatMoney(r.unallocated_advance as number)}</span>}
+            </span>
+          ),
+      },
+    ],
+    useExtra: () => useBalanceMap('supplier_balances', 'supplier_id'),
+    detailPath: (r) => `/suppliers/${r.id}`,
     fields: [
       { key: 'name', label: 'اسم المورد', required: true, section: 'البيانات الأساسية' },
       { key: 'category', label: 'المجال', hint: 'مثل: حديد، إسمنت، كهرباء', section: 'البيانات الأساسية' },
@@ -149,8 +171,27 @@ export const configs: Record<string, CrudConfig> = {
             <span className="text-faint">—</span>
           ),
       },
+      {
+        key: 'balance_due',
+        label: 'المتبقي للفني',
+        align: 'end',
+        hideBelow: 'sm',
+        render: (r) =>
+          r.balance_due === undefined ? (
+            <span className="text-faint">—</span>
+          ) : Number(r.balance_due) < 0 ? (
+            <span className="inline-flex flex-col items-end">
+              <Money value={-Number(r.balance_due)} className="text-sand-600" />
+              <span className="text-[10px] text-sand-600">مقدم عنده</span>
+            </span>
+          ) : (
+            <Money value={r.balance_due as number} className={Number(r.balance_due) > 0 ? 'font-semibold text-red-700 dark:text-red-400' : 'text-muted'} />
+          ),
+      },
       active,
     ],
+    useExtra: () => useBalanceMap('technician_balances', 'technician_id'),
+    detailPath: (r) => `/technicians/${r.id}`,
     fields: [
       { key: 'name', label: 'اسم الفني', required: true, section: 'البيانات الأساسية' },
       { key: 'technician_type_id', label: 'التخصص', lookup: 'technician_types', section: 'البيانات الأساسية' },

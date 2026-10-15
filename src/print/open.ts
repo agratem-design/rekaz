@@ -1,5 +1,20 @@
 // يفتح مستند الطباعة في تبويب جديد (الجلسة محفوظة فلا يُطلب الدخول مجدداً)
-export function openPrint(kind: 'receipt' | 'contract' | string, id: string, auto = false) {
+export function openPrint(kind: string, id: string, auto = false, params?: Record<string, string>) {
   const base = `${window.location.origin}${window.location.pathname}`
-  window.open(`${base}#/print/${kind}/${id}${auto ? '?auto=1' : ''}`, '_blank', 'noopener')
+  const q = new URLSearchParams(params)
+  if (auto) q.set('auto', '1')
+  const qs = q.toString()
+  window.open(`${base}#/print/${kind}/${id}${qs ? `?${qs}` : ''}`, '_blank', 'noopener')
+}
+
+// المستند المصدر لكل حركة خزينة
+export const sourcePrintKind: Record<string, string> = {
+  client_receipt: 'receipt',
+  supplier_payment: 'supplier-payment',
+  technician_payment: 'technician-payment',
+  technician_deposit: 'technician-receipt',
+  expense: 'expense',
+  transfer: 'transfer',
+  custody_issue: 'custody',
+  custody_return: 'custody-return',
 }

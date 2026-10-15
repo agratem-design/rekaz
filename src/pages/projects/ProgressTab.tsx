@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, TrendingUp } from 'lucide-react'
+import { Hammer, Save, TrendingUp } from 'lucide-react'
+import { WorkForm } from '../technicians/TechForms'
+import { WorkTable } from '../technicians/WorkTable'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable } from '@/components/DataTable'
@@ -22,6 +24,7 @@ export function ProgressTab({ project }: { project: ProjectDetail }) {
     },
   })
   const [draft, setDraft] = useState<Record<string, string>>({})
+  const [work, setWork] = useState(false)
   useEffect(() => setDraft({}), [items.data])
 
   const changed = Object.entries(draft).filter(([id, v]) => {
@@ -106,6 +109,18 @@ export function ProgressTab({ project }: { project: ProjectDetail }) {
           { key: 'earned', label: 'القيمة المكتسبة', align: 'end', render: (i) => <Money value={(Number(i.total_price) * value(i.id, Number(i.progress))) / 100} /> },
         ]}
       />
+      <div className="flex items-center justify-between pt-2">
+        <div>
+          <h3 className="font-semibold">الفنيون والإنجاز</h3>
+          <p className="text-xs text-muted">إنجاز الفنيين هو مصدر مستحقاتهم وتكلفة العمالة على البنود</p>
+        </div>
+        <Button variant="soft" onClick={() => setWork(true)}>
+          <Hammer className="size-4" />
+          تسجيل إنجاز فني
+        </Button>
+      </div>
+      <WorkTable projectId={project.id} onNew={() => setWork(true)} />
+      <WorkForm open={work} projectId={project.id} onClose={() => setWork(false)} />
     </div>
   )
 }

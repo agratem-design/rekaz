@@ -24,6 +24,12 @@ const ClientDetailPage = lazy(() => named(import('./pages/clients/ClientDetailPa
 const SettingsPage = lazy(() => named(import('./pages/SettingsPage'), 'SettingsPage'))
 const UsersPage = lazy(() => named(import('./pages/UsersPage'), 'UsersPage'))
 const AuditPage = lazy(() => named(import('./pages/AuditPage'), 'AuditPage'))
+const PurchasesPage = lazy(() => named(import('./pages/purchases/PurchasesPage'), 'PurchasesPage'))
+const ExpensesPage = lazy(() => named(import('./pages/expenses/ExpensesPage'), 'ExpensesPage'))
+const TransfersPage = lazy(() => named(import('./pages/TransfersPage'), 'TransfersPage'))
+const CustodiesPage = lazy(() => named(import('./pages/CustodiesPage'), 'CustodiesPage'))
+const SupplierDetailPage = lazy(() => named(import('./pages/suppliers/SupplierDetailPage'), 'SupplierDetailPage'))
+const TechnicianDetailPage = lazy(() => named(import('./pages/technicians/TechnicianDetailPage'), 'TechnicianDetailPage'))
 
 const pages: Record<string, React.ComponentType> = {
   '/': DashboardPage,
@@ -31,6 +37,10 @@ const pages: Record<string, React.ComponentType> = {
   '/projects/finishing': () => <ProjectsPage key="finishing" type="finishing" />,
   '/contracts': ContractsPage,
   '/receipts': ReceiptsPage,
+  '/purchases': PurchasesPage,
+  '/expenses': ExpensesPage,
+  '/transfers': TransfersPage,
+  '/custodies': CustodiesPage,
   '/clients': ClientsListPage,
   '/suppliers': SuppliersPage,
   '/technicians': TechniciansPage,
@@ -111,6 +121,8 @@ export default function App() {
         })}
         <Route path="/projects/:id/:tab?" element={<ProjectWorkspace />} />
         <Route path="/clients/:id" element={<ClientDetailPage />} />
+        <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
+        <Route path="/technicians/:id" element={<TechnicianDetailPage />} />
         <Route path="*" element={<ComingSoonPage />} />
       </Route>
     </Routes>

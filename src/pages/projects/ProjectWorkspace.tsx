@@ -16,6 +16,7 @@ import { OverviewTab } from './OverviewTab'
 import { PhasesTab } from './PhasesTab'
 import { ItemsTab } from './ItemsTab'
 import { ProgressTab } from './ProgressTab'
+import { ProjectExpensesTab, ProjectPurchasesTab } from './ProjectFinanceTabs'
 
 // مساحة عمل المشروع بتبويبات ثابتة بنفس ترتيب النظام السابق
 export function ProjectWorkspace() {
@@ -59,8 +60,8 @@ export function ProjectWorkspace() {
     { key: '', label: 'لوحة المشروع', icon: FolderKanban },
     ...(contracting ? [{ key: 'items', label: 'بنود المقايسة', icon: Package }] : []),
     { key: 'phases', label: 'المراحل', icon: Layers },
-    { key: 'purchases', label: contracting ? 'المشتريات' : 'المشتريات والخدمات', icon: ShoppingCart, muted: true },
-    { key: 'expenses', label: 'المصروفات', icon: Coins, muted: true },
+    { key: 'purchases', label: contracting ? 'المشتريات' : 'المشتريات والخدمات', icon: ShoppingCart },
+    { key: 'expenses', label: 'المصروفات', icon: Coins },
     ...(finance ? [{ key: 'payments', label: 'إيصالات القبض', icon: Receipt }] : []),
     ...(contracting ? [{ key: 'progress', label: 'نسب الإنجاز', icon: TrendingUp }] : []),
     { key: 'contracts', label: 'العقود', icon: FileSignature },
@@ -123,8 +124,8 @@ export function ProjectWorkspace() {
         {active === '' && <OverviewTab p={p} onReceipt={() => setReceipt(true)} />}
         {active === 'items' && <ItemsTab project={p} />}
         {active === 'phases' && <PhasesTab project={p} />}
-        {active === 'purchases' && <StageNotice stage="ج" title="المشتريات تُبنى في المرحلة التالية" />}
-        {active === 'expenses' && <StageNotice stage="ج" title="المصروفات تُبنى في المرحلة التالية" />}
+        {active === 'purchases' && <ProjectPurchasesTab project={p} />}
+        {active === 'expenses' && <ProjectExpensesTab project={p} />}
         {active === 'payments' && <ReceiptsTable projectId={p.id} onNew={() => setReceipt(true)} />}
         {active === 'progress' && <ProgressTab project={p} />}
         {active === 'contracts' && <ContractsList project={p} />}
