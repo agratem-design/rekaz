@@ -31,6 +31,7 @@ const CustodiesPage = lazy(() => named(import('./pages/CustodiesPage'), 'Custodi
 const SupplierDetailPage = lazy(() => named(import('./pages/suppliers/SupplierDetailPage'), 'SupplierDetailPage'))
 const EmployeeDetailPage = lazy(() => named(import('./pages/PeoplePages'), 'EmployeeDetailPage'))
 const EngineerDetailPage = lazy(() => named(import('./pages/PeoplePages'), 'EngineerDetailPage'))
+const ReportsPage = lazy(() => named(import('./pages/ReportsPage'), 'ReportsPage'))
 const TechnicianDetailPage = lazy(() => named(import('./pages/technicians/TechnicianDetailPage'), 'TechnicianDetailPage'))
 
 const pages: Record<string, React.ComponentType> = {
@@ -43,6 +44,7 @@ const pages: Record<string, React.ComponentType> = {
   '/expenses': ExpensesPage,
   '/transfers': TransfersPage,
   '/custodies': CustodiesPage,
+  '/reports': ReportsPage,
   '/clients': ClientsListPage,
   '/suppliers': SuppliersPage,
   '/technicians': TechniciansPage,

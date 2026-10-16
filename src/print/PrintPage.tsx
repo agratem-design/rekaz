@@ -9,6 +9,7 @@ import { contractStatusLabels, paymentMethodLabels } from '@/lib/labels'
 import { AmountBox, InfoGrid, PrintDocument, PrintSection, PrintTable, Signatures } from './PrintDocument'
 import { ensurePrintFont, resolvePrintSettings } from './printSettings'
 import { financeLoaders, type Loader } from './financeDocs'
+import { reportLoaders } from './reportDocs'
 
 // صفحة طباعة مستقلة (بلا شريط جانبي): /print/:kind/:id  — ?auto=1 يفتح نافذة الطباعة مباشرة
 export default function PrintPage() {
@@ -22,7 +23,7 @@ export default function PrintPage() {
       return data
     },
   })
-  const all = { ...loaders, ...financeLoaders }
+  const all = { ...loaders, ...financeLoaders, ...reportLoaders }
   const doc = useQuery({ queryKey: ['print', kind, id, params.toString()], queryFn: () => all[kind]?.(id, params) ?? Promise.reject(new Error('نوع مستند غير معروف')) })
   const settings = resolvePrintSettings(company.data)
 

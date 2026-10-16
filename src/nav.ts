@@ -64,7 +64,7 @@ export const navSections: NavSection[] = [
   {
     title: 'التقارير والإدارة',
     items: [
-      { path: '/reports', label: 'التقارير', icon: FileText, stage: 'هـ' },
+      { path: '/reports', label: 'التقارير', icon: FileText, roles: FIN, keywords: 'كشف تقرير ربحية ديون' },
       { path: '/users', label: 'إدارة المستخدمين', icon: ClipboardList, roles: ['admin'], keywords: 'الصلاحيات' },
       { path: '/audit', label: 'سجل التعديلات والرقابة', icon: ScrollText, roles: ['admin'], keywords: 'سجل العمليات' },
       { path: '/settings', label: 'الإعدادات', icon: Settings, roles: ['admin'], keywords: 'تصميم الطباعة الهوية' },
