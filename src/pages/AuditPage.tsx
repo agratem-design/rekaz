@@ -19,7 +19,7 @@ export const tableLabels: Record<string, string> = {
   treasuries: 'الخزائن',
   projects: 'المشاريع',
   project_phases: 'المراحل',
-  project_items: 'بنود المقايسة',
+  project_items: 'بنود المقاولات',
   project_item_assignments: 'تعيينات الفنيين',
   catalog_items: 'البنود العامة',
   measurement_units: 'وحدات القياس',

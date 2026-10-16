@@ -34,7 +34,7 @@ export function useCatalog() {
   })
 }
 
-// بند مقايسة: من بند عام أو جديد، بالوحدة وأبعادها (طول×عرض×ارتفاع) أو كمية مباشرة
+// بند مقاولات: من بند عام أو جديد، بالوحدة وأبعادها (طول×عرض×ارتفاع) أو كمية مباشرة
 export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrder }: { open: boolean; onClose: () => void; projectId: string; item: Item | null; defaultPhase?: string; nextOrder: number }) {
   const qc = useQueryClient()
   const units = useUnits()
@@ -133,7 +133,7 @@ export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrd
     <SidePanel
       open={open}
       size="lg"
-      title={item ? 'تعديل بند' : 'بند مقايسة جديد'}
+      title={item ? 'تعديل بند' : 'بند مقاولات جديد'}
       description={item?.name}
       dirty={dirty}
       onClose={onClose}

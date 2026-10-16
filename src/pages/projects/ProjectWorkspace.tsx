@@ -59,7 +59,7 @@ export function ProjectWorkspace() {
   const listPath = `/projects/${p.project_type}`
   const tabs = [
     { key: '', label: 'لوحة المشروع', icon: FolderKanban },
-    ...(contracting ? [{ key: 'items', label: 'بنود المقايسة', icon: Package }] : []),
+    ...(contracting ? [{ key: 'items', label: 'بنود المقاولات', icon: Package }] : []),
     { key: 'phases', label: 'المراحل', icon: Layers },
     { key: 'purchases', label: contracting ? 'المشتريات' : 'المشتريات والخدمات', icon: ShoppingCart },
     { key: 'expenses', label: 'المصروفات', icon: Coins },

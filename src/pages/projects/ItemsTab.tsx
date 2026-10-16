@@ -1,16 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRightLeft, Package, PackagePlus, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { ArrowRightLeft, FileText, Layers, Package, PackagePlus, Pencil, Plus, Printer, Trash2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
-import { DataTable } from '@/components/DataTable'
 import { ask } from '@/components/dialog'
-import { Badge, Button, EmptyState, FilterChips, Money, ProgressBar, StatCard } from '@/components/ui'
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Money, ProgressBar, TableSkeleton, cn } from '@/components/ui'
 import { formatMoney } from '@/lib/format'
+import { phaseStatusLabels, phaseStatusTone } from '@/lib/labels'
 import { usePhases, useUnits, type ProjectDetail } from '@/lib/queries'
 import { errorMessage, supabase } from '@/lib/supabase'
+import { openPrint } from '@/print/open'
 import { ItemForm, type Item } from './ItemForm'
 import { ImportCatalogModal, MovePhaseModal, StaffingPanel } from './ItemDialogs'
+import { QuickAddRow } from './QuickAddRow'
+
+// بنود المقاولات منظمة بالمراحل: لكل مرحلة فاتورة بنود مقاولات خاصة بها ومجموعها.
+// الإضافة من داخل المرحلة تأخذ المرحلة تلقائياً، مع سطر إضافة سريعة بلوحة المفاتيح.
+const ALL = 'all'
+const NONE = 'none'
+
+function readPhase(projectId: string) {
+  try {
+    return localStorage.getItem(`boq-phase-${projectId}`) ?? ''
+  } catch {
+    return ''
+  }
+}
 
 export function ItemsTab({ project }: { project: ProjectDetail }) {
   const { hasRole } = useAuth()
@@ -30,32 +45,51 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
     queryKey: ['project_item_staffing', project.id, (items.data ?? []).length],
     enabled: Boolean(items.data?.length),
     queryFn: async () => {
-      const { data, error } = await supabase.from('project_item_staffing').select('*').in('project_item_id', items.data!.map((i) => i.id))
+      const { data, error } = await supabase.from('project_item_staffing').select('*').in('project_item_id', items.data!.filter((i) => !i.id.startsWith('temp-')).map((i) => i.id))
       if (error) throw error
       return data
     },
   })
 
-  const [phase, setPhase] = useState('all')
+  const [phase, setPhaseState] = useState(() => readPhase(project.id))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Item | 'new' | null>(null)
   const [importing, setImporting] = useState(false)
   const [moving, setMoving] = useState<string[] | null>(null)
   const [staffFor, setStaffFor] = useState<Item | null>(null)
 
+  const all = useMemo(() => items.data ?? [], [items.data])
+  const phaseList = phases.data ?? []
+  const hasUnphased = all.some((i) => !i.phase_id)
+
+  // اختيار المرحلة: المحفوظة إن وُجدت، وإلا أول مرحلة، وإلا «كل المشروع»
+  useEffect(() => {
+    if (!phases.data) return
+    const valid = phase === ALL || (phase === NONE && hasUnphased) || phaseList.some((p) => p.id === phase)
+    if (!valid) setPhaseState(phaseList[0]?.id ?? (hasUnphased ? NONE : ALL))
+  }, [phases.data, hasUnphased]) // eslint-disable-line react-hooks/exhaustive-deps
+  const setPhase = (v: string) => {
+    setPhaseState(v)
+    setSelected(new Set())
+    try {
+      localStorage.setItem(`boq-phase-${project.id}`, v)
+    } catch {
+      /* التخزين غير متاح */
+    }
+  }
+
   const unitSym = useMemo(() => new Map((units.data ?? []).map((u) => [u.id, u.symbol])), [units.data])
-  const phaseName = useMemo(() => new Map((phases.data ?? []).map((p) => [p.id, p])), [phases.data])
   const missingByItem = useMemo(() => {
     const m = new Map<string, number>()
     for (const s of staffing.data ?? []) m.set(s.project_item_id!, (m.get(s.project_item_id!) ?? 0) + Number(s.missing_count))
     return m
   }, [staffing.data])
-
-  const all = items.data ?? []
-  const shown = all.filter((i) => phase === 'all' || (phase === 'none' ? !i.phase_id : i.phase_id === phase))
-  const total = shown.reduce((a, i) => a + Number(i.total_price), 0)
-  const earned = shown.reduce((a, i) => a + (Number(i.total_price) * Number(i.progress)) / 100, 0)
+  const inPhase = (pid: string) => all.filter((i) => (pid === NONE ? !i.phase_id : i.phase_id === pid))
+  const sum = (xs: Item[]) => xs.reduce((a, i) => a + Number(i.total_price), 0)
+  const earnedOf = (xs: Item[]) => xs.reduce((a, i) => a + (Number(i.total_price) * Number(i.progress)) / 100, 0)
   const nextOrder = all.reduce((m, i) => Math.max(m, i.order_index), 0) + 1
+  const currentPhase = phaseList.find((p) => p.id === phase)
+  const phaseIdForAdd = phase === ALL || phase === NONE ? null : phase
 
   const del = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -73,7 +107,6 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
       for (const k of ['project_items', 'project', 'project_financials', 'project_item_staffing']) qc.invalidateQueries({ queryKey: [k] })
     },
   })
-
   const confirmDelete = async (ids: string[]) => {
     const names = ids.map((id) => all.find((i) => i.id === id)?.name).filter(Boolean)
     const ok = await ask({
@@ -84,6 +117,54 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
     if (ok) del.mutate(ids)
   }
 
+  // مرحلة جديدة من داخل التبويب
+  const [newPhase, setNewPhase] = useState('')
+  const addPhase = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase
+        .from('project_phases')
+        .insert({ project_id: project.id, name: newPhase.trim(), order_index: phaseList.length + 1 })
+        .select('id')
+        .single()
+      if (error) throw error
+      return data.id
+    },
+    onSuccess: async (id) => {
+      setNewPhase('')
+      await qc.invalidateQueries({ queryKey: ['project_phases', project.id] })
+      setPhase(id)
+      toast.success('تمت إضافة المرحلة')
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  })
+
+  if (items.isLoading || phases.isLoading) return <Card className="p-0"><TableSkeleton /></Card>
+  if (items.error) return <ErrorState message={errorMessage(items.error)} onRetry={() => items.refetch()} />
+
+  const railItem = (key: string, label: React.ReactNode, sub: React.ReactNode, count: number, total: number) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => setPhase(key)}
+      aria-current={phase === key ? 'true' : undefined}
+      className={cn(
+        'w-full rounded-lg border px-3 py-2.5 text-right transition',
+        phase === key ? 'border-brand-400 bg-accent-soft shadow-sm dark:border-sand-500' : 'border-transparent hover:border-line hover:bg-surface-2',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium">{label}</span>
+        <span className="num shrink-0 rounded-full bg-surface-2 px-1.5 text-[11px] text-muted ring-1 ring-line">{count}</span>
+      </div>
+      <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted">
+        <span className="truncate">{sub}</span>
+        <Money value={total} className="text-ink" />
+      </div>
+    </button>
+  )
+
+  const shown = phase === ALL ? all : inPhase(phase)
+  const allChecked = shown.length > 0 && shown.every((i) => selected.has(i.id))
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s)
@@ -91,169 +172,290 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
       else n.add(id)
       return n
     })
-  const allChecked = shown.length > 0 && shown.every((i) => selected.has(i.id))
-
-  const phaseOpts = [
-    { value: 'all', label: 'كل البنود', count: all.length },
-    ...(phases.data ?? []).map((p) => ({ value: p.id, label: p.name, count: all.filter((i) => i.phase_id === p.id).length })),
-    ...(all.some((i) => !i.phase_id) ? [{ value: 'none', label: 'بلا مرحلة', count: all.filter((i) => !i.phase_id).length }] : []),
-  ]
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-        <StatCard icon={Package} label="عدد البنود" value={<span className="num">{shown.length}</span>} />
-        <StatCard icon={Package} label="قيمة البنود" value={<Money value={total} />} tone="blue" />
-        <StatCard icon={Package} label="القيمة المكتسبة" value={<Money value={earned} />} hint={total ? `${((earned / total) * 100).toFixed(1)}% من القيمة` : undefined} tone="sand" />
-        <StatCard icon={Package} label="ميزانية المشروع" value={project.budget ? <Money value={project.budget} /> : <span className="text-base text-faint">بلا ميزانية</span>} />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterChips value={phase} onChange={(v) => (setPhase(v), setSelected(new Set()))} options={phaseOpts} />
-        {canWrite && (
-          <div className="ms-auto flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setImporting(true)}>
-              <PackagePlus className="size-4" />
-              استيراد من البنود العامة
-            </Button>
-            <Button onClick={() => setEditing('new')}>
-              <Plus className="size-4" />
-              بند جديد
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {selected.size > 0 && canWrite && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-accent-soft px-4 py-2 text-sm dark:border-brand-800">
-          <span>
-            تم تحديد <span className="num font-semibold">{selected.size}</span> بند
-          </span>
-          <Button size="sm" variant="secondary" onClick={() => setMoving([...selected])}>
-            <ArrowRightLeft className="size-3.5" />
-            نقل المحدد
-          </Button>
-          <Button size="sm" variant="secondary" className="text-red-600" onClick={() => confirmDelete([...selected])}>
-            <Trash2 className="size-3.5" />
-            حذف المحدد
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-            إلغاء التحديد
-          </Button>
+    <div className="grid gap-4 lg:grid-cols-[17rem_1fr]">
+      {/* شريط المراحل */}
+      <aside className="space-y-1.5" aria-label="المراحل">
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-xs font-semibold text-muted">المراحل وفواتيرها</span>
+          <Money value={sum(all)} className="text-xs font-semibold" />
         </div>
-      )}
-
-      <DataTable
-        rows={shown}
-        getKey={(i) => i.id}
-        loading={items.isLoading}
-        error={items.error ? errorMessage(items.error) : null}
-        onRetry={() => items.refetch()}
-        onRowClick={canWrite ? (i) => setEditing(i) : undefined}
-        rowClassName={(i) => selected.has(i.id) && 'bg-accent-soft/50'}
-        empty={
-          <EmptyState
-            icon={Package}
-            title={phase === 'all' ? 'لم تُدرج بنود مقايسة بعد' : 'لا توجد بنود في هذه المرحلة'}
-            action={
-              canWrite && (
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setImporting(true)}>
-                    استيراد من البنود العامة
-                  </Button>
-                  <Button onClick={() => setEditing('new')}>بند جديد</Button>
-                </div>
-              )
-            }
-          >
-            أضف البنود بالكمية والسعر، أو استورد عدة بنود عامة دفعة واحدة.
-          </EmptyState>
-        }
-        columns={[
-          ...(canWrite
-            ? [
-                {
-                  key: 'sel',
-                  label: <input type="checkbox" aria-label="تحديد الكل" className="size-4 accent-brand-600" checked={allChecked} onChange={() => setSelected(allChecked ? new Set() : new Set(shown.map((i) => i.id)))} />,
-                  className: 'w-10',
-                  render: (i: Item) => <input type="checkbox" aria-label={`تحديد ${i.name}`} className="size-4 accent-brand-600" checked={selected.has(i.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(i.id)} />,
-                },
-              ]
-            : []),
-          {
-            key: 'name',
-            label: 'البند',
-            render: (i) => (
-              <div>
-                <div className="font-medium">{i.name}</div>
-                <div className="flex flex-wrap gap-1.5 text-xs text-muted">
-                  {i.phase_id && <span>{phaseName.get(i.phase_id)?.name}</span>}
-                  {(missingByItem.get(i.id) ?? 0) > 0 && <Badge tone="amber">فنيون ناقصون {missingByItem.get(i.id)}</Badge>}
-                </div>
-              </div>
-            ),
-          },
-          { key: 'qty', label: 'الكمية', align: 'end', render: (i) => <span className="num whitespace-nowrap">{formatMoney(i.quantity)} <span className="text-xs text-muted">{unitSym.get(i.unit_id ?? '') ?? ''}</span></span> },
-          { key: 'price', label: 'سعر الوحدة', align: 'end', hideBelow: 'sm', render: (i) => <Money value={i.unit_price} /> },
-          { key: 'total', label: 'الإجمالي', align: 'end', render: (i) => <Money value={i.total_price} className="font-semibold" /> },
-          {
-            key: 'progress',
-            label: 'الإنجاز',
-            hideBelow: 'md',
-            render: (i) => (
-              <div className="flex min-w-24 items-center gap-2">
-                <ProgressBar value={Number(i.progress)} tone="green" />
-                <span className="num w-9 text-xs text-muted">{Number(i.progress).toFixed(0)}%</span>
-              </div>
-            ),
-          },
-        ]}
-        footer={
-          shown.length > 0 && (
-            <tr>
-              <td colSpan={canWrite ? 4 : 3} className="px-4 py-2.5 text-sm">
-                إجمالي البنود ({shown.length})
-              </td>
-              <td className="px-4 py-2.5 text-left">
-                <Money value={total} />
-              </td>
-              <td className="hidden md:table-cell" colSpan={canWrite ? 2 : 1} />
-            </tr>
-          )
-        }
-        rowActions={(i) => (
-          <>
-            <Button variant="ghost" size="icon" className="size-8" aria-label="الفنيون" title="الفنيون" onClick={() => setStaffFor(i)}>
-              <Users className="size-4" />
-            </Button>
-            {canWrite && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 lg:block lg:space-y-1.5 lg:overflow-visible [&>button]:min-w-48 lg:[&>button]:min-w-0">
+          {phaseList.map((p) =>
+            railItem(
+              p.id,
               <>
-                <Button variant="ghost" size="icon" className="size-8" aria-label="تعديل" title="تعديل" onClick={() => setEditing(i)}>
-                  <Pencil className="size-4" />
+                <span className="num text-xs text-brand-500 dark:text-sand-300">{p.reference_number}</span>
+                <span className="mx-1 text-faint">·</span>
+                {p.name}
+              </>,
+              <Badge tone={phaseStatusTone[p.status]}>{phaseStatusLabels[p.status]}</Badge>,
+              inPhase(p.id).length,
+              sum(inPhase(p.id)),
+            ),
+          )}
+          {hasUnphased && railItem(NONE, 'بنود بلا مرحلة', 'المشروع الرئيسي', inPhase(NONE).length, sum(inPhase(NONE)))}
+          {(phaseList.length > 0 || hasUnphased) && railItem(ALL, 'كل المشروع', 'مجمّعة حسب المرحلة', all.length, sum(all))}
+        </div>
+        {canWrite && (
+          <form
+            className="flex gap-1.5 pt-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (newPhase.trim()) addPhase.mutate()
+            }}
+          >
+            <Input value={newPhase} onChange={(e) => setNewPhase(e.target.value)} placeholder="مرحلة جديدة…" aria-label="اسم المرحلة الجديدة" className="h-8 text-xs" />
+            <Button type="submit" size="sm" variant="secondary" loading={addPhase.isPending} disabled={!newPhase.trim()} aria-label="إضافة مرحلة">
+              <Plus className="size-3.5" />
+            </Button>
+          </form>
+        )}
+      </aside>
+
+      <section className="min-w-0 space-y-3">
+        {/* رأس فاتورة المرحلة */}
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <span className="rounded-xl bg-brand-50 p-2.5 text-brand-600 dark:bg-brand-900/60 dark:text-sand-300">
+            {phase === ALL ? <Layers className="size-5" /> : <FileText className="size-5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs text-muted">فاتورة بنود المقاولات</div>
+            <h2 className="text-lg font-semibold">
+              {phase === ALL ? 'كل المشروع' : phase === NONE ? 'بنود بلا مرحلة' : currentPhase ? `${currentPhase.name}` : '—'}
+              {currentPhase?.reference_number && <span className="num ms-2 text-sm font-normal text-muted">رقم {currentPhase.reference_number}</span>}
+            </h2>
+          </div>
+          <div className="flex gap-5 text-sm">
+            <div>
+              <div className="text-xs text-muted">الإجمالي</div>
+              <Money value={sum(shown)} className="font-display text-lg font-semibold" />
+            </div>
+            <div className="hidden sm:block">
+              <div className="text-xs text-muted">المكتسب</div>
+              <Money value={earnedOf(shown)} className="font-display text-lg font-semibold" />
+            </div>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Button variant="secondary" size="sm" onClick={() => openPrint('boq', project.id, false, { phase })}>
+              <Printer className="size-3.5" />
+              طباعة الفاتورة
+            </Button>
+            {canWrite && phase !== ALL && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setImporting(true)}>
+                  <PackagePlus className="size-3.5" />
+                  استيراد من البنود العامة
                 </Button>
-                <Button variant="ghost" size="icon" className="size-8" aria-label="نقل إلى مرحلة" title="نقل إلى مرحلة" onClick={() => setMoving([i.id])}>
-                  <ArrowRightLeft className="size-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="size-8 hover:text-red-600" aria-label="حذف" title="حذف" onClick={() => confirmDelete([i.id])}>
-                  <Trash2 className="size-4" />
+                <Button size="sm" onClick={() => setEditing('new')}>
+                  <Plus className="size-3.5" />
+                  بند بتفاصيل
                 </Button>
               </>
             )}
-          </>
-        )}
-      />
+          </div>
+        </Card>
 
-      <ItemForm
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        projectId={project.id}
-        item={editing === 'new' ? null : editing}
-        defaultPhase={phase !== 'all' && phase !== 'none' ? phase : undefined}
-        nextOrder={nextOrder}
-      />
-      {importing && <ImportCatalogModal projectId={project.id} nextOrder={nextOrder} defaultPhase={phase !== 'all' && phase !== 'none' ? phase : undefined} onClose={() => setImporting(false)} />}
+        {selected.size > 0 && canWrite && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-accent-soft px-4 py-2 text-sm dark:border-brand-800">
+            <span>
+              تم تحديد <span className="num font-semibold">{selected.size}</span> بند
+            </span>
+            <Button size="sm" variant="secondary" onClick={() => setMoving([...selected])}>
+              <ArrowRightLeft className="size-3.5" />
+              نقل إلى مرحلة
+            </Button>
+            <Button size="sm" variant="secondary" className="text-red-600" onClick={() => confirmDelete([...selected])}>
+              <Trash2 className="size-3.5" />
+              حذف المحدد
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              إلغاء التحديد
+            </Button>
+          </div>
+        )}
+
+        {!phaseList.length && !all.length ? (
+          <Card>
+            <EmptyState icon={Layers} title="ابدأ بإضافة مرحلة" action={canWrite && <Button variant="secondary" onClick={() => setPhase(NONE)}>أو أضف بنوداً بلا مرحلة</Button>}>
+              لكل مرحلة فاتورة بنود مقاولات خاصة بها. اكتب اسم المرحلة في «مرحلة جديدة» ثم أضف بنودها.
+            </EmptyState>
+          </Card>
+        ) : phase === ALL ? (
+          <div className="space-y-4">
+            {[...phaseList.map((p) => ({ id: p.id, title: `${p.reference_number ?? ''} — ${p.name}` })), ...(hasUnphased ? [{ id: NONE, title: 'بنود بلا مرحلة' }] : [])].map((g) => {
+              const rows = inPhase(g.id)
+              if (!rows.length) return null
+              return (
+                <Card key={g.id} className="overflow-hidden p-0">
+                  <button type="button" onClick={() => setPhase(g.id)} className="flex w-full items-center justify-between border-b border-line bg-surface-2 px-4 py-2.5 text-sm font-semibold hover:text-brand-700 dark:hover:text-sand-300">
+                    <span>{g.title}</span>
+                    <span className="flex items-center gap-3">
+                      <span className="text-xs font-normal text-muted">{rows.length} بند</span>
+                      <Money value={sum(rows)} />
+                    </span>
+                  </button>
+                  <ItemsTable rows={rows} unitSym={unitSym} missing={missingByItem} canWrite={false} onOpen={canWrite ? (i) => setEditing(i) : undefined} />
+                </Card>
+              )
+            })}
+            <Card className="flex items-center justify-between px-4 py-3 font-semibold">
+              <span>إجمالي بنود المقاولات للمشروع</span>
+              <Money value={sum(all)} className="font-display text-lg" />
+            </Card>
+          </div>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <ItemsTable
+              rows={shown}
+              unitSym={unitSym}
+              missing={missingByItem}
+              canWrite={canWrite}
+              selected={selected}
+              allChecked={allChecked}
+              onToggle={toggle}
+              onToggleAll={() => setSelected(allChecked ? new Set() : new Set(shown.map((i) => i.id)))}
+              onOpen={canWrite ? (i) => setEditing(i) : undefined}
+              actions={(i) => (
+                <>
+                  <Button variant="ghost" size="icon" className="size-8" aria-label="الفنيون" title="الفنيون" onClick={() => setStaffFor(i)}>
+                    <Users className="size-4" />
+                  </Button>
+                  {canWrite && (
+                    <>
+                      <Button variant="ghost" size="icon" className="size-8" aria-label="تعديل" title="تعديل" onClick={() => setEditing(i)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="size-8" aria-label="نقل إلى مرحلة" title="نقل إلى مرحلة" onClick={() => setMoving([i.id])}>
+                        <ArrowRightLeft className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="size-8 hover:text-red-600" aria-label="حذف" title="حذف" onClick={() => confirmDelete([i.id])}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </>
+                  )}
+                </>
+              )}
+              quickAdd={canWrite && <QuickAddRow projectId={project.id} phaseId={phaseIdForAdd} nextOrder={nextOrder} />}
+              total={sum(shown)}
+            />
+          </Card>
+        )}
+      </section>
+
+      <ItemForm open={editing !== null} onClose={() => setEditing(null)} projectId={project.id} item={editing === 'new' ? null : editing} defaultPhase={phaseIdForAdd ?? undefined} nextOrder={nextOrder} />
+      {importing && <ImportCatalogModal projectId={project.id} nextOrder={nextOrder} defaultPhase={phaseIdForAdd ?? undefined} onClose={() => setImporting(false)} />}
       {moving && <MovePhaseModal projectId={project.id} itemIds={moving} onClose={() => setMoving(null)} onDone={() => setSelected(new Set())} />}
       <StaffingPanel item={staffFor} siblings={all} onClose={() => setStaffFor(null)} />
+    </div>
+  )
+}
+
+function ItemsTable({
+  rows,
+  unitSym,
+  missing,
+  canWrite,
+  selected,
+  allChecked,
+  onToggle,
+  onToggleAll,
+  onOpen,
+  actions,
+  quickAdd,
+  total,
+}: {
+  rows: Item[]
+  unitSym: Map<string, string>
+  missing: Map<string, number>
+  canWrite: boolean
+  selected?: Set<string>
+  allChecked?: boolean
+  onToggle?: (id: string) => void
+  onToggleAll?: () => void
+  onOpen?: (i: Item) => void
+  actions?: (i: Item) => React.ReactNode
+  quickAdd?: React.ReactNode
+  total?: number
+}) {
+  const th = 'border-b border-line bg-surface-2 px-3 py-2.5 text-xs font-semibold text-muted'
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr>
+            {canWrite && (
+              <th className={cn(th, 'w-10')}>
+                <input type="checkbox" aria-label="تحديد الكل" className="size-4 accent-brand-600" checked={Boolean(allChecked)} onChange={onToggleAll} />
+              </th>
+            )}
+            <th className={cn(th, 'w-10 text-center')}>م</th>
+            <th className={cn(th, 'text-right')}>البند</th>
+            <th className={cn(th, 'text-right')}>الكمية</th>
+            <th className={cn(th, 'text-left')}>سعر الوحدة</th>
+            <th className={cn(th, 'text-left')}>الإجمالي</th>
+            <th className={cn(th, 'hidden text-right md:table-cell')}>الإنجاز</th>
+            <th className={cn(th, 'w-px')} aria-label="إجراءات" />
+          </tr>
+        </thead>
+        <tbody>
+          {!rows.length && (
+            <tr>
+              <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
+                <Package className="mx-auto mb-2 size-6 text-faint" />
+                لا توجد بنود بعد. {canWrite && 'اكتب البند في سطر الإضافة السريعة أدناه واضغط Enter.'}
+              </td>
+            </tr>
+          )}
+          {rows.map((i, n) => (
+            <tr key={i.id} onClick={onOpen && !i.id.startsWith('temp-') ? () => onOpen(i) : undefined} className={cn('group hover:bg-surface-2', onOpen && 'cursor-pointer', selected?.has(i.id) && 'bg-accent-soft/50', i.id.startsWith('temp-') && 'opacity-60')}>
+              {canWrite && (
+                <td className="border-b border-line px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" aria-label={`تحديد ${i.name}`} className="size-4 accent-brand-600" checked={Boolean(selected?.has(i.id))} onChange={() => onToggle?.(i.id)} />
+                </td>
+              )}
+              <td className="num border-b border-line px-3 py-2 text-center text-xs text-muted">{n + 1}</td>
+              <td className="border-b border-line px-3 py-2">
+                <div className="font-medium">{i.name}</div>
+                {(missing.get(i.id) ?? 0) > 0 && <Badge tone="amber">فنيون ناقصون {missing.get(i.id)}</Badge>}
+              </td>
+              <td className="num border-b border-line px-3 py-2 whitespace-nowrap">
+                {formatMoney(i.quantity)} <span className="text-xs text-muted">{unitSym.get(i.unit_id ?? '') ?? ''}</span>
+              </td>
+              <td className="border-b border-line px-3 py-2 text-left">
+                <Money value={i.unit_price} />
+              </td>
+              <td className="border-b border-line px-3 py-2 text-left">
+                <Money value={i.total_price} className="font-semibold" />
+              </td>
+              <td className="hidden border-b border-line px-3 py-2 md:table-cell">
+                <div className="flex min-w-24 items-center gap-2">
+                  <ProgressBar value={Number(i.progress)} tone="green" />
+                  <span className="num w-9 text-xs text-muted">{Number(i.progress).toFixed(0)}%</span>
+                </div>
+              </td>
+              <td className="border-b border-line px-2 py-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">{actions?.(i)}</div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          {total !== undefined && rows.length > 0 && (
+            <tr className="bg-surface-2 font-semibold">
+              <td colSpan={canWrite ? 5 : 4} className="px-3 py-2.5">
+                الإجمالي ({rows.length} بند)
+              </td>
+              <td className="px-3 py-2.5 text-left">
+                <Money value={total} />
+              </td>
+              <td colSpan={2} />
+            </tr>
+          )}
+        </tfoot>
+      </table>
+      {quickAdd}
     </div>
   )
 }

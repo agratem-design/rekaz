@@ -90,7 +90,7 @@ export function ProjectsPage({ type }: { type: Enums<'project_type'> }) {
     <div>
       <PageHeader
         title={title}
-        description={contracting ? 'مشاريع بسعر ثابت من العقود أو بنود المقايسة' : 'مشاريع بالتكلفة الفعلية مضافاً إليها نسبة الشركة'}
+        description={contracting ? 'مشاريع بسعر ثابت من العقود أو بنود المقاولات' : 'مشاريع بالتكلفة الفعلية مضافاً إليها نسبة الشركة'}
         actions={addButton}
       />
 

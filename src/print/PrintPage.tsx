@@ -235,7 +235,7 @@ const loaders: Record<string, Loader> = {
             ]}
           />
           {items.data && items.data.length > 0 && (
-            <PrintSection title="بنود المقايسة">
+            <PrintSection title="بنود المقاولات">
               <PrintTable
                 columns={[
                   { label: 'م', width: '9mm', align: 'center', render: (_x, i) => <span className="num">{i + 1}</span> },

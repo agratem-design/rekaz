@@ -82,7 +82,7 @@ export const financeLoaders: Record<string, Loader> = {
               { label: 'المشروع', value: p.projects?.name ?? 'مشتريات عامة للشركة' },
               { label: 'الزبون', value: p.projects?.clients?.name },
               ...(p.project_phases ? [{ label: 'المرحلة', value: `${p.project_phases.name} (${p.project_phases.reference_number ?? ''})` }] : []),
-              ...(p.project_items ? [{ label: 'بند المقايسة', value: p.project_items.name }] : []),
+              ...(p.project_items ? [{ label: 'بند المقاولات', value: p.project_items.name }] : []),
               ...(isReturn && original ? [{ label: 'مرتجع من فاتورة', value: `${original.invoice_no ?? ''} بتاريخ ${formatDate(original.invoice_date)}`, wide: true }] : []),
             ]}
           />
@@ -272,6 +272,71 @@ export const financeLoaders: Record<string, Loader> = {
       cancel: r,
       signs: ['توقيع الدافع (صاحب العهدة)', 'توقيع المستلم / أمين الصندوق'],
     })
+  },
+
+  // ───────────── فاتورة بنود المقاولات: لمرحلة، أو للمشروع كله مجمّعاً بالمراحل ─────────────
+  async boq(projectId, params) {
+    const phaseParam = params.get('phase') ?? 'all'
+    const [p, phases, items, units] = await Promise.all([
+      one(supabase.from('projects').select('*, clients(name)').eq('id', projectId).single()),
+      one(supabase.from('project_phases').select('*').eq('project_id', projectId).order('order_index').order('created_at')),
+      one(supabase.from('project_items').select('*').eq('project_id', projectId).order('order_index').order('created_at')),
+      one(supabase.from('measurement_units').select('id, symbol')),
+    ])
+    const sym = new Map(units.map((u) => [u.id, u.symbol]))
+    const groups = [
+      ...phases.map((ph) => ({ key: ph.id, title: `${ph.name}${ph.reference_number ? ` (${ph.reference_number})` : ''}`, rows: items.filter((i) => i.phase_id === ph.id) })),
+      { key: 'none', title: 'بنود بلا مرحلة', rows: items.filter((i) => !i.phase_id) },
+    ].filter((g) => g.rows.length && (phaseParam === 'all' || g.key === phaseParam))
+    const one_ = phaseParam !== 'all' ? groups[0] : null
+    const total = groups.reduce((a, g) => a + g.rows.reduce((s, i) => s + Number(i.total_price), 0), 0)
+    const ph = phases.find((x) => x.id === phaseParam)
+    return {
+      title: 'فاتورة بنود المقاولات',
+      number: ph?.reference_number ?? undefined,
+      render: (company, s) => (
+        <PrintDocument company={company} settings={s} title="فاتورة بنود المقاولات" number={ph?.reference_number ?? undefined} date={formatDate(new Date().toISOString())} subtitle={one_ ? one_.title : 'كل مراحل المشروع'}>
+          <InfoGrid
+            items={[
+              { label: 'المشروع', value: p.name },
+              { label: 'الزبون', value: p.clients?.name },
+              ...(p.location ? [{ label: 'الموقع', value: p.location }] : []),
+              { label: 'المرحلة', value: one_ ? one_.title : 'كل المراحل' },
+            ]}
+          />
+          {!groups.length && <p>لا توجد بنود.</p>}
+          {groups.map((g) => {
+            const sub = g.rows.reduce((a, i) => a + Number(i.total_price), 0)
+            const table = (
+              <PrintTable
+                columns={[
+                  { label: 'م', width: '9mm', align: 'center', render: (_i, n) => <span className="num">{n + 1}</span> },
+                  { label: 'البند', render: (i) => i.name },
+                  { label: 'الوحدة', width: '18mm', align: 'center', render: (i) => sym.get(i.unit_id ?? '') ?? '—' },
+                  { label: 'الكمية', width: '20mm', align: 'center', render: (i) => <span className="num">{formatMoney(i.quantity)}</span> },
+                  { label: 'سعر الوحدة', width: '26mm', align: 'end', render: (i) => <span className="num">{formatMoney(i.unit_price)}</span> },
+                  { label: 'الإجمالي', width: '30mm', align: 'end', render: (i) => <span className="num">{formatMoney(i.total_price)}</span> },
+                ]}
+                rows={g.rows}
+                totals={[{ label: one_ ? 'إجمالي المرحلة' : `مجموع ${g.title}`, value: formatMoney(sub) }]}
+              />
+            )
+            return one_ ? (
+              <div key={g.key}>{table}</div>
+            ) : (
+              <PrintSection key={g.key} title={g.title}>
+                {table}
+              </PrintSection>
+            )
+          })}
+          {groups.length > 1 && (
+            <PrintTable columns={[{ label: 'البيان', render: (r: [string, number]) => r[0] }, { label: 'المبلغ', align: 'end', width: '40mm', render: (r) => <span className="num">{formatMoney(r[1])}</span> }]} rows={groups.map((g) => [g.title, g.rows.reduce((a, i) => a + Number(i.total_price), 0)] as [string, number])} totals={[{ label: 'الإجمالي العام', value: formatMoney(total) }]} />
+          )}
+          <AmountBox amount={total} label={one_ ? 'إجمالي فاتورة المرحلة' : 'إجمالي بنود المقاولات'} />
+          <Signatures items={[{ label: 'الطرف الأول (الشركة)', name: company.company_name, note: company.signee_name ?? undefined }, { label: 'الطرف الثاني (الزبون)', name: p.clients?.name }]} />
+        </PrintDocument>
+      ),
+    }
   },
 
   // ───────────── كشوف الحساب ─────────────

@@ -212,7 +212,7 @@ export function ProjectRefPicker({
           ))}
         </Select>
       </Field>
-      <Field label="بند المقايسة">
+      <Field label="بند المقاولات">
         <Select value={itemId} disabled={!projectId} onChange={(e) => onChange({ projectId, phaseId: phaseId || (items.data ?? []).find((i) => i.id === e.target.value)?.phase_id || '', itemId: e.target.value })}>
           <option value="">بدون ارتباط ببند</option>
           {itemList.map((i) => (

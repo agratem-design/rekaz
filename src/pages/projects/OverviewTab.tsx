@@ -51,7 +51,7 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
         // القيمة والمحصّل والمتبقي في رأس مساحة العمل؛ هنا مصدر القيمة والتكلفة والربح
         <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
           {contracting ? (
-            <StatCard icon={Scale} label="مصدر قيمة المشروع" value={<Money value={f.client_obligation} />} hint={Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقايسة'} />
+            <StatCard icon={Scale} label="مصدر قيمة المشروع" value={<Money value={f.client_obligation} />} hint={Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقاولات'} />
           ) : (
             <StatCard icon={Scale} label="إجمالي استحقاق الزبون" value={<Money value={f.client_obligation} />} hint={`التكلفة + نسبة ${p.finishing_percentage ?? 0}%`} />
           )}
@@ -108,7 +108,7 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
         {contracting && (
           <Card>
             <CardHeader
-              title="بنود المقايسة"
+              title="بنود المقاولات"
               icon={Package}
               action={
                 <Link to={`/projects/${p.id}/items`}>
@@ -119,7 +119,7 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
               }
             />
             {!items.data?.length ? (
-              <EmptyState icon={Package} title="لم تُدرج بنود مقايسة بعد" action={<Link to={`/projects/${p.id}/items`}><Button variant="soft">إضافة بنود المقايسة</Button></Link>} />
+              <EmptyState icon={Package} title="لم تُدرج بنود مقاولات بعد" action={<Link to={`/projects/${p.id}/items`}><Button variant="soft">إضافة بنود المقاولات</Button></Link>} />
             ) : (
               <>
                 <KeyValue label="عدد البنود">
@@ -180,7 +180,7 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
             {understaffedItems > 0 && (
               <Alert
                 tone="amber"
-                text={<>{understaffedItems} بند مقايسة بحاجة لاستكمال تعيين الفنيين المطلوبين</>}
+                text={<>{understaffedItems} بند مقاولات بحاجة لاستكمال تعيين الفنيين المطلوبين</>}
                 action={
                   <Link to={`/projects/${p.id}/items`}>
                     <Button size="sm" variant="soft">

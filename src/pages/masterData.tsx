@@ -303,7 +303,7 @@ export const configs: Record<string, CrudConfig> = {
     table: 'catalog_items',
     title: 'البنود العامة',
     singular: 'بند',
-    description: 'بنود جاهزة تُستورد إلى مقايسة المشروع بسعرها ووحدتها.',
+    description: 'بنود جاهزة تُستورد إلى بنود مقاولات المشروع بسعرها ووحدتها.',
     icon: LayoutGrid,
     columns: [
       { key: 'name', label: 'البند' },

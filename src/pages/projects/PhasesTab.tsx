@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Layers, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Layers, Package, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable } from '@/components/DataTable'
@@ -20,6 +21,16 @@ export function PhasesTab({ project }: { project: ProjectDetail }) {
   const canWrite = hasRole('admin', 'engineer', 'supervisor')
   const canDelete = hasRole('admin', 'engineer')
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  // كما في النظام السابق: من المرحلة إلى فاتورة بنودها مباشرة
+  const openPhaseItems = (phaseId: string) => {
+    try {
+      localStorage.setItem(`boq-phase-${project.id}`, phaseId)
+    } catch {
+      /* التخزين غير متاح */
+    }
+    navigate(`/projects/${project.id}/items`)
+  }
   const phases = usePhases(project.id)
   const [editing, setEditing] = useState<Phase | 'new' | null>(null)
   const [form, setForm] = useState<Form>({ name: '', status: 'planned', start_date: '', end_date: '', order_index: '', description: '' })
@@ -123,12 +134,20 @@ export function PhasesTab({ project }: { project: ProjectDetail }) {
           { key: 'desc', label: 'الوصف', hideBelow: 'lg', render: (r) => <span className="line-clamp-1 text-muted">{r.description ?? '—'}</span> },
         ]}
         rowActions={
-          canWrite
+          canWrite || project.project_type === 'contracting'
             ? (r) => (
                 <>
+                  {project.project_type === 'contracting' && (
+                    <Button variant="soft" size="sm" className="h-8" title="فاتورة بنود المقاولات لهذه المرحلة" onClick={() => openPhaseItems(r.id)}>
+                      <Package className="size-3.5" />
+                      بنود المرحلة
+                    </Button>
+                  )}
+                  {canWrite && (
                   <Button variant="ghost" size="icon" className="size-8" aria-label="تعديل" title="تعديل" onClick={() => open(r)}>
                     <Pencil className="size-4" />
                   </Button>
+                  )}
                   {canDelete && (
                     <Button
                       variant="ghost"
