@@ -106,7 +106,7 @@ export function CustodiesPage() {
   )
 }
 
-function IssueForm({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function IssueForm({ open, onClose, holderType, holderId }: { open: boolean; onClose: () => void; holderType?: 'employee' | 'engineer'; holderId?: string }) {
   const qc = useQueryClient()
   const projects = useProjectsFinancials()
   const engineers = useEngineers()
@@ -118,7 +118,7 @@ function IssueForm({ open, onClose }: { open: boolean; onClose: () => void }) {
       return data
     },
   })
-  const blank = () => ({ holderType: 'employee' as 'employee' | 'engineer', holder: '', project_id: '', treasury_id: '', amount: '', date: todayISO(), purpose: '' })
+  const blank = () => ({ holderType: (holderType ?? 'employee') as 'employee' | 'engineer', holder: holderId ?? '', project_id: '', treasury_id: '', amount: '', date: todayISO(), purpose: '' })
   const [f, setF] = useState(blank)
   const [key, setKey] = useState(newKey)
   const [errors, setErrors] = useState<Record<string, string>>({})

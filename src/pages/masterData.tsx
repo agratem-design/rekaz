@@ -234,6 +234,7 @@ export const configs: Record<string, CrudConfig> = {
     writeRoles: FIN,
     deleteRoles: ADMIN,
     searchKeys: ['name', 'position', 'department'],
+    detailPath: (r) => `/employees/${r.id}`,
   },
   engineers: {
     table: 'engineers',
@@ -253,6 +254,7 @@ export const configs: Record<string, CrudConfig> = {
     writeRoles: ADMIN,
     deleteRoles: ADMIN,
     searchKeys: ['name', 'specialty'],
+    detailPath: (r) => `/engineers/${r.id}`,
   },
   technician_types: {
     table: 'technician_types',

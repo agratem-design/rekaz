@@ -29,6 +29,8 @@ const ExpensesPage = lazy(() => named(import('./pages/expenses/ExpensesPage'), '
 const TransfersPage = lazy(() => named(import('./pages/TransfersPage'), 'TransfersPage'))
 const CustodiesPage = lazy(() => named(import('./pages/CustodiesPage'), 'CustodiesPage'))
 const SupplierDetailPage = lazy(() => named(import('./pages/suppliers/SupplierDetailPage'), 'SupplierDetailPage'))
+const EmployeeDetailPage = lazy(() => named(import('./pages/PeoplePages'), 'EmployeeDetailPage'))
+const EngineerDetailPage = lazy(() => named(import('./pages/PeoplePages'), 'EngineerDetailPage'))
 const TechnicianDetailPage = lazy(() => named(import('./pages/technicians/TechnicianDetailPage'), 'TechnicianDetailPage'))
 
 const pages: Record<string, React.ComponentType> = {
@@ -123,6 +125,8 @@ export default function App() {
         <Route path="/clients/:id" element={<ClientDetailPage />} />
         <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
         <Route path="/technicians/:id" element={<TechnicianDetailPage />} />
+        <Route path="/employees/:id" element={<Guard roles={['admin', 'accountant']}><EmployeeDetailPage /></Guard>} />
+        <Route path="/engineers/:id" element={<EngineerDetailPage />} />
         <Route path="*" element={<ComingSoonPage />} />
       </Route>
     </Routes>
