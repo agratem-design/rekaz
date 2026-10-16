@@ -1,3 +1,4 @@
+import type { BusinessTables, BusinessViews } from './businessTypes'
 export type Json =
   | string
   | number
@@ -13,7 +14,21 @@ export type Database = {
     PostgrestVersion: "14.1"
   }
   public: {
-    Tables: {
+    Tables: BusinessTables & {
+      customer_invoices: {
+        Row: {
+          id: string; client_id: string; project_id: string | null; document_type: string;
+          source_key: string; invoice_number: string | null; invoice_date: string | null;
+          title: string; lines: Json; subtotal: number; fee_percentage: number; fee_amount: number;
+          amount: number; source_filename: string | null; notes: string | null;
+          status: Database["public"]["Enums"]["record_status"]; reversed_at: string | null;
+          reversed_by: string | null; reversal_reason: string | null; idempotency_key: string;
+          created_by: string | null; created_at: string;
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -873,6 +888,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           position: string | null
+          profile_id: string | null
           updated_at: string
         }
         Insert: {
@@ -887,6 +903,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           position?: string | null
+          profile_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -901,6 +918,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           position?: string | null
+          profile_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1308,6 +1326,8 @@ export type Database = {
           phase_id: string | null
           progress: number
           project_id: string
+          base_quantity?: number | null
+          cubic_factor?: number
           quantity: number
           total_price: number | null
           unit_id: string | null
@@ -1326,6 +1346,8 @@ export type Database = {
           phase_id?: string | null
           progress?: number
           project_id: string
+          base_quantity?: number | null
+          cubic_factor?: number
           quantity: number
           total_price?: number | null
           unit_id?: string | null
@@ -1344,6 +1366,8 @@ export type Database = {
           phase_id?: string | null
           progress?: number
           project_id?: string
+          base_quantity?: number | null
+          cubic_factor?: number
           quantity?: number
           total_price?: number | null
           unit_id?: string | null
@@ -2533,7 +2557,7 @@ export type Database = {
         ]
       }
     }
-    Views: {
+    Views: BusinessViews & {
       client_balances: {
         Row: {
           available_credit: number | null
@@ -2862,6 +2886,10 @@ export type Database = {
       }
     }
     Functions: {
+      business_command: { Args: { p_key: string; p_action: string; p_data: Json }; Returns: string }
+
+      record_customer_invoice: { Args: { p_key: string; p_document: Json }; Returns: string }
+      reverse_customer_invoice: { Args: { p_invoice_id: string; p_reason: string }; Returns: undefined }
       allocate_supplier_advance: {
         Args: { p_amount: number; p_payment_id: string; p_purchase_id: string }
         Returns: string
@@ -3111,6 +3139,10 @@ export type Database = {
       }
       set_opening_balance: {
         Args: { p_amount: number; p_date: string; p_treasury_id: string }
+        Returns: string
+      }
+      save_treasury: {
+        Args: { p_document: Json }
         Returns: string
       }
       transfer_between_treasuries: {

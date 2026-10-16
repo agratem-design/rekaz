@@ -1,7 +1,8 @@
+import { PayrollPage } from './business/PayrollPage'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Briefcase, Building2, CalendarDays, Construction, HardHat, Link2, Mail, Package, Phone, Plus, Wallet } from 'lucide-react'
+import { Briefcase, Building2, CalendarDays, HardHat, Link2, Mail, Package, Phone, Plus, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable } from '@/components/DataTable'
@@ -31,20 +32,13 @@ function CustodyList({ rows, onIssue }: { rows: CustodyRow[]; onIssue?: () => vo
   )
 }
 
-function SchemaNotice({ items }: { items: string }) {
-  return (
-    <Card>
-      <EmptyState icon={Construction} title="غير متاح بعد في قاعدة البيانات">
-        {items} تحتاج جداول ودوال مالية جديدة في قاعدة البيانات لم تُنشأ بعد. ستُضاف بعد اعتماد ترحيل جديد للقاعدة.
-      </EmptyState>
-    </Card>
-  )
-}
-
 // ───────────── صفحة الموظف ─────────────
 export function EmployeeDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const { hasRole } = useAuth()
+  const isAdmin = hasRole('admin')
+  const qc = useQueryClient()
   const [tab, setTab] = useState('custody')
   const [issuing, setIssuing] = useState(false)
   const e = useQuery({
@@ -54,6 +48,26 @@ export function EmployeeDetailPage() {
       if (error) throw error
       return data
     },
+  })
+  const profiles = useQuery({
+    queryKey: ['profiles-for-link'],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, display_name, username').order('display_name')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const link = useMutation({
+    mutationFn: async (profileId: string) => {
+      const { error } = await supabase.from('employees').update({ profile_id: profileId || null }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('تم ربط حساب المستخدم')
+      qc.invalidateQueries({ queryKey: ['employee', id] })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
   })
   const custodies = useCustodies()
   if (e.isLoading) return <Skeleton className="h-64 w-full rounded-xl" />
@@ -113,15 +127,33 @@ export function EmployeeDetailPage() {
         <StatCard icon={Wallet} label="عهد مفتوحة" value={<span className="num">{open.length}</span>} tone="sand" />
         <StatCard icon={Wallet} label="المتبقي في عهده" value={<Money value={open.reduce((a, c) => a + c.remaining, 0)} />} tone="blue" />
       </div>
+      {isAdmin && (
+        <Card className="mb-5">
+          <CardHeader title="حساب المستخدم المرتبط" icon={Link2} description="يربط الموظف بحساب دخول في المنظومة" />
+          <Field label="المستخدم">
+            <Select value={emp.profile_id ?? ''} onChange={(ev) => link.mutate(ev.target.value)} disabled={link.isPending} className="max-w-sm">
+              <option value="">— بلا حساب —</option>
+              {(profiles.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.display_name} ({p.username})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {emp.profile_id && (
+            <p className="mt-2 text-xs text-muted">مرتبط بـ {(profiles.data ?? []).find((p) => p.id === emp.profile_id)?.display_name ?? 'حساب مستخدم'}</p>
+          )}
+        </Card>
+      )}
       <Tabs
         active={tab}
         onChange={setTab}
         items={[
           { key: 'custody', label: 'العهد', icon: Wallet },
-          { key: 'payroll', label: 'الرواتب والسلف', icon: Briefcase, muted: true },
+          { key: 'payroll', label: 'الرواتب والسلف', icon: Briefcase },
         ]}
       />
-      <div className="mt-4">{tab === 'custody' ? <CustodyList rows={mine} onIssue={() => setIssuing(true)} /> : <SchemaNotice items="مسيرات الرواتب والقسائم والسلف واستقطاعها" />}</div>
+      <div className="mt-4">{tab === 'custody' ? <CustodyList rows={mine} onIssue={() => setIssuing(true)} /> : <PayrollPage employeeId={emp.id} />}</div>
       <IssueForm open={issuing} onClose={() => setIssuing(false)} holderType="employee" holderId={emp.id} />
     </div>
   )
@@ -143,7 +175,7 @@ export function EngineerDetailPage() {
       const [e, projects, items, profiles] = await Promise.all([
         supabase.from('engineers').select('*').eq('id', id).single(),
         supabase.from('projects').select('id, name, status, project_type, clients(name)').eq('supervising_engineer_id', id).order('created_at', { ascending: false }),
-        supabase.from('project_items').select('id, name, progress, total_price, project_id, projects(name)').eq('engineer_id', id),
+        supabase.from('project_items').select('id, name, total_price, project_id, projects(name)').eq('engineer_id', id),
         supabase.from('profiles').select('id, display_name, username').order('display_name'),
       ])
       if (e.error) throw e.error
@@ -269,7 +301,6 @@ export function EngineerDetailPage() {
             columns={[
               { key: 'name', label: 'البند', render: (i) => <span className="font-medium">{i.name}</span> },
               { key: 'project', label: 'المشروع', render: (i) => <Link to={`/projects/${i.project_id}/items`} className="hover:underline">{i.projects?.name}</Link> },
-              { key: 'progress', label: 'الإنجاز', render: (i) => <span className="num">{Number(i.progress)}%</span> },
             ]}
           />
         )}
