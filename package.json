@@ -1,13 +1,55 @@
 {
   "name": "rikaz",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
+  "description": "منظومة ركاز لإدارة المقاولات والتشطيبات",
+  "author": "شركة ركاز العقارية",
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:start": "electron .",
+    "desktop:build": "npm run build && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "ly.rikaz.app",
+    "productName": "ركاز",
+    "executableName": "Rikaz",
+    "artifactName": "Rikaz-Setup-${version}.${ext}",
+    "copyright": "© 2026 شركة ركاز العقارية",
+    "directories": {
+      "output": "../rikaz-release",
+      "buildResources": "desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/main.cjs",
+      "desktop/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ركاز",
+      "uninstallDisplayName": "ركاز"
+    }
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -25,6 +67,8 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",

@@ -1,5 +1,5 @@
 import {
-  Banknote, Boxes, Building2, ClipboardList, FileSignature, FileText, HardHat, LayoutDashboard, Landmark, LayoutGrid,
+  Banknote, Boxes, DatabaseBackup, Building2, ClipboardList, FileSignature, FileText, HardHat, LayoutDashboard, Landmark, LayoutGrid,
   Package, Paintbrush, Receipt, Ruler, ScrollText, Settings, Shapes, ShoppingCart, Tags, Truck, UserCog, Users, Wallet, Wrench, ArrowLeftRight, type LucideIcon,
 } from 'lucide-react'
 import type { AppRole } from './lib/supabase'
@@ -67,6 +67,7 @@ export const navSections: NavSection[] = [
       { path: '/reports', label: 'التقارير', icon: FileText, roles: FIN, keywords: 'كشف تقرير ربحية ديون' },
       { path: '/users', label: 'إدارة المستخدمين', icon: ClipboardList, roles: ['admin'], keywords: 'الصلاحيات' },
       { path: '/audit', label: 'سجل التعديلات والرقابة', icon: ScrollText, roles: ['admin'], keywords: 'سجل العمليات' },
+      { path: '/backup', label: 'النسخ الاحتياطي', icon: DatabaseBackup, roles: ['admin'], keywords: 'تصدير نسخة' },
       { path: '/settings', label: 'الإعدادات', icon: Settings, roles: ['admin'], keywords: 'تصميم الطباعة الهوية' },
     ],
   },

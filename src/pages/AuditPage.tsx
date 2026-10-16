@@ -36,6 +36,17 @@ export const tableLabels: Record<string, string> = {
   company_settings: 'الإعدادات',
   profiles: 'المستخدمون',
   user_roles: 'الصلاحيات',
+  catalog_item_requirements: 'متطلبات البنود العامة',
+  project_item_requirements: 'متطلبات بنود المشاريع',
+  contract_items: 'بنود العقود',
+  clause_templates: 'قوالب الشروط',
+  contract_clauses: 'شروط العقود',
+  client_credit_entries: 'الرصيد الدائن للزبائن',
+  supplier_payment_allocations: 'توزيع دفعات الموردين',
+  technician_receipts: 'المستلم من الفنيين',
+  custody_returns: 'إرجاعات العهد',
+  treasury_entries: 'حركات الخزائن',
+  audit_log: 'سجل العمليات',
 }
 
 type Filter = 'all' | 'INSERT' | 'UPDATE' | 'DELETE'
