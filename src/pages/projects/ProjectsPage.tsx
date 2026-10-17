@@ -22,10 +22,6 @@ function readView(): 'grid' | 'list' {
   }
 }
 
-const progressOf = (p: ProjectWithFin) => {
-  const items = Number(p.fin?.items_total ?? 0)
-  return items > 0 ? (Number(p.fin?.earned_value ?? 0) / items) * 100 : null
-}
 const collectionOf = (p: ProjectWithFin) => {
   const ob = Number(p.fin?.client_obligation ?? 0)
   return ob > 0 ? (Number(p.fin?.collected ?? 0) / ob) * 100 : null
@@ -81,7 +77,7 @@ export function ProjectsPage({ type }: { type: Enums<'project_type'> }) {
   )
 
   const actions = (p: ProjectWithFin) => [
-    { label: 'لوحة المشروع', icon: Icon, onClick: () => navigate(`/projects/${p.id}`) },
+    { label: 'فتح المشروع', icon: Icon, onClick: () => navigate(`/projects/${p.id}`) },
     { label: 'مراحل المشروع', icon: Layers, onClick: () => navigate(`/projects/${p.id}/phases`) },
     { label: 'إعدادات المشروع', icon: Settings2, onClick: () => setEditing(p), hidden: !canWrite },
   ]
@@ -201,26 +197,6 @@ export function ProjectsPage({ type }: { type: Enums<'project_type'> }) {
             },
             { key: 'status', label: 'الحالة', render: (p) => <Badge tone={projectStatusTone[p.status]} dot>{projectStatusLabels[p.status]}</Badge> },
             { key: 'engineer', label: 'المهندس المشرف', hideBelow: 'lg', render: (p) => p.engineers?.name ?? <span className="text-faint">—</span> },
-            ...(contracting
-              ? [
-                  {
-                    key: 'progress',
-                    label: 'الإنجاز',
-                    hideBelow: 'md' as const,
-                    render: (p: ProjectWithFin) => {
-                      const v = progressOf(p)
-                      return v === null ? (
-                        <span className="text-faint">—</span>
-                      ) : (
-                        <div className="flex min-w-24 items-center gap-2">
-                          <ProgressBar value={v} tone="green" />
-                          <span className="num w-9 text-xs text-muted">{v.toFixed(0)}%</span>
-                        </div>
-                      )
-                    },
-                  },
-                ]
-              : []),
             ...(finance
               ? [
                   { key: 'ob', label: contracting ? 'قيمة المشروع' : 'إجمالي المستحق', align: 'end' as const, render: (p: ProjectWithFin) => <Money value={p.fin?.client_obligation} /> },
@@ -261,7 +237,6 @@ const statusStrip: Record<Enums<'project_status'>, string> = {
 function ProjectCard({ p, finance, menu }: { p: ProjectWithFin; finance: boolean; menu: React.ReactNode }) {
   const ob = Number(p.fin?.client_obligation ?? 0)
   const col = Number(p.fin?.collected ?? 0)
-  const progress = progressOf(p)
   const collection = collectionOf(p)
   const Icon = p.project_type === 'contracting' ? Building2 : Paintbrush
   return (
@@ -289,15 +264,6 @@ function ProjectCard({ p, finance, menu }: { p: ProjectWithFin; finance: boolean
       </div>
 
       <div className="space-y-2.5 px-4 pb-3">
-        {progress !== null && (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted">
-              <span>نسبة الإنجاز</span>
-              <span className="num font-medium text-ink">{progress.toFixed(0)}%</span>
-            </div>
-            <ProgressBar value={progress} tone="green" label="نسبة الإنجاز" />
-          </div>
-        )}
         {finance && (
           <div>
             <div className="mb-1 flex justify-between text-xs text-muted">

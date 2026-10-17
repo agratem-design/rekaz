@@ -1,3 +1,4 @@
+import { Money } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { formatDate, formatMoney } from '@/lib/format'
 import { projectStatusLabels, projectTypeLabels } from '@/lib/labels'
@@ -60,7 +61,7 @@ export const reportLoaders: Record<string, Loader> = {
               totals={[{ label: 'الصافي', value: formatMoney(cash + receivable + custody - supDue - techDue - credits) }]}
             />
           </PrintSection>
-          <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+          <Signatures items={[{ label: 'المدير', name: company.signee_name ?? undefined }]} />
         </PrintDocument>
       ),
     }
@@ -72,7 +73,7 @@ export const reportLoaders: Record<string, Loader> = {
     let rq = supabase.from('project_financials').select('*').order('name')
     if (type === 'contracting' || type === 'finishing') rq = rq.eq('project_type', type)
     const rows = await q(rq)
-    const sum = (k: 'client_obligation' | 'collected' | 'direct_cost' | 'gross_profit_to_date') => rows.reduce((a, x) => a + n(x[k]), 0)
+    const sum = (k: 'client_obligation' | 'collected' | 'direct_cost' | 'net_contract_value') => rows.reduce((a, x) => a + (k === 'net_contract_value' ? n(x.client_obligation) - n(x.direct_cost) : n(x[k])), 0)
     return {
       title: 'تقرير المشاريع',
       render: (company, st) => (
@@ -85,14 +86,14 @@ export const reportLoaders: Record<string, Loader> = {
               { label: 'الالتزام', align: 'end', render: (x) => <span className="num">{formatMoney(x.client_obligation)}</span> },
               { label: 'المحصّل', align: 'end', render: (x) => <span className="num">{formatMoney(x.collected)}</span> },
               { label: 'التكلفة المباشرة', align: 'end', render: (x) => <span className="num">{formatMoney(x.direct_cost)}</span> },
-              { label: 'الربح حتى تاريخه', align: 'end', render: (x) => <span className="num">{formatMoney(x.gross_profit_to_date)}</span> },
+              { label: 'القيمة بعد التكاليف', align: 'end', render: (x) => <span className="num">{formatMoney(n(x.client_obligation) - n(x.direct_cost))}</span> },
             ]}
             rows={rows}
             totals={[
               { label: 'إجمالي الالتزام', value: formatMoney(sum('client_obligation')) },
               { label: 'إجمالي المحصّل', value: formatMoney(sum('collected')) },
               { label: 'إجمالي التكلفة المباشرة', value: formatMoney(sum('direct_cost')) },
-              { label: 'إجمالي الربح حتى تاريخه', value: formatMoney(sum('gross_profit_to_date')) },
+              { label: 'إجمالي القيمة بعد التكاليف', value: formatMoney(sum('net_contract_value')) },
             ]}
           />
         </PrintDocument>
@@ -135,7 +136,7 @@ export const reportLoaders: Record<string, Loader> = {
             columns={[
               { label: 'م', width: '9mm', align: 'center', render: (_x, i) => <span className="num">{i + 1}</span> },
               { label: 'الفني', render: (x) => x.name },
-              { label: 'المستحق من الإنجاز', align: 'end', render: (x) => <span className="num">{formatMoney(x.earned)}</span> },
+              { label: 'المستحق من الأعمال', align: 'end', render: (x) => <span className="num">{formatMoney(x.earned)}</span> },
               { label: 'المدفوع', align: 'end', render: (x) => <span className="num">{formatMoney(x.paid)}</span> },
               { label: 'المستلم منه', align: 'end', render: (x) => <span className="num">{formatMoney(x.received_back)}</span> },
               { label: 'المتبقي له', align: 'end', render: (x) => <span className="num">{formatMoney(x.balance_due)}</span> },
@@ -217,7 +218,7 @@ export const reportLoaders: Record<string, Loader> = {
               />
             </PrintSection>
           ))}
-          <InfoGrid items={[{ label: 'إجمالي الذمم المستحقة', value: <span className="num">{formatMoney(rows.reduce((a, x) => a + n(x.total_due), 0))} د.ل</span>, wide: true }]} />
+          <InfoGrid items={[{ label: 'إجمالي الذمم المستحقة', value: <Money value={rows.reduce((a, x) => a + n(x.total_due), 0)} />, wide: true }]} />
         </PrintDocument>
       ),
     }

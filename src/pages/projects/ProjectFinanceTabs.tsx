@@ -20,7 +20,7 @@ export function OperationPicker({ onPick, onClose, finishing }: { onPick: (op: O
   const ops: { op: Op; icon: LucideIcon; title: string; desc: string; show: boolean }[] = [
     { op: 'material', icon: Package, title: 'شراء مواد ومستلزمات', desc: 'فاتورة شراء مواد بناء وأدوات من مورد (نقداً أو ذمة)', show: finance },
     { op: 'service', icon: Wrench, title: finishing ? 'خدمات مورد / تشطيب' : 'خدمات مورد', desc: 'فاتورة خدمة يقدمها مورد للمشروع', show: finance },
-    { op: 'work', icon: Hammer, title: 'عمل فني / عمالة', desc: 'إنجاز فني بالكمية والسعر؛ يصبح مستحقاً للفني وتكلفة على المشروع', show: true },
+    { op: 'work', icon: Hammer, title: 'عمل فني / عمالة', desc: 'عمل بالكمية والسعر؛ يصبح مستحقاً للفني وتكلفة على المشروع', show: true },
     { op: 'expense', icon: Coins, title: 'مصروف مباشر للمشروع', desc: 'نثريات، وقود، ضيافة، ومصروفات موقعية من خزينة أو عهدة', show: finance },
     { op: 'return', icon: RotateCcw, title: 'مرتجع مشتريات', desc: 'إرجاع جزء من فاتورة مورد سابقة', show: finance },
   ]
@@ -56,17 +56,17 @@ function useOps() {
   return { picking, setPicking, op, setOp }
 }
 
-function OpForms({ project, op, close }: { project: ProjectDetail; op: Op | null; close: () => void }) {
+function OpForms({ project, phaseId, op, close }: { project: ProjectDetail; phaseId?: string; op: Op | null; close: () => void }) {
   return (
     <>
-      <PurchaseForm open={op === 'material' || op === 'service' || op === 'return'} kind={op === 'service' ? 'service' : op === 'return' ? 'return' : 'material'} projectId={project.id} onClose={close} />
-      <WorkForm open={op === 'work'} projectId={project.id} onClose={close} />
-      <ExpenseForm open={op === 'expense'} projectId={project.id} onClose={close} />
+      <PurchaseForm open={op === 'material' || op === 'service' || op === 'return'} kind={op === 'service' ? 'service' : op === 'return' ? 'return' : 'material'} projectId={project.id} phaseId={phaseId} onClose={close} />
+      <WorkForm open={op === 'work'} projectId={project.id} phaseId={phaseId} onClose={close} />
+      <ExpenseForm open={op === 'expense'} projectId={project.id} phaseId={phaseId} onClose={close} />
     </>
   )
 }
 
-export function ProjectPurchasesTab({ project }: { project: ProjectDetail }) {
+export function ProjectPurchasesTab({ project, phaseId }: { project: ProjectDetail; phaseId?: string }) {
   const { picking, setPicking, op, setOp } = useOps()
   return (
     <div>
@@ -80,18 +80,18 @@ export function ProjectPurchasesTab({ project }: { project: ProjectDetail }) {
           إضافة مشترى
         </Button>
       </div>
-      <PurchasesTable projectId={project.id} onNew={() => setPicking(true)} />
+      <PurchasesTable projectId={project.id} phaseId={phaseId} onNew={() => setPicking(true)} />
       <div className="mt-6">
         <h3 className="mb-2 font-semibold">أعمال الفنيين والعمالة</h3>
-        <WorkTable projectId={project.id} onNew={() => setOp('work')} />
+        <WorkTable projectId={project.id} phaseId={phaseId} onNew={() => setOp('work')} />
       </div>
       {picking && <OperationPicker finishing={project.project_type === 'finishing'} onClose={() => setPicking(false)} onPick={(o) => (setPicking(false), setOp(o))} />}
-      <OpForms project={project} op={op} close={() => setOp(null)} />
+      <OpForms project={project} phaseId={phaseId} op={op} close={() => setOp(null)} />
     </div>
   )
 }
 
-export function ProjectExpensesTab({ project }: { project: ProjectDetail }) {
+export function ProjectExpensesTab({ project, phaseId }: { project: ProjectDetail; phaseId?: string }) {
   const [open, setOpen] = useState(false)
   return (
     <div>
@@ -105,8 +105,8 @@ export function ProjectExpensesTab({ project }: { project: ProjectDetail }) {
           مصروف مباشر
         </Button>
       </div>
-      <ExpensesTable projectId={project.id} onNew={() => setOpen(true)} />
-      <ExpenseForm open={open} projectId={project.id} onClose={() => setOpen(false)} />
+      <ExpensesTable projectId={project.id} phaseId={phaseId} onNew={() => setOpen(true)} />
+      <ExpenseForm open={open} projectId={project.id} phaseId={phaseId} onClose={() => setOpen(false)} />
     </div>
   )
 }

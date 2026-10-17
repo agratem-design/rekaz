@@ -6,6 +6,12 @@ import { useAuth } from '@/auth/AuthProvider'
 import { Modal } from '@/components/dialog'
 import { SidePanel } from '@/components/SidePanel'
 import { Badge, Button, Checkbox, EmptyState, Field, FilterChips, Input, Money, SearchInput, Section, Select, Spinner, cn } from '@/components/ui'
+import { WorkForm } from '../technicians/TechForms'
+import { WorkTable } from '../technicians/WorkTable'
+import { financeKeys } from '@/components/pickers'
+import { newKey } from '@/lib/queries'
+import { todayISO } from '@/lib/format'
+import { Link } from 'react-router-dom'
 import { formatMoney } from '@/lib/format'
 import { options, rateUnitLabels } from '@/lib/labels'
 import { usePhases, useUnits } from '@/lib/queries'
@@ -13,7 +19,7 @@ import { errorMessage, supabase, type Enums } from '@/lib/supabase'
 import { useCatalog, type Item } from './ItemForm'
 
 const refreshItems = (qc: ReturnType<typeof useQueryClient>) => {
-  for (const k of ['project_items', 'project', 'project_financials', 'project_item_staffing', 'item_staff']) qc.invalidateQueries({ queryKey: [k] })
+  for (const k of ['project_items', 'project', 'project_financials', 'project_item_staffing', 'item_staff', 'assignment', ...financeKeys]) qc.invalidateQueries({ queryKey: [k] })
 }
 
 // ───────────── استيراد عدة بنود عامة دفعة واحدة ─────────────
@@ -193,6 +199,10 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
   const canWrite = hasRole('admin', 'engineer', 'supervisor')
   const qc = useQueryClient()
   const id = item?.id
+  const [workTech, setWorkTech] = useState<string | null>(null)
+  const [workKey, setWorkKey] = useState(newKey)
+  const [postDue, setPostDue] = useState(true)
+  const [retryDue, setRetryDue] = useState(false)
   const data = useQuery({
     queryKey: ['item_staff', id],
     enabled: Boolean(id),
@@ -225,7 +235,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
   const missing = (data.data?.req ?? []).reduce((a, r) => a + Number(r.missing_count), 0)
 
   return (
-    <SidePanel open={item !== null} size="lg" title="الفنيون على البند" description={item?.name} onClose={onClose}>
+    <><SidePanel open={item !== null && !workTech} size="lg" title="عمال البند ومستحقاتهم" description={item?.name} dirty={Boolean(newAsg.tech)} onClose={() => { if (!run.isPending) onClose() }}>
       {data.isLoading ? (
         <Spinner />
       ) : data.error ? (
@@ -233,6 +243,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
       ) : (
         data.data && (
           <>
+            <div className="mb-5 rounded-xl border border-line bg-accent-soft p-4 text-sm leading-7">أضف أكثر من عامل لهذا البند، وحدد الكمية والسعر لكل عامل. عند اختيار تسجيل المستحق، يظهر المبلغ في حساب العامل وتكلفة المشروع مباشرة.</div>
             <Section title="التخصصات المطلوبة">
               {!data.data.req.length ? (
                 <p className="text-sm text-muted">لا توجد متطلبات عمالة لهذا البند.</p>
@@ -297,7 +308,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
                 <ul className="divide-y divide-line rounded-lg border border-line">
                   {data.data.asg.map((a) => (
                     <li key={a.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-                      <span className="flex-1 font-medium">{a.technicians?.name}</span>
+                      <Link to={`/technicians/${a.technician_id}`} className="flex-1 font-medium text-accent hover:underline">{a.technicians?.name}</Link>
                       <span className="text-xs text-muted">{typeName.get(a.technicians?.technician_type_id ?? '') ?? ''}</span>
                       {a.agreed_rate !== null && (
                         <span className="text-xs">
@@ -305,6 +316,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
                           {a.planned_quantity ? <span className="num text-muted"> × {a.planned_quantity}</span> : null}
                         </span>
                       )}
+                      {canWrite && <Button size="sm" variant="soft" onClick={() => setWorkTech(a.technician_id)}>تسجيل مستحق</Button>}
                       {canWrite && (
                         <Button variant="ghost" size="icon" className="size-7 hover:text-red-600" aria-label="إزالة الفني" onClick={() => run.mutate(() => supabase.from('project_item_assignments').delete().eq('id', a.id))}>
                           <Trash2 className="size-3.5" />
@@ -316,7 +328,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
               )}
               {canWrite && (
                 <div className="space-y-3 rounded-lg border border-dashed border-line-strong p-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <fieldset disabled={run.isPending || retryDue} className="grid gap-3 sm:grid-cols-2">
                     <Field label="الفني">
                       <Select
                         value={newAsg.tech}
@@ -327,7 +339,7 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
                       >
                         <option value="">— اختر الفني —</option>
                         {data.data.techs
-                          .filter((t) => t.is_active && !assignedIds.has(t.id))
+                          .filter((t) => t.is_active && (!assignedIds.has(t.id) || t.id === newAsg.tech))
                           .map((t) => (
                             <option key={t.id} value={t.id}>
                               {t.name}
@@ -349,29 +361,40 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
                     <Field label="السعر المتفق (د.ل)">
                       <Input type="number" dir="ltr" step="0.001" min={0} value={newAsg.rate} onChange={(e) => setNewAsg({ ...newAsg, rate: e.target.value })} />
                     </Field>
-                    <Field label="الكمية المخططة">
+                    <Field label={postDue ? "الكمية المستحقة" : "الكمية المخططة"}>
                       <Input type="number" dir="ltr" step="0.001" min={0} value={newAsg.qty} onChange={(e) => setNewAsg({ ...newAsg, qty: e.target.value })} />
                     </Field>
-                  </div>
+                  </fieldset>
+                  <Checkbox disabled={run.isPending || retryDue} checked={postDue} onChange={setPostDue} label="تسجيل المبلغ مستحقاً في حساب العامل الآن" />
+                  {postDue && <div className="flex justify-between rounded-lg bg-accent-soft p-3 text-sm"><span>المبلغ الذي سيضاف لحساب العامل</span><Money value={Number(newAsg.rate || 0) * Number(newAsg.qty || 0)} className="font-semibold" /></div>}
                   <Button
                     variant="soft"
-                    disabled={!newAsg.tech}
+                    loading={run.isPending}
+                    disabled={!newAsg.tech || (postDue && (!newAsg.unit || newAsg.rate === '' || !Number.isFinite(Number(newAsg.rate)) || Number(newAsg.rate) < 0 || !Number.isFinite(Number(newAsg.qty)) || Number(newAsg.qty) <= 0))}
                     onClick={() =>
                       run.mutate(async () => {
-                        const r = await supabase.from('project_item_assignments').insert({
+                        const r = await supabase.from('project_item_assignments').upsert({
                           project_item_id: id!,
                           technician_id: newAsg.tech,
                           rate_unit: newAsg.unit || null,
                           agreed_rate: newAsg.rate === '' ? null : Number(newAsg.rate),
                           planned_quantity: newAsg.qty === '' ? null : Number(newAsg.qty),
-                        })
-                        if (!r.error) setNewAsg({ tech: '', unit: '', rate: '', qty: '' })
+                        }, { onConflict: 'project_item_id,technician_id' })
+                        if (r.error) return r
+                        if (postDue) {
+                          const posted = await supabase.rpc('record_technician_work', { p_key: workKey, p_technician_id: newAsg.tech, p_project_id: item!.project_id, p_item_id: id!, p_phase_id: item!.phase_id as string, p_date: todayISO(), p_rate_unit: newAsg.unit as Enums<'rate_unit'>, p_quantity: Number(newAsg.qty), p_rate: Number(newAsg.rate), p_description: `مستحق البند: ${item!.name}` })
+                          if (posted.error) { setRetryDue(true); toast.info('تم تعيين العامل، لكن لم يُسجل المستحق. أعد المحاولة بنفس البيانات.'); return posted }
+                        }
+                        toast.success(postDue ? 'تم ربط العامل بالبند وتسجيل مستحقه في حسابه' : 'تم تعيين العامل')
+                        setRetryDue(false)
+                        setWorkKey(newKey())
+                        setNewAsg({ tech: '', unit: '', rate: '', qty: '' })
                         return r
                       })
                     }
                   >
                     <UserPlus className="size-4" />
-                    تعيين الفني
+                    {retryDue ? 'إعادة محاولة تسجيل المستحق' : postDue ? 'إضافة العامل وتسجيل المستحق' : 'تعيين العامل فقط'}
                   </Button>
                 </div>
               )}
@@ -413,9 +436,12 @@ export function StaffingPanel({ item, siblings, onClose }: { item: Item | null; 
                 </div>
               )}
             </Section>
+            <Section title="المستحقات المسجلة على هذا البند"><WorkTable projectId={item!.project_id} itemId={id} /></Section>
           </>
         )
       )}
     </SidePanel>
+    {item && <WorkForm open={Boolean(workTech)} onClose={() => setWorkTech(null)} technicianId={workTech ?? undefined} projectId={item.project_id} phaseId={item.phase_id ?? undefined} itemId={item.id} />}
+    </>
   )
 }

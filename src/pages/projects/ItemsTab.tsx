@@ -4,8 +4,7 @@ import { ArrowRightLeft, FileText, Layers, Package, PackagePlus, Pencil, Plus, P
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { ask } from '@/components/dialog'
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Money, ProgressBar, TableSkeleton, cn } from '@/components/ui'
-import { formatMoney } from '@/lib/format'
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Money, NumberWithUnit, TableSkeleton, cn } from '@/components/ui'
 import { phaseStatusLabels, phaseStatusTone } from '@/lib/labels'
 import { usePhases, useUnits, type ProjectDetail } from '@/lib/queries'
 import { errorMessage, supabase } from '@/lib/supabase'
@@ -27,7 +26,7 @@ function readPhase(projectId: string) {
   }
 }
 
-export function ItemsTab({ project }: { project: ProjectDetail }) {
+export function ItemsTab({ project, phaseId }: { project: ProjectDetail; phaseId?: string }) {
   const { hasRole } = useAuth()
   const canWrite = hasRole('admin', 'engineer', 'supervisor')
   const qc = useQueryClient()
@@ -51,7 +50,7 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
     },
   })
 
-  const [phase, setPhaseState] = useState(() => readPhase(project.id))
+  const [phase, setPhaseState] = useState(() => phaseId === 'unassigned' ? NONE : phaseId ?? readPhase(project.id))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Item | 'new' | null>(null)
   const [importing, setImporting] = useState(false)
@@ -64,7 +63,7 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
 
   // اختيار المرحلة: المحفوظة إن وُجدت، وإلا أول مرحلة، وإلا «كل المشروع»
   useEffect(() => {
-    if (!phases.data) return
+    if (!phases.data || phaseId) return
     const valid = phase === ALL || (phase === NONE && hasUnphased) || phaseList.some((p) => p.id === phase)
     if (!valid) setPhaseState(phaseList[0]?.id ?? (hasUnphased ? NONE : ALL))
   }, [phases.data, hasUnphased]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -86,7 +85,6 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
   }, [staffing.data])
   const inPhase = (pid: string) => all.filter((i) => (pid === NONE ? !i.phase_id : i.phase_id === pid))
   const sum = (xs: Item[]) => xs.reduce((a, i) => a + Number(i.total_price), 0)
-  const earnedOf = (xs: Item[]) => xs.reduce((a, i) => a + (Number(i.total_price) * Number(i.progress)) / 100, 0)
   const nextOrder = all.reduce((m, i) => Math.max(m, i.order_index), 0) + 1
   const currentPhase = phaseList.find((p) => p.id === phase)
   const phaseIdForAdd = phase === ALL || phase === NONE ? null : phase
@@ -174,9 +172,9 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
     })
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[17rem_1fr]">
+    <div className={phaseId ? "space-y-4" : "grid gap-4 lg:grid-cols-[17rem_1fr]"}>
       {/* شريط المراحل */}
-      <aside className="space-y-1.5" aria-label="المراحل">
+      <aside hidden={Boolean(phaseId)} className="space-y-1.5" aria-label="المراحل">
         <div className="mb-2 flex items-center justify-between px-1">
           <span className="text-xs font-semibold text-muted">المراحل وفواتيرها</span>
           <Money value={sum(all)} className="text-xs font-semibold" />
@@ -232,10 +230,7 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
               <div className="text-xs text-muted">الإجمالي</div>
               <Money value={sum(shown)} className="font-display text-lg font-semibold" />
             </div>
-            <div className="hidden sm:block">
-              <div className="text-xs text-muted">المكتسب</div>
-              <Money value={earnedOf(shown)} className="font-display text-lg font-semibold" />
-            </div>
+
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Button variant="secondary" size="sm" onClick={() => openPrint('boq', project.id, false, { phase })}>
@@ -276,7 +271,7 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
           </div>
         )}
 
-        {!phaseList.length && !all.length ? (
+        {!phaseId && !phaseList.length && !all.length ? (
           <Card>
             <EmptyState icon={Layers} title="ابدأ بإضافة مرحلة" action={canWrite && <Button variant="secondary" onClick={() => setPhase(NONE)}>أو أضف بنوداً بلا مرحلة</Button>}>
               لكل مرحلة فاتورة بنود مقاولات خاصة بها. اكتب اسم المرحلة في «مرحلة جديدة» ثم أضف بنودها.
@@ -319,8 +314,8 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
               onOpen={canWrite ? (i) => setEditing(i) : undefined}
               actions={(i) => (
                 <>
-                  <Button variant="ghost" size="icon" className="size-8" aria-label="الفنيون" title="الفنيون" onClick={() => setStaffFor(i)}>
-                    <Users className="size-4" />
+                  <Button variant="ghost" size="icon" className="h-8 px-2" aria-label="عمال البند ومستحقاتهم" title="عمال البند ومستحقاتهم" onClick={() => setStaffFor(i)}>
+                    <Users className="size-4" /><span className="text-xs">العمال</span>
                   </Button>
                   {canWrite && (
                     <>
@@ -347,7 +342,7 @@ export function ItemsTab({ project }: { project: ProjectDetail }) {
       <ItemForm open={editing !== null} onClose={() => setEditing(null)} projectId={project.id} item={editing === 'new' ? null : editing} defaultPhase={phaseIdForAdd ?? undefined} nextOrder={nextOrder} />
       {importing && <ImportCatalogModal projectId={project.id} nextOrder={nextOrder} defaultPhase={phaseIdForAdd ?? undefined} onClose={() => setImporting(false)} />}
       {moving && <MovePhaseModal projectId={project.id} itemIds={moving} onClose={() => setMoving(null)} onDone={() => setSelected(new Set())} />}
-      <StaffingPanel item={staffFor} siblings={all} onClose={() => setStaffFor(null)} />
+      <StaffingPanel key={staffFor?.id} item={staffFor} siblings={all} onClose={() => setStaffFor(null)} />
     </div>
   )
 }
@@ -381,8 +376,9 @@ function ItemsTable({
 }) {
   const th = 'border-b border-line bg-surface-2 px-3 py-2.5 text-xs font-semibold text-muted'
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-sm">
+    <div>
+      {quickAdd}
+      <div className="overflow-x-auto"><table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
             {canWrite && (
@@ -392,19 +388,20 @@ function ItemsTable({
             )}
             <th className={cn(th, 'w-10 text-center')}>م</th>
             <th className={cn(th, 'text-right')}>البند</th>
-            <th className={cn(th, 'text-right')}>الكمية</th>
+            <th className={cn(th, 'text-right')}>الكمية الأصلية</th>
+            <th className={cn(th, 'text-center')}>معامل التكعيب</th>
+            <th className={cn(th, 'text-right')}>الكمية النهائية</th>
             <th className={cn(th, 'text-left')}>سعر الوحدة</th>
             <th className={cn(th, 'text-left')}>الإجمالي</th>
-            <th className={cn(th, 'hidden text-right md:table-cell')}>الإنجاز</th>
             <th className={cn(th, 'w-px')} aria-label="إجراءات" />
           </tr>
         </thead>
         <tbody>
           {!rows.length && (
             <tr>
-              <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
+              <td colSpan={canWrite ? 9 : 8} className="px-4 py-8 text-center text-sm text-muted">
                 <Package className="mx-auto mb-2 size-6 text-faint" />
-                لا توجد بنود بعد. {canWrite && 'اكتب البند في سطر الإضافة السريعة أدناه واضغط Enter.'}
+                لا توجد بنود بعد. {canWrite && 'اكتب البند في مساحة الإضافة أعلاه واضغط Enter.'}
               </td>
             </tr>
           )}
@@ -420,8 +417,12 @@ function ItemsTable({
                 <div className="font-medium">{i.name}</div>
                 {(missing.get(i.id) ?? 0) > 0 && <Badge tone="amber">فنيون ناقصون {missing.get(i.id)}</Badge>}
               </td>
-              <td className="num border-b border-line px-3 py-2 whitespace-nowrap">
-                {formatMoney(i.quantity)} <span className="text-xs text-muted">{unitSym.get(i.unit_id ?? '') ?? ''}</span>
+              <td className="border-b border-line px-3 py-2 whitespace-nowrap">
+                <NumberWithUnit value={i.base_quantity ?? i.quantity} unit={unitSym.get(i.unit_id ?? '')} unitClassName="text-xs text-muted" />
+              </td>
+              <td className="num border-b border-line px-3 py-2 text-center">{i.cubic_factor ?? 1}</td>
+              <td className="border-b border-line px-3 py-2 whitespace-nowrap">
+                <NumberWithUnit value={i.quantity} unit={unitSym.get(i.unit_id ?? '')} unitClassName="text-xs text-muted" />
               </td>
               <td className="border-b border-line px-3 py-2 text-left">
                 <Money value={i.unit_price} />
@@ -429,14 +430,8 @@ function ItemsTable({
               <td className="border-b border-line px-3 py-2 text-left">
                 <Money value={i.total_price} className="font-semibold" />
               </td>
-              <td className="hidden border-b border-line px-3 py-2 md:table-cell">
-                <div className="flex min-w-24 items-center gap-2">
-                  <ProgressBar value={Number(i.progress)} tone="green" />
-                  <span className="num w-9 text-xs text-muted">{Number(i.progress).toFixed(0)}%</span>
-                </div>
-              </td>
               <td className="border-b border-line px-2 py-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">{actions?.(i)}</div>
+                <div className="flex justify-end gap-1">{actions?.(i)}</div>
               </td>
             </tr>
           ))}
@@ -444,18 +439,17 @@ function ItemsTable({
         <tfoot>
           {total !== undefined && rows.length > 0 && (
             <tr className="bg-surface-2 font-semibold">
-              <td colSpan={canWrite ? 5 : 4} className="px-3 py-2.5">
+              <td colSpan={canWrite ? 7 : 6} className="px-3 py-2.5">
                 الإجمالي ({rows.length} بند)
               </td>
               <td className="px-3 py-2.5 text-left">
                 <Money value={total} />
               </td>
-              <td colSpan={2} />
+              <td colSpan={1} />
             </tr>
           )}
         </tfoot>
-      </table>
-      {quickAdd}
+      </table></div>
     </div>
   )
 }

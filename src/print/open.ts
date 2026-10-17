@@ -16,5 +16,8 @@ export const sourcePrintKind: Record<string, string> = {
   expense: 'expense',
   transfer: 'transfer',
   custody_issue: 'custody',
+  payroll_slip: 'payroll-payment',
+  employee_advance: 'employee-advance',
+  advance_repayment: 'employee-advance',
   custody_return: 'custody-return',
 }

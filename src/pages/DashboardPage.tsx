@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, Building2, CircleDollarSign, Landmark, Truck, Users, Wallet, Wrench, type LucideIcon } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
-import { Badge, Card, CardHeader, CardsSkeleton, EmptyState, ErrorState, Money, PageHeader, ProgressBar, Skeleton, StatCard, cn } from '@/components/ui'
+import { Badge, Button, Card, CardHeader, CardsSkeleton, EmptyState, ErrorState, Money, PageHeader, ProgressBar, Skeleton, StatCard, cn } from '@/components/ui'
 import { domainLabels, projectStatusLabels, projectStatusTone, projectTypeLabels } from '@/lib/labels'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { formatMoney, todayLong } from '@/lib/format'
@@ -40,7 +40,7 @@ export function DashboardPage() {
   const finance = hasRole('admin', 'accountant')
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ['dashboard', finance], queryFn: () => load(finance) })
 
-  const header = <PageHeader title={`أهلاً ${profile?.display_name ?? ''}`} description={todayLong()} />
+  const header = <div className="mb-7 border-b border-line pb-1"><p className="mb-2 text-xs font-semibold text-accent">مساحة العمل / نظرة عامة</p><PageHeader title={`أهلاً ${profile?.display_name ?? ''}`} description={`مشاريعك وحساباتك في مكان واحد · ${todayLong()}`} actions={<Link to="/projects/contracting"><Button>إدارة المشاريع <ArrowLeft className="size-4" /></Button></Link>} /></div>
 
   if (isLoading)
     return (

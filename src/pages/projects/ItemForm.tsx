@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useAutomaticDraft } from '@/lib/formDrafts'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { EntryCard, EntryDetails, EntryLayout } from '@/components/EntryWorkspace'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
-import { Button, Field, Input, KeyValue, Money, Section, Select, Textarea } from '@/components/ui'
-import { formatMoney } from '@/lib/format'
+import { Button, Field, Input, KeyValue, Money, NumberWithUnit, Select, Textarea } from '@/components/ui'
 import { useEngineers, usePhases, useUnits } from '@/lib/queries'
 import { errorMessage, supabase, type Tables } from '@/lib/supabase'
 
@@ -17,9 +18,9 @@ type Form = {
   phase_id: string
   unit_id: string
   dims: Record<string, string>
+  cubic_factor: string
   quantity: string
   unit_price: string
-  progress: string
   engineer_id: string
 }
 
@@ -42,12 +43,20 @@ export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrd
   const engineers = useEngineers()
   const catalog = useCatalog()
   const [form, setForm] = useState<Form>(() => blank(defaultPhase))
+  const nameRef = useRef<HTMLInputElement>(null)
+  const continueEntry = useRef(false)
+  const saving = useRef(false)
+  const orderCursor = useRef(nextOrder)
+  orderCursor.current = Math.max(orderCursor.current, nextOrder)
+  const [savedCount, setSavedCount] = useState(0)
   const [dirty, setDirty] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!open) return
     setDirty(false)
+    orderCursor.current = nextOrder
+    setSavedCount(0)
     setErrors({})
     setForm(
       item
@@ -58,9 +67,9 @@ export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrd
             phase_id: item.phase_id ?? '',
             unit_id: item.unit_id ?? '',
             dims: Object.fromEntries(Object.entries((item.dimensions ?? {}) as Record<string, number>).map(([k, v]) => [k, String(v)])),
-            quantity: String(item.quantity),
+            quantity: String(item.base_quantity ?? item.quantity),
+            cubic_factor: String(item.cubic_factor ?? 1),
             unit_price: String(item.unit_price),
-            progress: String(item.progress),
             engineer_id: item.engineer_id ?? '',
           }
         : blank(defaultPhase),
@@ -72,10 +81,11 @@ export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrd
   const computed = useMemo(() => {
     if (!components.length) return null
     const vals = components.map((c) => Number(form.dims[c]))
-    if (vals.some((v) => !v || Number.isNaN(v))) return null
+    if (vals.some((v) => v <= 0 || !Number.isFinite(v))) return null
     return Math.round(vals.reduce((a, b) => a * b, 1) * Number(unit?.factor ?? 1) * 1000) / 1000
   }, [components, form.dims, unit?.factor])
-  const quantity = computed ?? Number(form.quantity)
+  const baseQuantity = computed ?? Number(form.quantity)
+  const quantity = Math.round(baseQuantity * Number(form.cubic_factor) * 1000) / 1000
   const total = Math.round((quantity || 0) * (Number(form.unit_price) || 0) * 1000) / 1000
 
   const set = (patch: Partial<Form>) => {
@@ -98,159 +108,114 @@ export function ItemForm({ open, onClose, projectId, item, defaultPhase, nextOrd
         phase_id: form.phase_id || null,
         unit_id: form.unit_id || null,
         dimensions: dims,
+        base_quantity: baseQuantity,
+        cubic_factor: Number(form.cubic_factor),
         quantity,
         unit_price: Number(form.unit_price) || 0,
-        progress: Number(form.progress) || 0,
         engineer_id: form.engineer_id || null,
       }
       const { error } = item
         ? await supabase.from('project_items').update(row).eq('id', item.id)
-        : await supabase.from('project_items').insert({ ...row, project_id: projectId, order_index: nextOrder })
+        : await supabase.from('project_items').insert({ ...row, project_id: projectId, order_index: orderCursor.current })
       if (error) throw error
     },
     // المسودة تُمسح بعد نجاح الحفظ فقط (الخطأ 12 في النظام السابق)
     onSuccess: () => {
       toast.success(item ? 'تم حفظ البند' : 'تمت إضافة البند')
       for (const k of ['project_items', 'project', 'project_financials', 'project_item_staffing']) qc.invalidateQueries({ queryKey: [k] })
-      onClose()
+      if (continueEntry.current && !item) {
+        orderCursor.current += 1
+        setSavedCount((n) => n + 1)
+        setForm((previous) => ({ ...blank(previous.phase_id), unit_id: previous.unit_id, engineer_id: previous.engineer_id }))
+        setDirty(false)
+        setErrors({})
+        requestAnimationFrame(() => nameRef.current?.focus())
+      } else onClose()
     },
+    onSettled: () => { saving.current = false },
     onError: (e) => toast.error(`${errorMessage(e)} — بياناتك ما زالت في النموذج`),
   })
 
-  const submit = () => {
+  const submit = (another = false) => {
+    if (saving.current) return
+    continueEntry.current = another
     const e: Record<string, string> = {}
     if (!form.name.trim()) e.name = 'اسم البند مطلوب'
-    if (!(quantity >= 0) || Number.isNaN(quantity)) e.quantity = 'كمية غير صحيحة'
+    if (!(Number(form.cubic_factor) > 0) || !Number.isFinite(Number(form.cubic_factor))) e.cubic_factor = 'أدخل معاملًا موجبًا'
+    if (!form.unit_id) e.unit_id = 'اختر وحدة القياس'
+    if (!(quantity > 0) || !Number.isFinite(quantity)) e.quantity = 'كمية غير صحيحة'
     if (components.length && computed === null && !form.quantity) e.quantity = 'أدخل الأبعاد أو الكمية'
-    if (form.unit_price === '' || Number(form.unit_price) < 0) e.unit_price = 'سعر غير صحيح'
-    const p = Number(form.progress)
-    if (Number.isNaN(p) || p < 0 || p > 100) e.progress = 'بين 0 و 100'
+    if (form.unit_price === '' || !Number.isFinite(Number(form.unit_price)) || Number(form.unit_price) < 0) e.unit_price = 'سعر غير صحيح'
     setErrors(e)
-    if (!Object.keys(e).length) save.mutate()
+    if (!Object.keys(e).length) { saving.current = true; save.mutate() }
   }
 
-  return (
-    <SidePanel
-      open={open}
-      size="lg"
-      title={item ? 'تعديل بند' : 'بند مقاولات جديد'}
-      description={item?.name}
-      dirty={dirty}
-      onClose={onClose}
-      footer={
-        <>
-          <Button loading={save.isPending} onClick={submit}>
-            حفظ البند
-          </Button>
-          <Button variant="secondary" onClick={async () => (await confirmDiscard(dirty)) && onClose()}>
-            إلغاء
-          </Button>
-        </>
-      }
-    >
-      <form
-        className="space-y-6"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault()
-          submit()
-        }}
-      >
-        <Section title="البند">
-          {!item && (
-            <Field label="من البنود العامة (اختياري)" hint="يملأ الاسم والوحدة والسعر، وتُنسخ متطلبات الفنيين للبند">
-              <Select
-                value={form.catalog_item_id}
-                onChange={(e) => {
-                  const c = (catalog.data ?? []).find((x) => x.id === e.target.value)
-                  set(c ? { catalog_item_id: c.id, name: c.name, unit_id: c.unit_id ?? '', unit_price: c.default_unit_price?.toString() ?? '', description: c.description ?? '' } : { catalog_item_id: '' })
-                }}
-              >
-                <option value="">— بند جديد —</option>
-                {(catalog.data ?? [])
-                  .filter((c) => c.is_active)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.default_unit_price ? ` — ${formatMoney(c.default_unit_price)} د.ل` : ''}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-          )}
-          <Field label="اسم البند" required error={errors.name}>
-            <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="المرحلة">
-              <Select value={form.phase_id} onChange={(e) => set({ phase_id: e.target.value })}>
-                <option value="">بدون مرحلة (المشروع الرئيسي)</option>
-                {(phases.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.reference_number} — {p.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="المهندس المسؤول">
-              <Select value={form.engineer_id} onChange={(e) => set({ engineer_id: e.target.value })}>
-                <option value="">—</option>
-                {(engineers.data ?? []).map((en) => (
-                  <option key={en.id} value={en.id}>
-                    {en.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <Field label="الوصف">
-            <Textarea value={form.description} onChange={(e) => set({ description: e.target.value })} />
-          </Field>
-        </Section>
+  useAutomaticDraft(`item:${projectId}:${item?.id??'new'}:${defaultPhase??''}`, open, { form }, dirty, (saved) => { setForm(saved.form); setDirty(true) })
 
-        <Section title="الكمية والسعر">
-          <Field label="وحدة القياس">
-            <Select value={form.unit_id} onChange={(e) => set({ unit_id: e.target.value, dims: {} })}>
-              <option value="">—</option>
-              {(units.data ?? []).map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.symbol})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {components.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              {components.map((c) => (
-                <Field key={c} label={dimLabels[c] ?? c}>
-                  <Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={form.dims[c] ?? ''} onChange={(e) => set({ dims: { ...form.dims, [c]: e.target.value } })} />
+  return (
+    <SidePanel open={open} workspace title={item ? 'تعديل بند' : 'إضافة بنود المرحلة'}
+      description="اكتب البند والكمية والسعر. احفظ وأضف التالي دون مغادرة مساحة الإدخال."
+      dirty={dirty} onClose={() => { if (!saving.current) onClose() }}
+      footer={<>
+        <Button loading={save.isPending} onClick={() => submit(false)}>حفظ البند</Button>
+        {!item && <Button variant="secondary" disabled={save.isPending} onClick={() => submit(true)}>حفظ وإضافة التالي</Button>}
+        <Button variant="ghost" disabled={save.isPending} onClick={async () => (await confirmDiscard(dirty)) && onClose()}>إلغاء</Button>
+        {savedCount > 0 && <span role="status" className="text-sm text-muted">تم حفظ {savedCount} بنود في هذه الجلسة</span>}
+      </>}>
+      <form noValidate onSubmit={(e) => { e.preventDefault(); submit(!item) }}>
+        <fieldset disabled={save.isPending} className="min-w-0">
+          <EntryLayout summary={<div className="space-y-3">
+            <p className="break-words font-semibold">{form.name || 'بند جديد'}</p>
+            <p className="text-sm text-muted">{(phases.data ?? []).find((p) => p.id === form.phase_id)?.name ?? 'بدون مرحلة'}</p>
+            <KeyValue label="الكمية الأصلية"><NumberWithUnit value={baseQuantity} unit={unit?.symbol} /></KeyValue>
+            <KeyValue label="معامل التكعيب"><bdi dir="ltr">{form.cubic_factor}</bdi></KeyValue>
+            <KeyValue label="الكمية النهائية"><NumberWithUnit value={quantity} unit={unit?.symbol} /></KeyValue>
+            <KeyValue label="سعر الوحدة"><Money value={Number(form.unit_price) || 0} /></KeyValue>
+            <div className="border-t border-line pt-4"><span className="text-sm text-muted">إجمالي البند</span><Money value={total} className="mt-2 block text-2xl font-semibold" /></div>
+          </div>}>
+            <EntryCard title="ما البند الذي تريد إضافته؟" description="اكتب اسمًا جديدًا أو اختر اقتراحًا من دليل البنود.">
+              <Field label="اسم البند" required error={errors.name}>
+                <Input ref={nameRef} list="item-entry-catalog" className="h-12 text-base" value={form.name} placeholder="مثال: صب خرسانة القواعد" onChange={(e) => {
+                  const c = (catalog.data ?? []).find((x) => x.is_active && x.name === e.target.value)
+                  set(c ? { name: c.name, catalog_item_id: c.id, unit_id: c.unit_id ?? '', unit_price: c.default_unit_price?.toString() ?? '', description: c.description ?? '' } : { name: e.target.value, catalog_item_id: '' })
+                }} />
+                <datalist id="item-entry-catalog">{(catalog.data ?? []).filter((c) => c.is_active).map((c) => <option key={c.id} value={c.name} />)}</datalist>
+              </Field>
+              <Field label="المرحلة">
+                <Select value={form.phase_id} onChange={(e) => set({ phase_id: e.target.value })}>
+                  <option value="">بدون مرحلة (المشروع الرئيسي)</option>
+                  {(phases.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.reference_number} — {p.name}</option>)}
+                </Select>
+              </Field>
+            </EntryCard>
+            <EntryCard title="الكمية والتسعير" description="الإجمالي يُحسب مباشرة أثناء الكتابة.">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Field className="col-span-2 sm:col-span-1" label="وحدة القياس" required error={errors.unit_id}><Select value={form.unit_id} onChange={(e) => set({ unit_id: e.target.value, dims: {} })}>
+                  <option value="">اختر الوحدة</option>{(units.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name} ({u.symbol})</option>)}
+                </Select></Field>
+                <Field label="الكمية" required error={errors.quantity} hint={computed !== null ? 'محسوبة من الأبعاد' : undefined}>
+                  <Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={computed !== null ? String(computed) : form.quantity} disabled={computed !== null} onChange={(e) => set({ quantity: e.target.value })} />
                 </Field>
-              ))}
-            </div>
-          )}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label={`الكمية${unit ? ` (${unit.symbol})` : ''}`} required error={errors.quantity} hint={computed !== null ? 'محسوبة من الأبعاد' : undefined}>
-              <Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={computed !== null ? String(computed) : form.quantity} disabled={computed !== null} onChange={(e) => set({ quantity: e.target.value })} />
-            </Field>
-            <Field label="سعر الوحدة (د.ل)" required error={errors.unit_price}>
-              <Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={form.unit_price} onChange={(e) => set({ unit_price: e.target.value })} />
-            </Field>
-            <Field label="نسبة الإنجاز %" error={errors.progress}>
-              <Input type="number" dir="ltr" step="1" min={0} max={100} value={form.progress} onChange={(e) => set({ progress: e.target.value })} />
-            </Field>
-          </div>
-          <div className="rounded-lg bg-surface-2 px-4 py-2">
-            <KeyValue label="إجمالي البند">
-              <Money value={total} className="text-base font-semibold" />
-            </KeyValue>
-          </div>
-        </Section>
-        <button type="submit" hidden />
+                <Field label="معامل التكعيب" required error={errors.cubic_factor} hint="الكمية النهائية = الكمية × المعامل"><Input type="number" dir="ltr" step="0.000001" min="0.000001" inputMode="decimal" value={form.cubic_factor} onChange={(e) => set({ cubic_factor: e.target.value })} /></Field>
+                <Field label="سعر الوحدة (د.ل)" required error={errors.unit_price}><Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={form.unit_price} onChange={(e) => set({ unit_price: e.target.value })} /></Field>
+              </div>
+              {components.length > 0 && <EntryDetails title="حساب الكمية من الأبعاد (اختياري)">
+                <p className="text-xs leading-6 text-muted">يمكنك إدخال الكمية مباشرة أعلاه، أو ملء جميع الأبعاد لحسابها تلقائيًا. امسح الأبعاد للعودة إلى الكمية اليدوية.</p>
+                <div className="grid gap-3 sm:grid-cols-3">{components.map((c) => <Field key={c} label={dimLabels[c] ?? c}><Input type="number" dir="ltr" step="0.001" min={0} inputMode="decimal" value={form.dims[c] ?? ''} onChange={(e) => set({ dims: { ...form.dims, [c]: e.target.value } })} /></Field>)}</div>
+              </EntryDetails>}
+            </EntryCard>
+            <EntryDetails title="الوصف والمهندس المسؤول (اختياري)">
+              <Field label="المهندس المسؤول"><Select value={form.engineer_id} onChange={(e) => set({ engineer_id: e.target.value })}><option value="">غير محدد</option>{(engineers.data ?? []).map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}</Select></Field>
+              <Field label="الوصف"><Textarea value={form.description} onChange={(e) => set({ description: e.target.value })} /></Field>
+            </EntryDetails>
+          </EntryLayout>
+          <button type="submit" hidden />
+        </fieldset>
       </form>
     </SidePanel>
   )
 }
 
 function blank(phase?: string): Form {
-  return { catalog_item_id: '', name: '', description: '', phase_id: phase ?? '', unit_id: '', dims: {}, quantity: '', unit_price: '', progress: '0', engineer_id: '' }
+  return { catalog_item_id: '', name: '', description: '', phase_id: phase ?? '', unit_id: '', dims: {}, cubic_factor: '1', quantity: '', unit_price: '', engineer_id: '' }
 }

@@ -24,3 +24,15 @@ dist-ssr
 *.sw?
 
 release
+
+# Environment variables
+.env
+.env*.local
+
+# Temporary & build/test artifacts
+output/
+tmp/
+test-screenshots/
+supabase/.temp/
+.agents/
+.claude/

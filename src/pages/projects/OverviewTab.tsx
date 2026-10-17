@@ -1,3 +1,4 @@
+import { useCustomerInvoices } from '../billing/CustomerInvoices'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -15,6 +16,8 @@ import { invalidateFinance } from '../receipts/ReceiptForm'
 export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () => void }) {
   const { hasRole } = useAuth()
   const finance = hasRole('admin', 'accountant')
+  const invoices = useCustomerInvoices({ projectId: p.id })
+  const issued = invoices.data?.some((r) => r.status === 'posted' && r.document_type !== 'summary')
   const phases = usePhases(p.id)
   const items = useQuery({
     queryKey: ['project_items', p.id],
@@ -42,24 +45,24 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
   const contracting = p.project_type === 'contracting'
   const remaining = Number(f?.client_remaining ?? 0)
   const itemsTotal = Number(f?.items_total ?? 0)
-  const progress = itemsTotal > 0 ? (Number(f?.earned_value ?? 0) / itemsTotal) * 100 : 0
   const understaffedItems = new Set((staffing.data ?? []).map((s) => s.project_item_id)).size
 
   return (
     <div className="space-y-5">
+      <div className="border-b border-line pb-5"><p className="text-xs font-semibold text-accent">الصورة الكاملة</p><h2 className="mt-2 text-2xl font-semibold">خلاصة المشروع</h2><p className="mt-2 text-sm text-muted">ملخص يجمع كل المراحل. افتح مرحلة من صفحة المراحل لإدارة بنودها والعمال والتكاليف الخاصة بها.</p></div>
       {finance && f && (
         // القيمة والمحصّل والمتبقي في رأس مساحة العمل؛ هنا مصدر القيمة والتكلفة والربح
         <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
           {contracting ? (
-            <StatCard icon={Scale} label="مصدر قيمة المشروع" value={<Money value={f.client_obligation} />} hint={Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقاولات'} />
+            <StatCard icon={Scale} label="القيمة المتفق عليها مع الزبون" value={<Money value={f.client_obligation} />} hint={issued ? 'من فواتير الزبون المصدرة، وتشمل المطالبات والرصيد السابق' : Number(f.contracts_total) > 0 ? 'من العقود المعتمدة' : 'من مجموع بنود المقاولات'} />
           ) : (
-            <StatCard icon={Scale} label="إجمالي استحقاق الزبون" value={<Money value={f.client_obligation} />} hint={`التكلفة + نسبة ${p.finishing_percentage ?? 0}%`} />
+            <StatCard icon={Scale} label="إجمالي استحقاق الزبون" value={<Money value={f.client_obligation} />} hint={issued ? 'من فاتورة التشطيب المصدرة، مستقلة عن سلف العمال' : `التكلفة + نسبة ${p.finishing_percentage ?? 0}%`} />
           )}
           <StatCard icon={Banknote} label="التكلفة المباشرة" value={<Money value={f.direct_cost} />} tone="blue" hint="مواد وخدمات وعمالة ومصروفات" />
           {contracting ? (
-            <StatCard icon={TrendingUp} label="الربح حتى تاريخه" value={<Money value={f.gross_profit_to_date} />} hint="المكتسب حسب الإنجاز − التكلفة" tone="sand" />
+            <StatCard icon={TrendingUp} label="القيمة بعد خصم التكاليف" value={<Money value={Number(f.client_obligation) - Number(f.direct_cost)} />} hint="قيمة المشروع المتفق عليها − التكاليف المسجلة، وليست ربحاً محققاً" tone="sand" />
           ) : (
-            <StatCard icon={PiggyBank} label="أتعاب الشركة" value={<Money value={f.company_fee} />} hint={`التكلفة المباشرة ${formatMoney(f.direct_cost)}`} tone="sand" />
+            <StatCard icon={PiggyBank} label="أتعاب الشركة" value={<Money value={f.company_fee} />} hint={issued ? 'الأتعاب الواردة في الفاتورة المصدرة' : `التكلفة المباشرة ${formatMoney(f.direct_cost)}`} tone="sand" />
           )}
         </div>
       )}
@@ -87,7 +90,7 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
               ['المواد', c.materials],
               ['خدمات الموردين', c.services],
               ['مرتجعات (تُطرح)', -Number(c.returns ?? 0)],
-              ['أجور الفنيين (من الإنجاز)', c.labor],
+              ['أجور العمال المسجلة', c.labor],
               ['مصروفات المشروع', c.expenses],
             ].map(([label, v]) => (
               <div key={label as string} className="py-1.5">
@@ -128,16 +131,6 @@ export function OverviewTab({ p, onReceipt }: { p: ProjectDetail; onReceipt: () 
                 <KeyValue label="إجمالي تسعير البنود">
                   <Money value={itemsTotal} />
                 </KeyValue>
-                <KeyValue label="القيمة المكتسبة حسب الإنجاز">
-                  <Money value={f?.earned_value} />
-                </KeyValue>
-                <div className="mt-2">
-                  <div className="mb-1 flex justify-between text-xs text-muted">
-                    <span>متوسط الإنجاز المالي</span>
-                    <span className="num">{progress.toFixed(1)}%</span>
-                  </div>
-                  <ProgressBar value={progress} tone="green" />
-                </div>
               </>
             )}
           </Card>

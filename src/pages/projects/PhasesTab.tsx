@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Layers, Package, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Layers, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
-import { DataTable } from '@/components/DataTable'
+
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { ask } from '@/components/dialog'
-import { Badge, Button, EmptyState, Field, Input, Select, Textarea } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorState, Field, Input, Select, Skeleton, Textarea } from '@/components/ui'
 import { formatDate } from '@/lib/format'
 import { options, phaseStatusLabels, phaseStatusTone } from '@/lib/labels'
 import { usePhases, type ProjectDetail } from '@/lib/queries'
@@ -22,15 +22,7 @@ export function PhasesTab({ project }: { project: ProjectDetail }) {
   const canDelete = hasRole('admin', 'engineer')
   const qc = useQueryClient()
   const navigate = useNavigate()
-  // كما في النظام السابق: من المرحلة إلى فاتورة بنودها مباشرة
-  const openPhaseItems = (phaseId: string) => {
-    try {
-      localStorage.setItem(`boq-phase-${project.id}`, phaseId)
-    } catch {
-      /* التخزين غير متاح */
-    }
-    navigate(`/projects/${project.id}/items`)
-  }
+  const openPhaseItems = (phaseId: string) => navigate(`/projects/${project.id}/${project.project_type === 'contracting' ? 'items' : 'purchases'}?phase=${phaseId}`)
   const phases = usePhases(project.id)
   const [editing, setEditing] = useState<Phase | 'new' | null>(null)
   const [form, setForm] = useState<Form>({ name: '', status: 'planned', start_date: '', end_date: '', order_index: '', description: '' })
@@ -106,67 +98,26 @@ export function PhasesTab({ project }: { project: ProjectDetail }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">مراحل المشروع</h2>
-          <p className="text-xs text-muted">لكل مرحلة رقم مرجعي سنوي يُولَّد تلقائياً (مثل 48/26)</p>
+          <p className="text-xs text-muted">اختر المرحلة أولاً، ثم أدر بنودها وفريق العمل وتكاليف التنفيذ.</p>
         </div>
         {addButton}
       </div>
-      <DataTable
-        rows={phases.data}
-        getKey={(r) => r.id}
-        loading={phases.isLoading}
-        error={phases.error ? errorMessage(phases.error) : null}
-        onRetry={() => phases.refetch()}
-        onRowClick={canWrite ? (r) => open(r) : undefined}
-        empty={
-          <EmptyState icon={Layers} title="لا توجد مراحل مسجلة لهذا المشروع" action={addButton}>
-            قسّم المشروع إلى مراحل تنفيذية لتتبع البنود والتكاليف لكل مرحلة.
-          </EmptyState>
-        }
-        columns={[
-          { key: 'ref', label: 'الرقم المرجعي', render: (r) => <span className="num font-medium text-brand-700 dark:text-brand-300">{r.reference_number}</span> },
-          { key: 'name', label: 'المرحلة', render: (r) => <span className="font-medium">{r.name}</span> },
-          { key: 'status', label: 'الحالة', render: (r) => <Badge tone={phaseStatusTone[r.status]} dot>{phaseStatusLabels[r.status]}</Badge> },
-          { key: 'start', label: 'البدء', hideBelow: 'sm', render: (r) => <span className="num text-muted">{formatDate(r.start_date)}</span> },
-          { key: 'end', label: 'الانتهاء', hideBelow: 'md', render: (r) => <span className="num text-muted">{formatDate(r.end_date)}</span> },
-          { key: 'desc', label: 'الوصف', hideBelow: 'lg', render: (r) => <span className="line-clamp-1 text-muted">{r.description ?? '—'}</span> },
-        ]}
-        rowActions={
-          canWrite || project.project_type === 'contracting'
-            ? (r) => (
-                <>
-                  {project.project_type === 'contracting' && (
-                    <Button variant="soft" size="sm" className="h-8" title="فاتورة بنود المقاولات لهذه المرحلة" onClick={() => openPhaseItems(r.id)}>
-                      <Package className="size-3.5" />
-                      بنود المرحلة
-                    </Button>
-                  )}
-                  {canWrite && (
-                  <Button variant="ghost" size="icon" className="size-8" aria-label="تعديل" title="تعديل" onClick={() => open(r)}>
-                    <Pencil className="size-4" />
-                  </Button>
-                  )}
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 hover:text-red-600"
-                      aria-label="حذف"
-                      title="حذف"
-                      onClick={async () => {
-                        if (await ask({ title: `حذف المرحلة «${r.name}»؟`, message: 'تبقى بنودها في المشروع بلا مرحلة. تُرفض إذا كانت عليها عمليات مالية.', confirmLabel: 'حذف' })) remove.mutate(r.id)
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  )}
-                </>
-              )
-            : undefined
-        }
-      />
+      {phases.isLoading ? <Skeleton className="h-64 rounded-2xl" /> : phases.error ? <ErrorState message={errorMessage(phases.error)} onRetry={() => phases.refetch()} /> : !phases.data?.length ? <EmptyState icon={Layers} title="ابدأ بإضافة أول مرحلة" action={addButton}>قسّم المشروع إلى مراحل، ثم افتح المرحلة لإدارة بنودها وعمالها وتكاليفها.</EmptyState> : <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+        {phases.data.map((ph, index) => <article key={ph.id} className="group overflow-hidden rounded-2xl border border-line bg-surface shadow-card transition-all duration-200 hover:border-sand-400 hover:shadow-md">
+          <button type="button" onClick={() => openPhaseItems(ph.id)} className="w-full cursor-pointer p-5 text-right transition-all duration-200 hover:bg-accent-soft/40">
+            <div className="mb-6 flex items-center justify-between"><span className="num font-display text-3xl text-sand-600 dark:text-sand-300">{String(index + 1).padStart(2, '0')}</span><Badge tone={phaseStatusTone[ph.status]} dot>{phaseStatusLabels[ph.status]}</Badge></div>
+            <p className="num text-xs text-muted">{ph.reference_number}</p><h3 className="mt-2 text-xl font-semibold">{ph.name}</h3>
+            <p className="mt-2 min-h-10 text-sm leading-6 text-muted">{ph.description || 'البنود والعمال والمشتريات والمصروفات في مكان واحد.'}</p>
+            <div className="mt-5 flex items-center gap-2 text-xs text-muted"><CalendarDays className="size-4" />{formatDate(ph.start_date)} — {formatDate(ph.end_date)}</div>
+            <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-sm font-semibold text-accent">فتح المرحلة<ArrowLeft className="size-4 transition-transform group-hover:-translate-x-1" /></div>
+          </button>
+          {canWrite && <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-2 px-4 py-2"><Button variant="ghost" size="sm" onClick={() => open(ph)}><Pencil className="size-3.5" />تعديل المرحلة</Button>{canDelete && <Button variant="ghost" size="icon" aria-label={`حذف ${ph.name}`} onClick={async () => { if (await ask({ title: `حذف المرحلة «${ph.name}»؟`, message: 'تبقى بنودها بلا مرحلة. تُرفض العملية إذا كانت عليها عمليات مالية.', confirmLabel: 'حذف' })) remove.mutate(ph.id) }}><Trash2 className="size-4" /></Button>}</div>}
+        </article>)}
+      </div>}
+      <div className="mt-5 rounded-xl border border-dashed border-line-strong p-4 text-sm text-muted">عمليات سابقة بلا مرحلة؟ <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${project.id}/${project.project_type === 'contracting' ? 'items' : 'purchases'}?phase=unassigned`)}>عرض العناصر غير المصنفة</Button></div>
 
       <SidePanel
         open={editing !== null}

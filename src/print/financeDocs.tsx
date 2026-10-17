@@ -109,7 +109,7 @@ export const financeLoaders: Record<string, Loader> = {
               <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{p.notes}</p>
             </PrintSection>
           )}
-          <Signatures items={[{ label: 'المورد', name: p.suppliers?.name }, { label: 'المستلم / المحاسب', name: company.signee_name ?? undefined }]} />
+          <Signatures items={[{ label: 'المورد', name: p.suppliers?.name }, { label: 'المستلم', name: company.signee_name ?? undefined }]} />
         </PrintDocument>
       ),
     }
@@ -117,7 +117,7 @@ export const financeLoaders: Record<string, Loader> = {
 
   // ───────────── سند صرف دفعة مورد ─────────────
   async 'supplier-payment'(id) {
-    const p = await one(supabase.from('supplier_payments').select('*, suppliers(name), treasuries(name), supplier_payment_allocations(amount, status, purchases(invoice_no, description))').eq('id', id).single())
+    const p = await one(supabase.from('supplier_payments').select('*, suppliers(name), supplier_payment_allocations(amount, status, purchases(invoice_no, description))').eq('id', id).single())
     const allocs = p.supplier_payment_allocations.filter((a) => a.status === 'posted' || p.status === 'reversed')
     const allocated = allocs.reduce((a, x) => a + Number(x.amount), 0)
     const about = allocs.length
@@ -133,7 +133,6 @@ export const financeLoaders: Record<string, Loader> = {
       about,
       info: [
         { label: 'طريقة الدفع', value: paymentMethodLabels[p.method] },
-        { label: 'من خزينة', value: p.treasuries?.name },
         ...(p.reference ? [{ label: 'المرجع', value: p.reference }] : []),
         ...(p.notes ? [{ label: 'ملاحظات', value: p.notes, wide: true }] : []),
       ],
@@ -145,7 +144,7 @@ export const financeLoaders: Record<string, Loader> = {
 
   // ───────────── سند صرف مستحقات فني ─────────────
   async 'technician-payment'(id) {
-    const p = await one(supabase.from('technician_payments').select('*, technicians(name), treasuries(name), projects(name)').eq('id', id).single())
+    const p = await one(supabase.from('technician_payments').select('*, technicians(name), projects(name)').eq('id', id).single())
     return voucher({
       title: 'سند صرف مستحقات فني',
       id: p.id,
@@ -156,7 +155,6 @@ export const financeLoaders: Record<string, Loader> = {
       about: p.projects?.name ? `دفعة عن أعمال مشروع «${p.projects.name}»` : 'دفعة على حساب الفني',
       info: [
         { label: 'طريقة الدفع', value: paymentMethodLabels[p.method] },
-        { label: 'من خزينة', value: p.treasuries?.name },
         ...(p.notes ? [{ label: 'ملاحظات', value: p.notes, wide: true }] : []),
       ],
       amount: Number(p.amount),
@@ -167,7 +165,7 @@ export const financeLoaders: Record<string, Loader> = {
 
   // ───────────── إيصال استلام من فني ─────────────
   async 'technician-receipt'(id) {
-    const r = await one(supabase.from('technician_receipts').select('*, technicians(name), treasuries(name)').eq('id', id).single())
+    const r = await one(supabase.from('technician_receipts').select('*, technicians(name)').eq('id', id).single())
     return voucher({
       title: 'إيصال استلام من فني',
       id: r.id,
@@ -176,10 +174,7 @@ export const financeLoaders: Record<string, Loader> = {
       party: r.technicians?.name,
       partyName: r.technicians?.name,
       about: r.notes ?? 'إرجاع زائد أو وديعة',
-      info: [
-        { label: 'طريقة الدفع', value: paymentMethodLabels[r.method] },
-        { label: 'أودع في', value: r.treasuries?.name },
-      ],
+      info: [{ label: 'طريقة الدفع', value: paymentMethodLabels[r.method] }],
       amount: Number(r.amount),
       cancel: r,
       signs: ['توقيع الدافع', 'توقيع المستلم / أمين الصندوق'],
@@ -254,7 +249,7 @@ export const financeLoaders: Record<string, Loader> = {
     })
   },
   async 'custody-return'(id) {
-    const r = await one(supabase.from('custody_returns').select('*, treasuries(name), custodies(employees(name), engineers(name), projects(name))').eq('id', id).single())
+    const r = await one(supabase.from('custody_returns').select('*, custodies(employees(name), engineers(name), projects(name))').eq('id', id).single())
     const holder = r.custodies?.employees?.name ?? r.custodies?.engineers?.name
     return voucher({
       title: 'سند تسوية عهدة مالية',
@@ -264,10 +259,7 @@ export const financeLoaders: Record<string, Loader> = {
       party: holder,
       partyName: holder ?? undefined,
       about: 'إرجاع نقدي من العهدة',
-      info: [
-        { label: 'أودع في', value: r.treasuries?.name },
-        ...(r.notes ? [{ label: 'ملاحظات', value: r.notes, wide: true }] : []),
-      ],
+      info: r.notes ? [{ label: 'ملاحظات', value: r.notes, wide: true }] : [],
       amount: Number(r.amount),
       cancel: r,
       signs: ['توقيع الدافع (صاحب العهدة)', 'توقيع المستلم / أمين الصندوق'],
@@ -313,7 +305,9 @@ export const financeLoaders: Record<string, Loader> = {
                   { label: 'م', width: '9mm', align: 'center', render: (_i, n) => <span className="num">{n + 1}</span> },
                   { label: 'البند', render: (i) => i.name },
                   { label: 'الوحدة', width: '18mm', align: 'center', render: (i) => sym.get(i.unit_id ?? '') ?? '—' },
-                  { label: 'الكمية', width: '20mm', align: 'center', render: (i) => <span className="num">{formatMoney(i.quantity)}</span> },
+                  { label: 'الكمية الأصلية', align: 'center', render: (i) => <span className="num">{formatMoney(i.base_quantity ?? i.quantity)}</span> },
+                  { label: 'معامل التكعيب', align: 'center', render: (i) => <span className="num">{String(i.cubic_factor ?? 1)}</span> },
+                  { label: 'الكمية النهائية', width: '20mm', align: 'center', render: (i) => <span className="num">{formatMoney(i.quantity)}</span> },
                   { label: 'سعر الوحدة', width: '26mm', align: 'end', render: (i) => <span className="num">{formatMoney(i.unit_price)}</span> },
                   { label: 'الإجمالي', width: '30mm', align: 'end', render: (i) => <span className="num">{formatMoney(i.total_price)}</span> },
                 ]}
@@ -370,17 +364,112 @@ export const financeLoaders: Record<string, Loader> = {
     ])
     type L = { date: string; label: string; debit: number; credit: number }
     const lines: L[] = [
-      ...w.map((x) => ({ date: x.work_date, label: `إنجاز ${formatMoney(x.quantity)} ${rateUnitLabels[x.rate_unit]} × ${formatMoney(x.rate)} — ${x.description ?? ''} (${x.projects?.name})`, debit: Number(x.amount), credit: 0 })),
+      ...w.map((x) => ({ date: x.work_date, label: `عمل ${formatMoney(x.quantity)} ${rateUnitLabels[x.rate_unit]} × ${formatMoney(x.rate)} — ${x.description ?? ''} (${x.projects?.name})`, debit: Number(x.amount), credit: 0 })),
       ...pay.map((x) => ({ date: x.payment_date, label: `دفعة${x.projects?.name ? ` — ${x.projects.name}` : ' على الحساب'}`, debit: 0, credit: Number(x.amount) })),
       ...rec.map((x) => ({ date: x.receipt_date, label: 'مبلغ مستلم من الفني', debit: Number(x.amount), credit: 0 })),
     ].sort((a, c) => a.date.localeCompare(c.date))
     const due = Number(b?.balance_due ?? 0)
     return statement('كشف حساب فني', t.name, lines, [
-      { label: 'المستحق من الإنجاز', value: formatMoney(b?.earned) },
+      { label: 'المستحق من الأعمال', value: formatMoney(b?.earned) },
       { label: 'المدفوع', value: formatMoney(b?.paid) },
       { label: 'المستلم من الفني', value: formatMoney(b?.received_back) },
       { label: due >= 0 ? 'المتبقي للفني' : 'مقدم عند الفني', value: formatMoney(Math.abs(due)) },
     ], ['له', 'منه'])
+  },
+
+  // ───────────── فاتورة أعمال فني: كل عمل مع طريقة حسابه، مجمّعة حسب المرحلة ─────────────
+  // الفلاتر اختيارية: work (عمل واحد) أو project أو phase (unassigned للأعمال بلا مرحلة)
+  async 'technician-invoice'(id, params) {
+    const workId = params.get('work')
+    const projectId = params.get('project')
+    const phaseId = params.get('phase')
+    const itemId = params.get('item')
+    const [t, b, all, assigns] = await Promise.all([
+      one(supabase.from('technicians').select('*').eq('id', id).single()),
+      one(supabase.from('technician_balances').select('*').eq('technician_id', id).maybeSingle()),
+      one(supabase.from('technician_work').select('*, projects(name), project_phases(name), project_items(name)').eq('technician_id', id).eq('status', 'posted').order('work_date').order('created_at')),
+      one(supabase.from('project_item_assignments').select('project_item_id, agreed_rate, rate_unit').eq('technician_id', id)),
+    ])
+    const rows = all.filter((x) => (!workId || x.id === workId) && (!projectId || x.project_id === projectId) && (!itemId || x.project_item_id === itemId) && (!phaseId || (phaseId === 'unassigned' ? !x.phase_id : x.phase_id === phaseId)))
+    // المصدر لا يُحفظ مع السجل، فيُستنتج: هل يطابق السعر تعيين الفني على البند أم سعره الافتراضي
+    const basisOf = (x: (typeof rows)[number]) => {
+      const a = assigns.find((v) => v.project_item_id === x.project_item_id)
+      if (a && a.agreed_rate !== null && Number(a.agreed_rate) === Number(x.rate) && a.rate_unit === x.rate_unit) return 'تعيين الفني على البند'
+      if (t.default_rate !== null && Number(t.default_rate) === Number(x.rate) && t.default_rate_unit === x.rate_unit) return 'السعر الافتراضي للفني'
+      return 'سعر مخصص لهذا العمل'
+    }
+    const amountOf = (x: (typeof rows)[number]) => Number(x.amount ?? Number(x.quantity) * Number(x.rate))
+    // ملاحظة الاستيراد الداخلية («— المصدر فاتورة… تسلسل الإدخال…») لا تُطبع على فاتورة الفني
+    const workText = (d: string | null) => d?.replace(/\s*[—-]?\s*المصدر فاتورة[\s\S]*$/, '').trim() || null
+    const groups = [...new Map(rows.map((x) => [x.phase_id ?? 'none', x.project_phases?.name ?? 'بلا مرحلة'])).entries()].map(([key, title]) => ({
+      key,
+      title,
+      rows: rows.filter((x) => (x.phase_id ?? 'none') === key),
+    }))
+    const total = rows.reduce((a, x) => a + amountOf(x), 0)
+    const scope = workId ? 'عمل واحد' : itemId ? 'بند' : phaseId ? 'مرحلة' : projectId ? 'مشروع' : 'كل الأعمال'
+    const project = projectId ? rows[0]?.projects?.name : undefined
+    return {
+      title: 'فاتورة أعمال فني',
+      number: ref(workId ?? id),
+      render: (company, s) => (
+        <PrintDocument company={company} settings={s} title="فاتورة أعمال فني" number={ref(workId ?? id)} date={formatDate(new Date().toISOString())} subtitle={`نطاق الفاتورة: ${scope}`}>
+          <InfoGrid
+            items={[
+              { label: 'الفني', value: t.name, wide: true },
+              ...(project ? [{ label: 'المشروع', value: project }] : []),
+              ...(t.phone ? [{ label: 'الهاتف', value: <span className="num">{t.phone}</span> }] : []),
+            ]}
+          />
+          {!rows.length && <p>لا توجد أعمال مطابقة.</p>}
+          {groups.map((g) => {
+            const sub = g.rows.reduce((a, x) => a + amountOf(x), 0)
+            return (
+              <PrintSection key={g.key} title={g.title}>
+                <PrintTable
+                  columns={[
+                    { label: 'م', width: '9mm', align: 'center', render: (_x, n) => <span className="num">{n + 1}</span> },
+                    { label: 'التاريخ', width: '22mm', align: 'center', render: (x) => <span className="num">{formatDate(x.work_date)}</span> },
+                    {
+                      label: 'البند / العمل',
+                      render: (x) => {
+                        const desc = workText(x.description)
+                        const sub = [x.project_items?.name ? desc : null, !projectId ? x.projects?.name : null].filter(Boolean).join(' · ')
+                        return (
+                          <span>
+                            {x.project_items?.name ?? desc ?? '—'}
+                            {sub && <span className="block text-[9pt] text-muted">{sub}</span>}
+                          </span>
+                        )
+                      },
+                    },
+                    { label: 'طريقة الحساب', width: '26mm', align: 'center', render: (x) => <span>{rateUnitLabels[x.rate_unit]}</span> },
+                    { label: 'الكمية × السعر', width: '32mm', align: 'center', render: (x) => <span className="num" dir="ltr">{formatMoney(x.quantity)} × {formatMoney(x.rate)}</span> },
+                    { label: 'أساس السعر', width: '30mm', align: 'center', render: (x) => <span className="text-[9pt]">{basisOf(x)}</span> },
+                    { label: 'المستحق', width: '26mm', align: 'end', render: (x) => <span className="num">{formatMoney(amountOf(x))}</span> },
+                  ]}
+                  rows={g.rows}
+                  totals={[{ label: `مجموع ${g.title}`, value: formatMoney(sub) }]}
+                />
+              </PrintSection>
+            )
+          })}
+          <AmountBox amount={total} label="إجمالي المستحق عن هذه الفاتورة" />
+          {!workId && !phaseId && !projectId && !itemId && (
+            <InfoGrid
+              items={[
+                { label: 'المستحق من الأعمال', value: formatMoney(b?.earned) },
+                { label: 'المدفوع للفني', value: formatMoney(b?.paid) },
+                { label: 'المستلم من الفني', value: formatMoney(b?.received_back) },
+                { label: Number(b?.balance_due ?? 0) >= 0 ? 'المتبقي للفني' : 'مقدم عند الفني', value: formatMoney(Math.abs(Number(b?.balance_due ?? 0))) },
+              ]}
+              cols={3}
+            />
+          )}
+          <Signatures items={[{ label: 'الطرف الأول (الشركة)', name: company.company_name, note: company.signee_name ?? undefined }, { label: 'الطرف الثاني (الفني)', name: t.name }]} />
+        </PrintDocument>
+      ),
+    }
   },
 
   async 'custody-statement'(id) {
@@ -467,7 +556,7 @@ function statement(title: string, party: string, lines: { date: string; label: s
           rows={rows}
           totals={totals}
         />
-        <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+        <Signatures items={[{ label: 'المدير', name: company.signee_name ?? undefined }]} />
       </PrintDocument>
     ),
   }

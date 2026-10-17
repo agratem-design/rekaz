@@ -1,3 +1,4 @@
+import { CustomerInvoices } from '../billing/CustomerInvoices'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -166,7 +167,7 @@ export function ClientDetailPage() {
         onChange={setTab}
         items={[
           { key: 'projects', label: 'كشف المشاريع', icon: Building2 },
-          ...(finance ? [{ key: 'receipts', label: 'سجل المقبوضات', icon: Banknote }] : []),
+          ...(finance ? [{ key: 'invoices', label: 'الفواتير والمطالبات', icon: Printer }, { key: 'receipts', label: 'سجل المقبوضات', icon: Banknote }] : []),
           ...(finance ? [{ key: 'credit', label: 'دفتر الرصيد الدائن', icon: Wallet }] : []),
         ]}
       />
@@ -216,6 +217,7 @@ export function ClientDetailPage() {
             />
           </>
         )}
+        {tab === 'invoices' && <CustomerInvoices clientId={c.id} />}
         {tab === 'receipts' && <ReceiptsTable clientId={c.id} onNew={() => setReceipt(true)} />}
         {tab === 'credit' && (
           <Card className="p-0">

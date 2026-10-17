@@ -1,3 +1,6 @@
+import { useAutomaticDraft } from '@/lib/formDrafts'
+import { EntryCard as Section, EntryDetails, EntryLayout } from '@/components/EntryWorkspace'
+import { AttachmentField } from '@/components/AttachmentField'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
@@ -5,7 +8,7 @@ import { toast } from 'sonner'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { TreasuryPicker } from '@/components/TreasuryPicker'
 import { PartyPicker, ProjectRefPicker, financeKeys } from '@/components/pickers'
-import { Button, Field, FilterChips, Input, KeyValue, Money, Section, Select, Textarea, cn } from '@/components/ui'
+import { Button, Field, FilterChips, Input, KeyValue, Money, Select, Textarea, cn } from '@/components/ui'
 import { formatMoney, todayISO } from '@/lib/format'
 import { options, paymentMethodLabels } from '@/lib/labels'
 import { newKey, useProjectsFinancials } from '@/lib/queries'
@@ -40,7 +43,7 @@ type Form = {
 const units = ['قطعة', 'متر', 'متر مربع', 'متر مكعب', 'كيلو', 'طن', 'لتر', 'كيس', 'كرتون', 'علبة']
 const emptyLine = (): Line => ({ name: '', quantity: '1', unit: 'قطعة', unit_price: '' })
 
-const blank = (p: { projectId?: string; supplierId?: string; kind?: Kind; returnOf?: PurchaseRow | null }): Form => ({
+const blank = (p: { phaseId?: string; projectId?: string; supplierId?: string; kind?: Kind; returnOf?: PurchaseRow | null }): Form => ({
   supplier_id: p.returnOf?.supplier_id ?? p.supplierId ?? '',
   kind: p.returnOf ? 'return' : (p.kind ?? 'material'),
   returns_purchase_id: p.returnOf?.id ?? '',
@@ -48,7 +51,7 @@ const blank = (p: { projectId?: string; supplierId?: string; kind?: Kind; return
   invoice_no: '',
   date: todayISO(),
   project_id: p.returnOf ? (p.returnOf.project_id ?? '') : (p.projectId ?? ''),
-  phase_id: p.returnOf?.phase_id ?? '',
+  phase_id: p.returnOf?.phase_id ?? (p.phaseId === 'unassigned' ? '' : p.phaseId ?? ''),
   item_id: p.returnOf?.project_item_id ?? '',
   mode: 'total',
   total: '',
@@ -64,26 +67,27 @@ const blank = (p: { projectId?: string; supplierId?: string; kind?: Kind; return
 
 // فاتورة مورد بنفس خطوات النظام السابق: المورد ← بيانات الفاتورة ← القيمة (إجمالي أو تفصيل) ← السداد الآن أو ذمة
 // الحفظ: record_purchase ثم (إن طُلب) pay_supplier موزعة على هذه الفاتورة. كل دالة بمفتاح ثابت.
-export function PurchaseForm({ open, onClose, projectId, supplierId, kind, returnOf }: { open: boolean; onClose: () => void; projectId?: string; supplierId?: string; kind?: Kind; returnOf?: PurchaseRow | null }) {
+export function PurchaseForm({ open, onClose, phaseId, projectId, supplierId, kind, returnOf }: { open: boolean; onClose: () => void; phaseId?: string; projectId?: string; supplierId?: string; kind?: Kind; returnOf?: PurchaseRow | null }) {
   const qc = useQueryClient()
   const projects = useProjectsFinancials()
-  const [form, setForm] = useState<Form>(() => blank({ projectId, supplierId, kind, returnOf }))
+  const [form, setForm] = useState<Form>(() => blank({ phaseId, projectId, supplierId, kind, returnOf }))
   const [keys, setKeys] = useState(() => ({ purchase: newKey(), payment: newKey() }))
   const [dirty, setDirty] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [attachmentBusy, setAttachmentBusy] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null) // فاتورة حُفظت وتعذّر سدادها
   const [printId, setPrintId] = useState<string | null>(null)
   const supplierPurchases = usePurchases({ supplierId: form.supplier_id || undefined })
 
   useEffect(() => {
     if (!open) return
-    setForm(blank({ projectId, supplierId, kind, returnOf }))
+    setForm(blank({ phaseId, projectId, supplierId, kind, returnOf }))
     setKeys({ purchase: newKey(), payment: newKey() })
     setDirty(false)
     setErrors({})
     setSavedId(null)
-  }, [open, projectId, supplierId, kind, returnOf])
+  }, [open, phaseId, projectId, supplierId, kind, returnOf])
 
   const project = (projects.data ?? []).find((p) => p.id === form.project_id)
   const isReturn = form.kind === 'return'
@@ -122,11 +126,13 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
   }
 
   const submit = async () => {
+    if (attachmentBusy) return toast.info('انتظر اكتمال رفع المرفق')
+    if (busy) return
     const e: Record<string, string> = {}
     if (!form.supplier_id) e.supplier_id = 'اختر المورد'
     if (isReturn && !form.returns_purchase_id) e.returns_purchase_id = 'اختر الفاتورة الأصلية'
     if (!(total > 0)) e.total = 'أدخل قيمة الفاتورة'
-    if (form.mode === 'lines' && form.lines.some((l) => l.name.trim() && !(Number(l.quantity) > 0))) e.total = 'كمية غير صحيحة في أحد الأسطر'
+    if (form.mode === 'lines' && form.lines.some((l) => !l.name.trim() || !Number.isFinite(Number(l.quantity)) || !(Number(l.quantity) > 0) || l.unit_price.trim() === '' || !Number.isFinite(Number(l.unit_price)) || Number(l.unit_price) < 0)) e.total = 'أكمل بيان وكمية وسعر كل سطر، أو احذف الأسطر الزائدة؛ لا يُحفظ سطر بلا بيان'
     if (isReturn && original && total > original.total_amount) e.total = `المرتجع أكبر من قيمة الفاتورة الأصلية (${formatMoney(original.total_amount)})`
     if (!form.date) e.date = 'التاريخ مطلوب'
     if (!isReturn && form.pay === 'now') {
@@ -189,19 +195,22 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
 
   const returnable = (supplierPurchases.data ?? []).filter((p) => p.status === 'posted' && p.kind !== 'return')
 
+  useAutomaticDraft(`purchase:${projectId??'general'}:${phaseId??''}:${supplierId??''}:${returnOf?.id??''}`, open, { form, keys, savedId }, dirty, (saved) => { setForm(saved.form); setKeys(saved.keys); setSavedId(saved.savedId); setDirty(true) })
+
   return (
     <>
       <SidePanel
+        workspace
         open={open}
         size="xl"
         title={isReturn ? 'مرتجع مشتريات' : 'فاتورة مشتريات'}
         description={isReturn ? 'يُطرح من مستحق المورد ومن تكلفة المشروع' : 'التزام على المشروع وذمة للمورد. السداد اختياري الآن أو لاحقاً'}
         dirty={dirty}
-        onClose={onClose}
+        onClose={() => { if (attachmentBusy || busy) { toast.info('انتظر اكتمال العملية'); return } onClose() }}
         footer={
           savedId ? (
             <>
-              <Button loading={busy} onClick={submit}>
+              <Button loading={busy} disabled={attachmentBusy} onClick={submit}>
                 إعادة محاولة تسجيل الدفعة فقط
               </Button>
               <Button variant="secondary" onClick={onClose}>
@@ -210,10 +219,10 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
             </>
           ) : (
             <>
-              <Button loading={busy} onClick={submit}>
+              <Button loading={busy} disabled={attachmentBusy} onClick={submit}>
                 {isReturn ? 'حفظ المرتجع' : 'حفظ الفاتورة'}
               </Button>
-              <Button variant="secondary" onClick={async () => (await confirmDiscard(dirty)) && onClose()}>
+              <Button variant="secondary" disabled={attachmentBusy || busy} onClick={async () => (await confirmDiscard(dirty)) && onClose()}>
                 إلغاء
               </Button>
             </>
@@ -226,7 +235,13 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
             تم حفظ الفاتورة كالتزام غير مسدد، لكن تعذّر تسجيل الدفعة. أعد المحاولة أو أغلق وسدّدها لاحقاً من صفحة المورد.
           </div>
         )}
-        <fieldset disabled={Boolean(savedId)} className="space-y-6">
+        <fieldset disabled={Boolean(savedId) || busy} className="min-w-0">
+          <EntryLayout summary={<div className="space-y-3">
+            <p className="font-semibold">{isReturn ? 'مرتجع مشتريات' : 'فاتورة المورد'}</p>
+            <p className="text-sm text-muted">{project?.name ?? 'مشتريات عامة للشركة'}</p>
+            <KeyValue label="قيمة الفاتورة"><Money value={total} /></KeyValue>
+            {!isReturn && <><KeyValue label="المدفوع الآن"><Money value={form.pay === 'now' ? Number(form.pay_amount) || 0 : 0} /></KeyValue><KeyValue label="المتبقي للمورد"><Money value={total - (form.pay === 'now' ? Number(form.pay_amount) || 0 : 0)} /></KeyValue></>}
+          </div>}>
           {!returnOf && (
             <FilterChips
               value={form.kind}
@@ -300,21 +315,21 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
             ) : (
               <div className="space-y-2">
                 {form.lines.map((l, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_5rem_6rem_6.5rem_auto] items-end gap-2">
-                    <Field label={i === 0 ? 'المادة' : ''}>
+                  <div key={i} className="grid min-w-0 grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_6rem_6.5rem_auto] rounded-xl border border-line bg-surface-2 p-3">
+                    <Field className="col-span-2 sm:col-span-1" label="المادة">
                       <Input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} placeholder="اسم المادة…" aria-label="اسم المادة" />
                     </Field>
-                    <Field label={i === 0 ? 'الكمية' : ''}>
+                    <Field label="الكمية">
                       <Input type="number" dir="ltr" step="0.001" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label="الكمية" />
                     </Field>
-                    <Field label={i === 0 ? 'الوحدة' : ''}>
+                    <Field label="الوحدة">
                       <Select value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })} aria-label="الوحدة">
                         {units.map((u) => (
                           <option key={u}>{u}</option>
                         ))}
                       </Select>
                     </Field>
-                    <Field label={i === 0 ? 'السعر' : ''}>
+                    <Field label="السعر">
                       <Input type="number" dir="ltr" step="0.001" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label="السعر" />
                     </Field>
                     <Button variant="ghost" size="icon" className="hover:text-red-600" aria-label="حذف السطر" disabled={form.lines.length === 1} onClick={() => set({ lines: form.lines.filter((_, j) => j !== i) })}>
@@ -392,12 +407,11 @@ export function PurchaseForm({ open, onClose, projectId, supplierId, kind, retur
             </Section>
           )}
 
-          <Section title="مرفق وملاحظات">
-            <Field label="رابط صورة الفاتورة (اختياري)">
-              <Input dir="ltr" value={form.attachment_path} onChange={(e) => set({ attachment_path: e.target.value })} placeholder="https://…" />
-            </Field>
+          <EntryDetails title="المرفقات والملاحظات (اختياري)">
+            <AttachmentField value={form.attachment_path} onChange={(attachment_path)=>set({attachment_path})} folder="ركاز/فواتير الموردين" onBusyChange={setAttachmentBusy} disabled={busy || Boolean(savedId)} />
             <Textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="أي تفاصيل أو ملاحظات حول هذه الفاتورة…" aria-label="ملاحظات" />
-          </Section>
+          </EntryDetails>
+          </EntryLayout>
         </fieldset>
       </SidePanel>
       {printId && <PrintOptions kind="purchase" id={printId} title="تم حفظ الفاتورة" message="هل تريد طباعة الفاتورة الآن؟" onClose={() => setPrintId(null)} />}

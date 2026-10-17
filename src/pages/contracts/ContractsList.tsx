@@ -108,7 +108,6 @@ export function ContractsList({ project }: { project?: ProjectDetail }) {
             render: (c) => (
               <div>
                 <div className="font-medium">{c.title}</div>
-                {c.project_phases && <div className="text-xs text-muted">مرحلة {c.project_phases.reference_number} — {c.project_phases.name}</div>}
               </div>
             ),
           },

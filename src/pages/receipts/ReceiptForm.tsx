@@ -1,3 +1,5 @@
+import { useAutomaticDraft } from '@/lib/formDrafts'
+import { EntryCard as Section, EntryDetails, EntryLayout } from '@/components/EntryWorkspace'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Printer } from 'lucide-react'
@@ -6,7 +8,7 @@ import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { ClientPicker } from '@/components/ClientPicker'
 import { TreasuryPicker } from '@/components/TreasuryPicker'
 import { Modal } from '@/components/dialog'
-import { Button, Field, Input, KeyValue, Money, Section, Select, Textarea } from '@/components/ui'
+import { Button, Field, Input, KeyValue, Money, Select, Textarea } from '@/components/ui'
 import { newKey, useProjectsFinancials } from '@/lib/queries'
 import { todayISO, formatMoney } from '@/lib/format'
 import { options, paymentMethodLabels, projectTypeLabels } from '@/lib/labels'
@@ -107,9 +109,12 @@ export function ReceiptForm({ open, onClose, clientId, projectId }: { open: bool
   const amount = Number(form.amount) || 0
   const after = remainingBefore - amount
 
+  useAutomaticDraft(`receipt:${projectId??''}:${clientId??''}`, open, { form, key }, dirty, (saved) => { setForm(saved.form); setKey(saved.key); setDirty(true) })
+
   return (
     <>
       <SidePanel
+        workspace
         open={open}
         size="lg"
         title="إيصال قبض جديد"
@@ -135,6 +140,11 @@ export function ReceiptForm({ open, onClose, clientId, projectId }: { open: bool
             submit()
           }}
         >
+          <EntryLayout summary={<div className="space-y-3">
+            <p className="font-semibold">{project?.name ?? 'رصيد عام للزبون'}</p>
+            <KeyValue label="الدفعة المستلمة"><Money value={amount} /></KeyValue>
+            {project && <><KeyValue label="المتبقي قبل الدفعة"><Money value={remainingBefore} /></KeyValue><KeyValue label={after < 0 ? 'زيادة بعد الدفعة' : 'المتبقي بعد الدفعة'}><Money value={Math.abs(after)} /></KeyValue></>}
+          </div>}>
           <Section title="الزبون والمشروع">
             <ClientPicker value={form.client_id} onChange={(id) => set({ client_id: id, project_id: '' })} error={errors.client_id} disabled={Boolean(clientId)} />
             <Field label="المشروع المستهدف" hint={!form.project_id ? 'بدون مشروع: يُحفظ المبلغ كاملاً رصيداً دائناً للزبون يُطبَّق لاحقاً على مشروع' : undefined}>
@@ -209,13 +219,16 @@ export function ReceiptForm({ open, onClose, clientId, projectId }: { open: bool
                 </Select>
               </Field>
             </div>
+            <EntryDetails title="المرجع والملاحظات (اختياري)">
             <Field label="المرجع (اختياري)" hint="رقم الصك أو الحوالة. رقم الإيصال يُولَّد تلقائياً">
               <Input value={form.reference} onChange={(e) => set({ reference: e.target.value })} dir="auto" />
             </Field>
             <Field label="ملاحظات">
               <Textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="أي ملاحظات إضافية على الدفعة…" />
             </Field>
+            </EntryDetails>
           </Section>
+          </EntryLayout>
           <button type="submit" hidden />
         </form>
       </SidePanel>

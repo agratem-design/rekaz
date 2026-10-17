@@ -14,8 +14,10 @@ const TABLES = [
   'treasuries', 'treasury_entries',
   'projects', 'project_phases', 'measurement_units', 'catalog_items', 'catalog_item_requirements', 'project_items', 'project_item_requirements', 'project_item_assignments',
   'contracts', 'contract_items', 'clause_templates', 'contract_clauses',
-  'client_receipts', 'client_credit_entries', 'purchases', 'supplier_payments', 'supplier_payment_allocations',
+  'customer_invoices', 'client_receipts', 'client_credit_entries', 'purchases', 'supplier_payments', 'supplier_payment_allocations',
   'technician_work', 'technician_payments', 'technician_receipts', 'custodies', 'custody_returns', 'expense_categories', 'expenses', 'transfers',
+  'payroll_runs', 'payroll_slips', 'payroll_payments', 'employee_advances', 'equipment', 'equipment_rentals',
+  'warehouses', 'stock_products', 'stock_movements', 'stock_counts', 'business_requests',
   'audit_log',
 ] as const
 

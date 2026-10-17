@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Building, Landmark, Pencil, Plus, Printer, ScrollText, Wallet } from 'lucide-react'
+import { Banknote, Building, Landmark, Pencil, Plus, Power, Printer, ScrollText, Wallet } from 'lucide-react'
 import { openPrint, sourcePrintKind } from '@/print/open'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { Badge, Button, Card, CardsSkeleton, Checkbox, EmptyState, ErrorState, Field, Input, Money, PageHeader, Section, Select, Spinner, StatCard, Textarea, cn } from '@/components/ui'
-import { formatDate } from '@/lib/format'
+import { ask } from '@/components/dialog'
+import type { Json } from '@/lib/database.types'
+import { formatDate, todayISO } from '@/lib/format'
 import { domainLabels, options, treasuryKindLabels } from '@/lib/labels'
 import { errorMessage, supabase, type Tables, type Views } from '@/lib/supabase'
 
 type Treasury = Tables<'treasuries'>
-type Form = Partial<Treasury> & { opening?: string }
+type Form = Partial<Treasury> & { opening?: string; opening_date?: string }
 
 export const sourceLabels: Record<string, string> = {
   opening_balance: 'رصيد افتتاحي',
@@ -55,26 +57,13 @@ export function TreasuriesPage() {
         domain: f.domain!,
         kind: f.kind ?? 'cash',
         parent_id: f.parent_id || null,
-        bank_name: f.bank_name || null,
-        account_number: f.account_number || null,
+        bank_name: f.kind === 'bank' ? f.bank_name || null : null,
+        account_number: f.kind === 'bank' ? f.account_number || null : null,
         notes: f.notes || null,
         is_active: f.is_active ?? true,
       }
-      if (f.id) {
-        const { error } = await supabase.from('treasuries').update(row).eq('id', f.id)
-        if (error) throw error
-        return
-      }
-      const { data, error } = await supabase.from('treasuries').insert(row).select('id').single()
+      const { error } = await supabase.rpc('save_treasury', { p_document: { ...row, ...(f.id ? { id: f.id } : { opening: f.opening || '0', opening_date: f.opening_date || todayISO() }) } as Json })
       if (error) throw error
-      if (f.opening && Number(f.opening) !== 0) {
-        const r = await supabase.rpc('set_opening_balance', {
-          p_treasury_id: data.id,
-          p_amount: Number(f.opening),
-          p_date: new Date().toISOString().slice(0, 10),
-        })
-        if (r.error) throw r.error
-      }
     },
     onSuccess: () => {
       toast.success('تم الحفظ')
@@ -131,12 +120,14 @@ export function TreasuriesPage() {
   const submit = () => {
     if (!editing?.name?.trim()) return setNameError('اسم الخزينة مطلوب')
     if (!editing.domain) return toast.error('اختر القطاع')
+    if (editing.opening && (!Number.isFinite(Number(editing.opening)) || Number(editing.opening) < 0)) return toast.error('أدخل رصيداً افتتاحياً صحيحاً صفراً أو موجباً')
     save.mutate(editing)
   }
 
   return (
     <div>
       {header}
+      {rows.some((r) => r.balance < 0) && <div role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-7 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><p className="font-semibold">أرصدة تحتاج تسوية ومراجعة</p><p>المبالغ المصروفة المسجلة أعلى من الوارد في بعض الخزائن. الرصيد السالب لا يمثل تمويلاً أو تحصيلاً من الزبون؛ راجع الحركات والتمويل والأرصدة السابقة.</p><ul className="mt-2 space-y-1">{rows.filter((r) => r.balance < 0).map((r) => <li key={r.id} className="flex flex-wrap justify-between gap-2"><span>{r.name}</span><Money value={r.balance} /></li>)}</ul></div>}
       <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
         <StatCard icon={Landmark} label="إجمالي الأرصدة" value={<Money value={total} />} />
         <StatCard icon={Wallet} label="الخزائن النقدية" value={<span className="num">{rows.filter((r) => r.kind === 'cash').length}</span>} tone="sand" />
@@ -168,6 +159,7 @@ export function TreasuriesPage() {
                     <Money value={sectorTotal} className="font-display text-xl font-semibold" />
                   </div>
                 </div>
+                {canWrite && <div className="flex justify-end border-b border-line px-4 py-2"><Button variant="soft" size="sm" disabled={!root.is_active} onClick={() => { setEditing({ parent_id: root.id, domain: root.domain, kind: 'cash', is_active: true }); setDirty(false); setNameError(null) }}><Plus className="size-4" />إضافة خزينة فرعية</Button></div>}
                 <ul className="divide-y divide-line">
                   {[root, ...children].map((t) => (
                     <li key={t.id} className="group flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -187,7 +179,7 @@ export function TreasuriesPage() {
                         <ScrollText className="size-4" />
                       </Button>
                       {canWrite && (
-                        <Button
+                        <><Button
                           variant="ghost"
                           size="icon"
                           className="size-8"
@@ -200,7 +192,9 @@ export function TreasuriesPage() {
                           }}
                         >
                           <Pencil className="size-4" />
-                        </Button>
+                        </Button><Button variant="ghost" size="icon" className="size-8" aria-label={`${t.is_active ? 'إيقاف' : 'تفعيل'} ${t.name}`} title={t.is_active ? 'إيقاف الخزينة' : 'تفعيل الخزينة'} disabled={save.isPending} onClick={async () => {
+                          if (await ask({ title: t.is_active ? 'إيقاف الخزينة؟' : 'تفعيل الخزينة؟', message: t.is_active ? 'تبقى الحركات السابقة محفوظة. يتطلب الإيقاف رصيداً صفراً وإيقاف الفروع أولاً، ويمكن إعادة التفعيل لاحقاً.' : 'ستظهر الخزينة مجدداً في نماذج القبض والصرف.', confirmLabel: t.is_active ? 'إيقاف الخزينة' : 'تفعيل الخزينة', tone: 'primary' })) save.mutate({ ...t, is_active: !t.is_active })
+                        }}><Power className="size-4" /></Button></>
                       )}
                     </li>
                   ))}
@@ -243,7 +237,7 @@ export function TreasuriesPage() {
                 >
                   <option value="">— خزينة رئيسية —</option>
                   {roots
-                    .filter((r) => r.id !== editing.id)
+                    .filter((r) => r.id !== editing.id && (r.is_active || r.id === editing.parent_id))
                     .map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name}
@@ -283,9 +277,9 @@ export function TreasuriesPage() {
                 </>
               )}
               {!editing.id && (
-                <Field label="الرصيد الافتتاحي (د.ل)" hint="يُسجَّل كحركة افتتاحية ولا يمكن تغييره لاحقاً">
-                  <Input type="number" step="0.001" inputMode="decimal" dir="ltr" value={editing.opening ?? ''} onChange={(e) => set({ opening: e.target.value })} />
-                </Field>
+                <><Field label="الرصيد الافتتاحي (د.ل)" hint="يُسجَّل كحركة افتتاحية ولا يمكن تغييره لاحقاً">
+                  <Input type="number" min="0" step="0.001" inputMode="decimal" dir="ltr" value={editing.opening ?? ''} onChange={(e) => set({ opening: e.target.value })} />
+                </Field><Field label="تاريخ الرصيد الافتتاحي"><Input type="date" value={editing.opening_date ?? todayISO()} onChange={(e) => set({ opening_date: e.target.value })} /></Field></>
               )}
             </Section>
             <Section title="ملاحظات">

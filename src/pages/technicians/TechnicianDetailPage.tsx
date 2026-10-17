@@ -52,7 +52,7 @@ export function TechnicianDetailPage() {
 
   type Line = { date: string; created: string; label: string; plus: number; minus: number }
   const lines: Line[] = [
-    ...(work.data ?? []).filter((w) => w.status === 'posted').map((w) => ({ date: w.work_date, created: w.created_at, label: `إنجاز: ${w.description ?? w.project_items?.name ?? ''} (${w.projects?.name})`, plus: Number(w.amount), minus: 0 })),
+    ...(work.data ?? []).filter((w) => w.status === 'posted').map((w) => ({ date: w.work_date, created: w.created_at, label: `عمل: ${w.description ?? w.project_items?.name ?? ''} (${w.projects?.name})`, plus: Number(w.amount), minus: 0 })),
     ...(payments.data ?? []).filter((p) => p.status === 'posted').map((p) => ({ date: p.payment_date, created: p.created_at, label: `دفعة${p.projects?.name ? ` — ${p.projects.name}` : ' على الحساب'}`, plus: 0, minus: Number(p.amount) })),
     ...(receipts.data ?? []).filter((r) => r.status === 'posted').map((r) => ({ date: r.receipt_date, created: r.created_at, label: 'مبلغ مستلم من الفني', plus: Number(r.amount), minus: 0 })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created))
@@ -89,7 +89,7 @@ export function TechnicianDetailPage() {
           <>
             <Button onClick={() => setForm('work')}>
               <Hammer className="size-4" />
-              تسجيل إنجاز
+              تسجيل عمل ومستحق
             </Button>
             {finance && (
               <>
@@ -105,6 +105,10 @@ export function TechnicianDetailPage() {
                   <Printer className="size-4" />
                   كشف الحساب
                 </Button>
+                <Button variant="secondary" onClick={() => openPrint('technician-invoice', tech.id)}>
+                  <Printer className="size-4" />
+                  فاتورة الأعمال
+                </Button>
               </>
             )}
           </>
@@ -112,7 +116,7 @@ export function TechnicianDetailPage() {
       />
       {b && (
         <div className="mb-5 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-          <StatCard icon={Hammer} label="المستحق من الإنجاز" value={<Money value={b.earned} />} />
+          <StatCard icon={Hammer} label="المستحق من الأعمال" value={<Money value={b.earned} />} />
           {finance && <StatCard icon={Banknote} label="المدفوع" value={<Money value={b.paid} />} tone="blue" />}
           {finance && <StatCard icon={ArrowDownToLine} label="مستلم من الفني" value={<Money value={b.received_back} />} tone="sand" />}
           {finance && <StatCard icon={Wallet} label={due >= 0 ? 'المتبقي للفني' : 'مقدم عند الفني'} value={<Money value={Math.abs(due)} />} tone={due > 0 ? 'red' : 'sand'} />}
@@ -123,7 +127,7 @@ export function TechnicianDetailPage() {
         onChange={setTab}
         items={[
           ...(finance ? [{ key: 'statement', label: 'كشف الحساب', icon: ScrollText }] : []),
-          { key: 'work', label: 'الإنجاز', icon: Hammer },
+          { key: 'work', label: 'الأعمال والمستحقات', icon: Hammer },
           ...(finance ? [{ key: 'payments', label: 'سندات الصرف', icon: ReceiptText }, { key: 'receipts', label: 'المستلم من الفني', icon: ArrowDownToLine }] : []),
         ]}
       />

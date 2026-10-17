@@ -25,18 +25,18 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ variant = 'primary', size = 'md', loading, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
   const styles = {
-    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700 dark:bg-sand-400 dark:hover:bg-sand-300 dark:text-brand-950',
+    primary: 'bg-brand-600 text-[var(--button-ink,#ffffff)] shadow-sm hover:bg-brand-700 dark:bg-sand-400 dark:hover:bg-sand-300 dark:text-[var(--button-dark-ink,#1d140e)]',
     secondary: 'border border-line-strong bg-surface text-ink shadow-sm hover:bg-surface-2',
     ghost: 'text-muted hover:bg-surface-2 hover:text-ink',
     soft: 'bg-accent-soft text-brand-700 hover:bg-brand-100 dark:text-brand-200 dark:hover:bg-brand-900',
     danger: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
   }[variant]
-  const sizes = { sm: 'h-8 px-2.5 text-xs', md: 'h-9 px-3.5 text-sm', icon: 'size-9 px-0' }[size]
+  const sizes = { sm: 'h-11 px-3 text-xs sm:h-8 sm:px-2.5', md: 'h-11 px-4 text-sm', icon: 'size-11 px-0 sm:size-10' }[size]
   return (
     <button
       type={type}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex cursor-pointer shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50',
         styles,
         sizes,
         className,
@@ -52,7 +52,7 @@ export function Button({ variant = 'primary', size = 'md', loading, className, c
 
 // ───────────── الحقول ─────────────
 const inputBase =
-  'h-9 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-faint outline-none transition focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15 disabled:bg-surface-2 disabled:text-muted aria-[invalid=true]:border-red-500'
+  'h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-faint outline-none transition focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15 disabled:bg-surface-2 disabled:text-muted aria-[invalid=true]:border-red-500'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...rest }, ref) => (
   <input ref={ref} className={cn(inputBase, className)} {...rest} />
@@ -120,7 +120,7 @@ export function Checkbox({ label, checked, onChange, disabled }: { label: ReactN
 
 // ───────────── الحاويات ─────────────
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-xl border border-line bg-surface p-4 shadow-card', className)}>{children}</div>
+  return <div className={cn('rounded-2xl border border-line bg-surface p-5 shadow-card', className)}>{children}</div>
 }
 
 export function CardHeader({ title, description, action, icon: Icon }: { title: ReactNode; description?: ReactNode; action?: ReactNode; icon?: LucideIcon }) {
@@ -130,7 +130,7 @@ export function CardHeader({ title, description, action, icon: Icon }: { title: 
         {Icon && <Icon className="size-4 text-brand-600 dark:text-brand-300" />}
         <div>
           <h2 className="text-[15px] font-semibold">{title}</h2>
-          {description && <p className="text-xs text-muted">{description}</p>}
+          {description && <p className="mt-1 text-xs leading-6 text-muted">{description}</p>}
         </div>
       </div>
       {action}
@@ -142,7 +142,7 @@ export type Crumb = { label: string; to?: string }
 
 export function PageHeader({ title, description, actions, crumbs }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; crumbs?: Crumb[] }) {
   return (
-    <div className="mb-6">
+    <div className="mb-7">
       {crumbs && crumbs.length > 0 && (
         <nav aria-label="مسار الصفحة" className="mb-2 flex flex-wrap items-center gap-1 text-xs text-muted">
           {crumbs.map((c, i) => (
@@ -161,8 +161,8 @@ export function PageHeader({ title, description, actions, crumbs }: { title: Rea
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          {title && <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>}
-          {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+          {title && <h1 className="text-2xl font-semibold leading-relaxed tracking-tight sm:text-3xl">{title}</h1>}
+          {description && <p className="mt-2 text-sm leading-7 text-muted">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
@@ -219,15 +219,20 @@ export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md'
   )
 }
 
-export function Money({ value, className, currency = true, signed }: { value: number | null | undefined; className?: string; currency?: boolean; signed?: boolean }) {
+export function NumberWithUnit({ value, unit, className, unitClassName, signed }: { value: number | null | undefined; unit?: ReactNode; className?: string; unitClassName?: string; signed?: boolean }) {
   const n = Number(value ?? 0)
   return (
-    <span className={cn('num whitespace-nowrap', n < 0 && 'text-red-600 dark:text-red-400', className)}>
-      {signed && n > 0 ? '+' : ''}
-      {formatMoney(n)}
-      {currency && <span className="ms-1 text-[0.75em] font-normal text-faint">د.ل</span>}
+    <span className={cn('whitespace-nowrap', className)}>
+      <span dir="rtl" className="inline-flex items-baseline gap-1 [unicode-bidi:isolate]" data-number-with-unit>
+        <bdi dir="ltr" className="num">{signed && n > 0 ? '+' : ''}{formatMoney(n)}</bdi>
+        {unit && <bdi dir="auto" className={unitClassName}>{unit}</bdi>}
+      </span>
     </span>
   )
+}
+
+export function Money({ value, className, currency = true, signed }: { value: number | null | undefined; className?: string; currency?: boolean; signed?: boolean }) {
+  return <NumberWithUnit value={value} unit={currency ? 'د.ل' : undefined} signed={signed} className={cn(Number(value ?? 0) < 0 && 'text-red-600 dark:text-red-400', className)} unitClassName="text-[0.75em] font-normal text-faint" />
 }
 
 export function ProgressBar({ value, max = 100, tone = 'brand', className, label }: { value: number; max?: number; tone?: 'brand' | 'sand' | 'red' | 'green'; className?: string; label?: string }) {
@@ -255,7 +260,6 @@ export function StatCard({
   to?: string
   tone?: 'brand' | 'sand' | 'red' | 'blue'
 }) {
-  const bar = { brand: 'bg-brand-500', sand: 'bg-sand-400', red: 'bg-red-500', blue: 'bg-sky-500' }[tone]
   const chip = {
     brand: 'bg-brand-50 text-brand-600 dark:bg-brand-900/60 dark:text-brand-200',
     sand: 'bg-sand-50 text-sand-600 dark:bg-sand-700/25 dark:text-sand-200',
@@ -263,15 +267,14 @@ export function StatCard({
     blue: 'bg-sky-50 text-sky-600 dark:bg-sky-950/60 dark:text-sky-300',
   }[tone]
   const body = (
-    <div className={cn('relative h-full overflow-hidden rounded-xl border border-line bg-surface p-3 shadow-card transition sm:p-4', to && 'hover:border-brand-300 hover:shadow-md dark:hover:border-brand-700')}>
-      <span className={cn('absolute inset-y-0 right-0 w-1', bar)} />
+    <div className={cn('relative h-full overflow-hidden rounded-xl border border-line bg-surface p-4 shadow-card transition-all duration-200 sm:p-5', to && 'hover:border-brand-300 hover:shadow-md dark:hover:border-brand-700')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-muted">{label}</div>
-          <div className="font-display mt-1.5 truncate text-lg leading-none font-semibold sm:text-2xl">{value}</div>
-          {hint && <div className="mt-2 hidden text-xs text-muted sm:block">{hint}</div>}
+          <div className="text-sm font-medium text-muted">{label}</div>
+          <div className="font-display mt-3 text-xl leading-snug font-semibold sm:text-2xl">{value}</div>
+          {hint && <div className="mt-3 text-xs leading-6 text-muted">{hint}</div>}
         </div>
-        <span className={cn('hidden rounded-lg p-2 sm:block', chip)}>
+        <span className={cn('hidden rounded-full p-2 sm:block', chip)}>
           <Icon className="size-5" />
         </span>
       </div>
@@ -365,8 +368,8 @@ export function FilterChips<T extends string>({ options, value, onChange }: { op
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition',
-            value === o.value ? 'border-brand-600 bg-brand-600 text-white dark:border-sand-400 dark:bg-sand-400 dark:text-brand-950' : 'border-line-strong bg-surface text-muted hover:text-ink',
+            'inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition sm:h-8',
+            value === o.value ? 'border-brand-600 bg-brand-600 text-[var(--button-ink,#ffffff)] dark:border-sand-400 dark:bg-sand-400 dark:text-[var(--button-dark-ink,#1d140e)]' : 'border-line-strong bg-surface text-muted hover:text-ink',
           )}
         >
           {o.label}

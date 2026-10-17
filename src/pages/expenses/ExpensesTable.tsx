@@ -11,13 +11,13 @@ import { useExpenses, type ExpenseRow } from './expenseData'
 
 type Scope = 'all' | 'general' | 'projects'
 
-export function ExpensesTable({ projectId, custodyId, onNew, scopeFilter }: { projectId?: string; custodyId?: string; onNew?: () => void; scopeFilter?: boolean }) {
+export function ExpensesTable({ phaseId, projectId, custodyId, onNew, scopeFilter }: { phaseId?: string; projectId?: string; custodyId?: string; onNew?: () => void; scopeFilter?: boolean }) {
   const { data, isLoading, error, refetch } = useExpenses({ projectId, custodyId })
   const [search, setSearch] = useState('')
   const [scope, setScope] = useState<Scope>('all')
   const [showReversed, setShowReversed] = useState(false)
   const reverse = useRpc((a: { id: string; reason: string }) => supabase.rpc('reverse_expense', { p_expense_id: a.id, p_reason: a.reason, p_date: todayISO() }), { success: 'تم إلغاء المصروف' })
-  const all = data ?? []
+  const all = (data ?? []).filter((r) => !phaseId || (phaseId === 'unassigned' ? !r.phase_id : r.phase_id === phaseId))
   const q = search.trim()
   const shown = all.filter(
     (e) =>

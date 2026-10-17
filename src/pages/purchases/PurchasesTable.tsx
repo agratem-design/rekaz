@@ -15,7 +15,7 @@ import { purchaseKindLabels, purchaseKindTone, usePurchases, type PurchaseRow } 
 type Status = 'all' | 'open' | 'paid' | 'reversed'
 type Kind = 'all' | 'material' | 'service' | 'return'
 
-export function PurchasesTable({ projectId, supplierId, onNew }: { projectId?: string; supplierId?: string; onNew?: () => void }) {
+export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phaseId?: string; projectId?: string; supplierId?: string; onNew?: () => void }) {
   const { hasRole } = useAuth()
   const finance = hasRole('admin', 'accountant')
   const { data, isLoading, error, refetch } = usePurchases({ projectId, supplierId })
@@ -26,7 +26,7 @@ export function PurchasesTable({ projectId, supplierId, onNew }: { projectId?: s
   const [returning, setReturning] = useState<PurchaseRow | null>(null)
   const reverse = useRpc((a: { id: string; reason: string }) => supabase.rpc('reverse_purchase', { p_purchase_id: a.id, p_reason: a.reason }), { success: 'تم إلغاء الفاتورة' })
 
-  const all = data ?? []
+  const all = (data ?? []).filter((r) => !phaseId || (phaseId === 'unassigned' ? !r.phase_id : r.phase_id === phaseId))
   const q = search.trim()
   const shown = all.filter((p) => {
     if (kind !== 'all' && p.kind !== kind) return false

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { formatMoney } from '@/lib/format'
+import { NumberWithUnit } from '@/components/ui'
 import { amountInWords } from './amountInWords'
 import type { Company, PrintSettings } from './printSettings'
 
@@ -14,6 +14,7 @@ export function PrintDocument({
   cancelled,
   children,
   compact,
+  dense,
 }: {
   company: Company | null | undefined
   settings: PrintSettings
@@ -24,6 +25,7 @@ export function PrintDocument({
   cancelled?: { reason?: string | null; at?: string | null } | null
   children: ReactNode
   compact?: boolean // سند قصير: نصف صفحة تقريباً
+  dense?: boolean
 }) {
   const vars = {
     '--p-title': settings.print_section_title_color,
@@ -37,7 +39,7 @@ export function PrintDocument({
   } as CSSProperties
 
   return (
-    <article dir="rtl" className={`print-root pd relative mx-auto bg-white text-[#1b1f1d] shadow-pop${compact ? ' pd-voucher' : ''}`} style={vars}>
+    <article dir="rtl" className={`print-root pd relative mx-auto bg-white text-[#1b1f1d] shadow-pop${compact ? ' pd-voucher' : ''}${dense ? ' pd-dense' : ''}`} style={vars}>
       <style>{printCss}</style>
       {cancelled && (
         <>
@@ -85,10 +87,21 @@ export function PrintDocument({
           {subtitle && <div className="pd-meta">{subtitle}</div>}
         </div>
       </header>
+      {settings.accountant_position === 'header' && <Accountant settings={settings} />}
       <div className={compact ? 'pd-body pd-compact' : 'pd-body'}>{children}</div>
+      {settings.accountant_position === 'footer' && <Accountant settings={settings} />}
       {settings.footer_note && <footer className="pd-footer">{settings.footer_note}</footer>}
     </article>
   )
+}
+
+function Accountant({ settings }: { settings: PrintSettings }) {
+  if (!settings.accountant_name.trim()) return null
+  return <div className={`pd-accountant pd-accountant-${settings.accountant_position}`} style={{ textAlign: settings.accountant_align }} data-accountant-position={settings.accountant_position}>
+    <div className="pd-accountant-content"><div className="pd-sign-label">المحاسب</div><div className="pd-sign-name">{settings.accountant_name}</div>
+      {settings.accountant_position === 'footer' && <><div className="pd-accountant-line" /><div className="pd-small">التوقيع</div></>}
+    </div>
+  </div>
 }
 
 export function InfoGrid({ items, cols = 2 }: { items: { label: string; value: ReactNode; wide?: boolean }[]; cols?: 2 | 3 }) {
@@ -109,8 +122,8 @@ export function AmountBox({ amount, label = 'المبلغ', cancelled }: { amoun
     <div className="pd-amount">
       <div className="pd-amount-row">
         <span>{label}</span>
-        <span className="num pd-amount-value" style={cancelled ? { textDecoration: 'line-through' } : undefined}>
-          {formatMoney(amount)} <small>د.ل</small>
+        <span className="pd-amount-value" style={cancelled ? { textDecoration: 'line-through' } : undefined}>
+          <NumberWithUnit value={amount} unit="د.ل" unitClassName="text-[9pt] font-normal" />
         </span>
       </div>
       <div className="pd-words">{amountInWords(amount)}</div>
@@ -187,6 +200,7 @@ export function Signatures({ items }: { items: { label: string; name?: ReactNode
 
 const printCss = `
 .pd { width: 210mm; min-height: 148mm; padding: 14mm 14mm 12mm; font-family: var(--p-font); font-size: var(--p-size); line-height: 1.7; }
+.pd h1, .pd h2, .pd h3 { font-family: inherit; }
 .pd .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
 .pd-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; padding-bottom: 4mm; border-bottom: 2px solid var(--p-title); margin-bottom: 6mm; }
 .pd-brand { display: flex; align-items: center; gap: 4mm; }
@@ -222,6 +236,10 @@ const printCss = `
 .pd-total-row:first-child { border-top: 0; }
 .pd-total-row:last-child { background: var(--p-tot-bg); color: var(--p-tot-fg); font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .pd-signatures { display: grid; gap: 10mm; margin-top: 8mm; break-inside: avoid; }
+.pd-accountant { break-inside: avoid; margin: 4mm 0; }
+.pd-accountant-content { display: inline-block; min-width: 42mm; max-width: 100%; overflow-wrap: anywhere; text-align: center; }
+.pd-accountant-footer { margin-top: 6mm; }
+.pd-accountant-line { border-top: 1px solid #8a8f89; margin-top: 12mm; }
 .pd-sign { text-align: center; display: flex; flex-direction: column; min-height: 34mm; }
 .pd-sign-label { font-weight: 700; color: var(--p-title); }
 .pd-sign-name { font-weight: 600; }
@@ -235,7 +253,24 @@ const printCss = `
 .pd-clause-no { flex-shrink: 0; width: 7mm; height: 7mm; border-radius: 50%; background: var(--p-title); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media print {
   .pd { width: auto; min-height: 0; padding: 0; }
+  .pd-dense { font-size: min(var(--p-size), 9.5pt); line-height: 1.4; }
+  .pd-dense .pd-table td { padding: 0.8mm 2mm; }
+  .pd-body { display: block; }
+  .pd-body > * + *, .pd-closing > * + * { margin-top: 3mm; }
+  .pd-closing { break-inside: avoid; }
+  .pd-section-title { break-after: avoid; }
+  .pd-section:not(:has(tbody tr:nth-child(6))) { break-inside: avoid; }
+  .pd-table th { padding: 1.5mm 2mm; }
+  .pd-table td { padding: 1.2mm 2mm; }
+  .pd-amount, .pd-totals { break-inside: avoid; }
+  .pd-signatures { margin-top: 5mm; }
+  .pd-sign { min-height: 24mm; }
+  .pd-dense .pd-signatures { margin-top: 3mm; }
+  .pd-dense .pd-sign { min-height: 18mm; }
   .pd-voucher { padding: 8mm; outline-offset: -2mm; }
   @page { size: A4; margin: 12mm 12mm 16mm; @bottom-center { content: "صفحة " counter(page) " من " counter(pages); font-size: 8pt; color: #888; } }
 }
 `
+
+
+

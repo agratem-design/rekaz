@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { Button, Field, Textarea, cn } from './ui'
@@ -141,8 +142,8 @@ export function Modal({
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [title, onClose])
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-0 animate-fade-in sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+  return createPortal(
+    <div data-modal-overlay onClick={(e) => e.stopPropagation()} className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-0 animate-fade-in sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-labelledby={labelledBy ?? (title ? 'modal-title' : undefined)} className={cn('flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-surface shadow-pop animate-pop-in sm:rounded-2xl', w)}>
         {title && (
           <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -157,6 +158,6 @@ export function Modal({
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         {footer && <footer className="flex gap-2 border-t border-line bg-surface-2 px-5 py-3">{footer}</footer>}
       </div>
-    </div>
+    </div>, document.body
   )
 }

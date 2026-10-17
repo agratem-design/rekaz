@@ -1,10 +1,11 @@
+import { EntryCard, EntryDetails, EntryLayout, EntryCard as Section } from '@/components/EntryWorkspace'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { TreasuryPicker } from '@/components/TreasuryPicker'
 import { PartyPicker, ProjectRefPicker, financeKeys, useTechnicians } from '@/components/pickers'
-import { Button, Field, Input, KeyValue, Money, Section, Select, Textarea } from '@/components/ui'
+import { Button, Field, Input, KeyValue, Money, Select, Textarea } from '@/components/ui'
 import { formatMoney, todayISO } from '@/lib/format'
 import { options, paymentMethodLabels, rateUnitLabels } from '@/lib/labels'
 import { newKey, useProjectsFinancials } from '@/lib/queries'
@@ -16,14 +17,14 @@ const refresh = (qc: ReturnType<typeof useQueryClient>) => {
   for (const k of financeKeys) qc.invalidateQueries({ queryKey: [k] })
 }
 
-// ───────────── تسجيل إنجاز فني (مستحق، بلا حركة خزينة) ─────────────
-export function WorkForm({ open, onClose, technicianId, projectId, itemId }: { open: boolean; onClose: () => void; technicianId?: string; projectId?: string; itemId?: string }) {
+// ───────────── تسجيل عمل ومستحق (مستحق، بلا حركة خزينة) ─────────────
+export function WorkForm({ phaseId, open, onClose, technicianId, projectId, itemId }: { phaseId?: string; open: boolean; onClose: () => void; technicianId?: string; projectId?: string; itemId?: string }) {
   const qc = useQueryClient()
   const techs = useTechnicians()
   const blank = () => ({
     technician_id: technicianId ?? '',
     project_id: projectId ?? '',
-    phase_id: '',
+    phase_id: phaseId === 'unassigned' ? '' : phaseId ?? '',
     item_id: itemId ?? '',
     date: todayISO(),
     rate_unit: '' as Enums<'rate_unit'> | '',
@@ -101,23 +102,24 @@ export function WorkForm({ open, onClose, technicianId, projectId, itemId }: { o
     })
     setBusy(false)
     if (error) return toast.error(errorMessage(error))
-    toast.success(`تم تسجيل الإنجاز: ${formatMoney(amount)} د.ل مستحقة للفني`)
+    toast.success(`تم تسجيل المستحق: ${formatMoney(amount)} د.ل مستحقة للفني`)
     refresh(qc)
     onClose()
   }
 
   return (
     <SidePanel
+        workspace
       open={open}
       size="lg"
-      title="تسجيل إنجاز فني"
-      description="سجل الإنجاز هو مصدر مستحق الفني ويدخل تكلفة المشروع. لا تتحرك أي خزينة."
+      title="تسجيل عمل ومستحق"
+      description="سجل الأعمال والمستحقات هو مصدر مستحق الفني ويدخل تكلفة المشروع. لا تتحرك أي خزينة."
       dirty={dirty}
       onClose={onClose}
       footer={
         <>
           <Button loading={busy} onClick={submit}>
-            حفظ الإنجاز
+            حفظ العمل والمستحق
           </Button>
           <Button variant="secondary" onClick={async () => (await confirmDiscard(dirty)) && onClose()}>
             إلغاء
@@ -125,6 +127,13 @@ export function WorkForm({ open, onClose, technicianId, projectId, itemId }: { o
         </>
       }
     >
+      <EntryLayout summary={<div className="space-y-3">
+        <p className="font-semibold">{(techs.data ?? []).find((t) => t.id === f.technician_id)?.name ?? 'اختر الفني'}</p>
+        <KeyValue label="الكمية المنجزة">{Number(f.quantity) || 0}</KeyValue>
+        <KeyValue label="السعر"><Money value={Number(f.rate) || 0} /></KeyValue>
+        <div className="border-t border-line pt-4"><span className="text-sm text-muted">المستحق للفني</span><Money value={amount} className="mt-2 block text-2xl font-semibold" /></div>
+        <p className="text-xs leading-6 text-muted">تسجيل المستحق لا يصرف مبلغًا من الخزينة. السداد له عملية مستقلة.</p>
+      </div>}>
       <Section title="الفني والعمل">
         <PartyPicker table="technicians" value={f.technician_id} onChange={(id) => set({ technician_id: id, rate: '', rate_unit: '' })} error={errors.technician} disabled={Boolean(technicianId)} />
         <ProjectRefPicker projectId={f.project_id} phaseId={f.phase_id} itemId={f.item_id} optionalProject={false} fixedProject={Boolean(projectId)} error={errors.project} onChange={(v) => set({ project_id: v.projectId, phase_id: v.phaseId, item_id: v.itemId })} />
@@ -160,6 +169,7 @@ export function WorkForm({ open, onClose, technicianId, projectId, itemId }: { o
           </KeyValue>
         </div>
       </Section>
+      </EntryLayout>
     </SidePanel>
   )
 }
@@ -233,6 +243,7 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
   return (
     <>
       <SidePanel
+        workspace
         open={open}
         title={pay ? 'صرف دفعة لفني' : 'استلام مبلغ من فني'}
         description={pay ? 'تخفض مستحق الفني وتخصم من الخزينة. المشروع سياق للعرض فقط.' : 'إرجاع زائد أو وديعة من الفني: تُضاف للخزينة وتزيد مستحقه'}
@@ -249,6 +260,13 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
           </>
         }
       >
+        <EntryLayout summary={<div className="space-y-3">
+          <KeyValue label={due >= 0 ? 'المستحق للفني حالياً' : 'مقدم عند الفني'}><Money value={Math.abs(due)} /></KeyValue>
+          <KeyValue label="قيمة الحركة"><Money value={Number(f.amount) || 0} /></KeyValue>
+          <KeyValue label="الرصيد بعد الحركة"><Money value={pay ? due - (Number(f.amount) || 0) : due + (Number(f.amount) || 0)} /></KeyValue>
+          <p className="text-xs leading-6 text-muted">الرصيد الموجب مستحق للفني، والسالب مبلغ مقدم عنده.</p>
+        </div>}>
+        <EntryCard title="الفني وبيانات الدفعة">
         <PartyPicker table="technicians" value={f.technician_id} onChange={(id) => set({ technician_id: id })} error={errors.technician} disabled={Boolean(technicianId)} />
         {f.technician_id && (
           <div className="rounded-lg bg-surface-2 px-4 py-2 text-sm">
@@ -287,9 +305,13 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
           )}
         </div>
         <TreasuryPicker label={pay ? 'الخزينة المخصوم منها' : 'الخزينة المستلمة'} value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={pay ? (project?.project_type ?? null) : null} required error={errors.treasury} />
+        </EntryCard>
+        <EntryDetails title="ملاحظات إضافية (اختياري)">
         <Field label="ملاحظات">
           <Textarea value={f.notes} onChange={(e) => set({ notes: e.target.value })} />
         </Field>
+        </EntryDetails>
+        </EntryLayout>
       </SidePanel>
       {printId && <PrintOptions kind={pay ? 'technician-payment' : 'technician-receipt'} id={printId} title={pay ? 'تم صرف الدفعة' : 'تم الاستلام'} message="هل تريد طباعة السند الآن؟" onClose={() => setPrintId(null)} />}
     </>

@@ -1,3 +1,4 @@
+import { EntryCard as Section, EntryLayout } from '@/components/EntryWorkspace'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Wand2 } from 'lucide-react'
@@ -5,7 +6,7 @@ import { toast } from 'sonner'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { TreasuryPicker } from '@/components/TreasuryPicker'
 import { PartyPicker, financeKeys } from '@/components/pickers'
-import { Button, EmptyState, Field, Input, KeyValue, Money, Section, Select, Textarea } from '@/components/ui'
+import { Button, EmptyState, Field, Input, KeyValue, Money, Select, Textarea } from '@/components/ui'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { options, paymentMethodLabels } from '@/lib/labels'
 import { newKey } from '@/lib/queries'
@@ -112,6 +113,7 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
   return (
     <>
       <SidePanel
+        workspace
         open={open}
         size="lg"
         title="سداد دفعة للمورد"
@@ -129,6 +131,11 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
           </>
         }
       >
+        <EntryLayout summary={<div className="space-y-3">
+          <KeyValue label="مبلغ الدفعة"><Money value={amt} /></KeyValue>
+          <KeyValue label="الموزع على الفواتير"><Money value={allocated} /></KeyValue>
+          <KeyValue label="يبقى مقدماً للمورد"><Money value={Math.max(advance, 0)} /></KeyValue>
+        </div>}>
         <Section title="الدفعة">
           <PartyPicker table="suppliers" value={supplier} onChange={(id) => (setSupplier(id), setAlloc({}), touch())} error={errors.supplier} disabled={Boolean(supplierId)} />
           <div className="grid gap-4 sm:grid-cols-2">
@@ -213,6 +220,7 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
             <Textarea value={notes} onChange={(e) => (setNotes(e.target.value), touch())} />
           </Field>
         </Section>
+        </EntryLayout>
       </SidePanel>
       {printId && <PrintOptions kind="supplier-payment" id={printId} title="تم تسجيل الدفعة" message="هل تريد طباعة سند الصرف الآن؟" onClose={() => setPrintId(null)} />}
     </>

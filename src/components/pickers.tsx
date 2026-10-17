@@ -179,7 +179,7 @@ export function ProjectRefPicker({
   const projects = useProjectsFinancials()
   const phases = usePhases(projectId || undefined)
   const items = useQuery({
-    queryKey: ['project_items', projectId],
+    queryKey: ['project_items', projectId, 'picker'],
     enabled: Boolean(projectId),
     queryFn: async () => {
       const { data, error } = await supabase.from('project_items').select('id, name, phase_id').eq('project_id', projectId).order('order_index')

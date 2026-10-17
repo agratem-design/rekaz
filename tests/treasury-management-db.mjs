@@ -1,0 +1,17 @@
+import { PGlite } from '../tmp/invoice-db-test/node_modules/@electric-sql/pglite/dist/index.js';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();await db.exec(fs.readFileSync('supabase/tests/00_supabase_shim.sql','utf8'));
+for(const f of fs.readdirSync('supabase/migrations').sort())await db.exec(fs.readFileSync('supabase/migrations/'+f,'utf8').replace('create extension if not exists pgcrypto;',''));
+const uid='22222222-2222-4222-8222-222222222222';await db.query('insert into auth.users(id,email)values($1,$2)',[uid,'treasury@test.local']);await db.query("insert into public.user_roles(user_id,role)values($1,'admin')",[uid]);await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);await db.exec('set role authenticated');
+const save=async d=>(await db.query('select public.save_treasury($1::jsonb) id',[JSON.stringify(d)])).rows[0].id;
+const row={name:'خزينة اختبار',domain:'contracting',kind:'cash',is_active:true};let root=await save(row),branch=await save({...row,name:'فرع',parent_id:root,opening:'100',opening_date:'2026-01-01'}),empty=await save({...row,name:'فرع فارغ',parent_id:root});
+await assert.rejects(()=>save({...row,id:branch,parent_id:root,is_active:false}),/الرصيد الحالي/);
+await assert.rejects(()=>save({...row,id:root,is_active:false}),/الفروع/);
+await assert.rejects(()=>save({...row,id:root,parent_id:branch}),/فرع آخر/);
+await assert.rejects(()=>save({...row,name:'رصيد خاطئ',opening:-1}),/صفراً أو موجباً/);
+await assert.rejects(()=>save({...row,name:'تاريخ ناقص',opening:100}),/تاريخ/);
+assert.equal((await db.query("select count(*)::int n from public.treasuries where name in ('رصيد خاطئ','تاريخ ناقص')")).rows[0].n,0);
+await save({...row,id:empty,parent_id:root,is_active:false});assert.equal((await db.query('select is_active from public.treasuries where id=$1',[empty])).rows[0].is_active,false);await save({...row,id:empty,parent_id:root,is_active:true});
+await assert.rejects(()=>save({...row,parent_id:root,domain:'finishing'}),/قطاع/);
+assert.equal((await db.query('select balance from public.treasury_balances where treasury_id=$1',[branch])).rows[0].balance,'100.000');
+console.log('PASS: atomic creation+opening, opening date/amount validation, branch ownership, no cycles or hidden subbranches, zero-balance deactivation/reactivation, funded treasury and active-child protection.');await db.close();

@@ -1,12 +1,14 @@
+import { useAutomaticDraft } from '@/lib/formDrafts'
+import { EntryCard as Section } from '@/components/EntryWorkspace'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileDown, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { SidePanel, confirmDiscard } from '@/components/SidePanel'
 import { ClientPicker } from '@/components/ClientPicker'
-import { Button, Field, Input, Money, Section, Select, Textarea } from '@/components/ui'
+import { Button, Field, Input, Money, Select, Textarea } from '@/components/ui'
 import { contractStatusLabels, options } from '@/lib/labels'
-import { usePhases, useProjectsFinancials } from '@/lib/queries'
+import { useProjectsFinancials } from '@/lib/queries'
 import { errorMessage, supabase, type Enums, type Tables } from '@/lib/supabase'
 import { useCatalog } from '../projects/ItemForm'
 
@@ -52,7 +54,6 @@ export function ContractForm({ open, onClose, contract, projectId, clientId }: {
   const [clauses, setClauses] = useState<Clause[]>([])
   const [dirty, setDirty] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const phases = usePhases(form.project_id || undefined)
   const projectItems = useQuery({
     queryKey: ['project_items', form.project_id],
     enabled: Boolean(form.project_id),
@@ -132,7 +133,7 @@ export function ContractForm({ open, onClose, contract, projectId, clientId }: {
         contract_number: form.contract_number.trim() || null,
         client_id: form.client_id,
         project_id: form.project_id || null,
-        phase_id: form.phase_id || null,
+        phase_id: null,
         status: form.status,
         amount: Number(form.amount) || 0,
         start_date: form.start_date || null,
@@ -187,8 +188,11 @@ export function ContractForm({ open, onClose, contract, projectId, clientId }: {
 
   const clientProjects = (projects.data ?? []).filter((p) => p.client_id === form.client_id)
 
+  useAutomaticDraft(`contract:${contract?.id??'new'}`, open, { form, lines, clauses }, dirty, (saved) => { setForm(saved.form); setLines(saved.lines); setClauses(saved.clauses); setDirty(true) })
+
   return (
     <SidePanel
+        workspace
       open={open}
       size="xl"
       title={contract ? 'تعديل العقد' : 'عقد جديد'}
@@ -235,16 +239,6 @@ export function ContractForm({ open, onClose, contract, projectId, clientId }: {
                 ))}
               </Select>
             </Field>
-            <Field label="المرحلة (اختياري)">
-              <Select value={form.phase_id} disabled={!form.project_id} onChange={(e) => set({ phase_id: e.target.value })}>
-                <option value="">كل المشروع</option>
-                {(phases.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.reference_number} — {p.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
             <Field label="الحالة" hint="العقد النشط أو المكتمل يصبح التزام الزبون في المقاولات">
               <Select value={form.status} onChange={(e) => set({ status: e.target.value as Form['status'] })}>
                 {options(contractStatusLabels).map((o) => (
@@ -283,8 +277,8 @@ export function ContractForm({ open, onClose, contract, projectId, clientId }: {
 
         <Section title="بنود العقد المالية">
           {lines.map((l, i) => (
-            <div key={i} className="grid grid-cols-[1fr_6rem_7rem_auto] items-end gap-2">
-              <Field label={i === 0 ? 'البند' : ''}>
+            <div key={i} className="grid min-w-0 grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem_auto]">
+              <Field className="col-span-2 sm:col-span-1" label={i === 0 ? 'البند' : ''}>
                 <Input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} aria-label="اسم البند" />
               </Field>
               <Field label={i === 0 ? 'الكمية' : ''}>

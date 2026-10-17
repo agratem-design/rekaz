@@ -55,11 +55,11 @@ export function ReportsPage() {
         {tab === 'hub' && (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <ReportCard icon={Landmark} title="الملخص المالي العام" desc="أرصدة الخزائن والمركز المالي المختصر: النقدية والذمم والمستحقات" figure={d && <Money value={d.cash} />} figureLabel="النقدية" kind="financial-summary" link="/treasuries" />
-            <ReportCard icon={Building2} title="تقرير المشاريع المالي" desc="الالتزام والمحصّل والتكلفة المباشرة والربح حتى تاريخه لكل مشروع" figure={d && <span className="num">{d.projects.length}</span>} figureLabel="مشروع" kind="projects-report" onView={() => setTab('projects')} />
+            <ReportCard icon={Building2} title="تقرير المشاريع المالي" desc="الالتزام والمحصّل والتكلفة المباشرة والقيمة بعد التكاليف لكل مشروع" figure={d && <span className="num">{d.projects.length}</span>} figureLabel="مشروع" kind="projects-report" onView={() => setTab('projects')} />
             <ReportCard icon={Users} title="ديون وذمم الزبائن" desc="الزبائن الذين عليهم مستحقات، مفصّلة لكل مشروع" figure={d && <Money value={d.receivable} />} figureLabel={d ? `${d.debtors} زبون` : ''} kind="debts-report" link="/clients" />
             <ReportCard icon={Users} title="كشف الزبائن الإجمالي" desc="كل الزبائن: إجمالي الأعمال والمسدد والمتبقي والرصيد الدائن" kind="clients-statement" link="/clients" />
             <ReportCard icon={Truck} title="ذمم الموردين" desc="الفواتير والمدفوع والمقدم والمستحق لكل مورد" figure={d && <Money value={d.supDue} />} figureLabel="مستحق" kind="suppliers-report" link="/suppliers" />
-            <ReportCard icon={Wrench} title="مستحقات الفنيين" desc="المستحق من الإنجاز والمدفوع والمتبقي لكل فني" figure={d && <Money value={d.techDue} />} figureLabel="مستحق" kind="technicians-report" link="/technicians" />
+            <ReportCard icon={Wrench} title="مستحقات الفنيين" desc="المستحق من الأعمال والمدفوع والمتبقي لكل فني" figure={d && <Money value={d.techDue} />} figureLabel="مستحق" kind="technicians-report" link="/technicians" />
             <ReportCard icon={Coins} title="كشف المصروفات" desc="مصروفات المشاريع والمصروفات العامة حسب المشروع والفترة" figure={d && <Money value={d.expenses} />} figureLabel="الإجمالي" kind="expenses-report" onView={() => setTab('expenses')} />
           </div>
         )}
@@ -145,7 +145,7 @@ function ProjectsReport({ rows, loading }: { rows?: PRow[]; loading: boolean }) 
         { key: 'ob', label: 'الالتزام', align: 'end', render: (r) => <Money value={r.client_obligation} /> },
         { key: 'col', label: 'المحصّل', align: 'end', hideBelow: 'sm', render: (r) => <Money value={r.collected} /> },
         { key: 'cost', label: 'التكلفة المباشرة', align: 'end', hideBelow: 'sm', render: (r) => <Money value={r.direct_cost} /> },
-        { key: 'profit', label: 'الربح حتى تاريخه', align: 'end', render: (r) => <Money value={r.gross_profit_to_date} className={cn('font-semibold', n(r.gross_profit_to_date) >= 0 && 'text-olive-700 dark:text-olive-300')} /> },
+        { key: 'profit', label: 'القيمة بعد التكاليف', align: 'end', render: (r) => <Money value={n(r.client_obligation) - n(r.direct_cost)} className={cn('font-semibold', n(r.client_obligation) - n(r.direct_cost) >= 0 && 'text-olive-700 dark:text-olive-300')} /> },
       ]}
       footer={
         shown.length > 0 && (
@@ -162,7 +162,7 @@ function ProjectsReport({ rows, loading }: { rows?: PRow[]; loading: boolean }) 
               <Money value={sum('direct_cost')} />
             </td>
             <td className="px-4 py-2.5 text-left">
-              <Money value={sum('gross_profit_to_date')} />
+              <Money value={sum('client_obligation') - sum('direct_cost')} />
             </td>
           </tr>
         )

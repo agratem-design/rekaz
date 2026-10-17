@@ -1,7 +1,9 @@
+import { businessLoaders } from './businessDocs'
+import { customerInvoiceLoaders } from './customerInvoiceDocs'
 import { useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Printer, X } from 'lucide-react'
+import { Download, Printer, X } from 'lucide-react'
 import { Button, ErrorState, Spinner } from '@/components/ui'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { formatDate, formatMoney } from '@/lib/format'
@@ -23,7 +25,7 @@ export default function PrintPage() {
       return data
     },
   })
-  const all = { ...loaders, ...financeLoaders, ...reportLoaders }
+  const all = { ...businessLoaders, ...loaders, ...financeLoaders, ...reportLoaders, ...customerInvoiceLoaders }
   const doc = useQuery({ queryKey: ['print', kind, id, params.toString()], queryFn: () => all[kind]?.(id, params) ?? Promise.reject(new Error('نوع مستند غير معروف')) })
   const settings = resolvePrintSettings(company.data)
 
@@ -39,10 +41,21 @@ export default function PrintPage() {
     }
   }, [ready, params])
 
+  const exportHtml = () => {
+    const article = document.querySelector('.print-root')
+    if (!article) return
+    const safeTitle = (doc.data?.title ?? 'مستند').replace(/[<>:"/\\|?*]/g, '-')
+    const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((el) => el.outerHTML).join('')
+    const body = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title>${fontLinks}<style>body{margin:0;background:white}.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}.print-root{box-shadow:none}</style></head><body>${article.outerHTML}</body></html>`
+    const url = URL.createObjectURL(new Blob([body], { type: 'text/html;charset=utf-8' }))
+    const a = document.createElement('a'); a.href = url; a.download = `${safeTitle}${doc.data?.number ? `-${doc.data.number}` : ''}.html`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
   return (
     <div className="min-h-dvh bg-stone-200/70 pb-10 dark:bg-stone-900">
       <div className="no-print sticky top-0 z-10 mb-6 flex items-center gap-2 border-b border-line bg-surface px-4 py-2.5 shadow-sm">
         <span className="flex-1 truncate text-sm font-medium">{doc.data?.title ?? 'طباعة'}</span>
+        <Button variant="secondary" onClick={exportHtml} disabled={!ready}><Download className="size-4" />تنزيل نسخة</Button>
         <Button onClick={() => window.print()} disabled={!ready}>
           <Printer className="size-4" />
           طباعة
@@ -70,7 +83,7 @@ const loaders: Record<string, Loader> = {
   async receipt(id) {
     const { data: r, error } = await supabase
       .from('client_receipts')
-      .select('*, clients(name, phone), projects(name), treasuries(name)')
+      .select('*, clients(name, phone), projects(name)')
       .eq('id', id)
       .single()
     if (error) throw error
@@ -94,7 +107,6 @@ const loaders: Record<string, Loader> = {
               { label: 'وذلك عن', value: r.projects ? `دفعة على مشروع «${r.projects.name}»` : 'دفعة مقدمة على حساب الزبون (رصيد دائن)', wide: true },
               { label: 'طريقة الدفع', value: paymentMethodLabels[r.method] },
               { label: 'المرجع', value: r.reference },
-              { label: 'أودع في', value: r.treasuries?.name },
               { label: 'هاتف الزبون', value: r.clients?.phone ? <span className="num">{r.clients.phone}</span> : null },
               ...(r.notes ? [{ label: 'ملاحظات', value: r.notes, wide: true }] : []),
             ]}
@@ -169,7 +181,7 @@ const loaders: Record<string, Loader> = {
               <p style={{ margin: 0 }}>لا توجد دفعات مسجلة.</p>
             )}
           </PrintSection>
-          <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+          <Signatures items={[{ label: 'المدير', name: company.signee_name ?? undefined }]} />
         </PrintDocument>
       ),
     }
@@ -241,10 +253,11 @@ const loaders: Record<string, Loader> = {
                 columns={[
                   { label: 'م', width: '9mm', align: 'center', render: (_x, i) => <span className="num">{i + 1}</span> },
                   { label: 'البند', render: (x) => x.name },
-                  { label: 'الكمية', align: 'center', render: (x) => <span className="num">{formatMoney(x.quantity)}</span> },
+                  { label: 'الكمية الأصلية', align: 'center', render: (x) => <span className="num">{formatMoney(x.base_quantity ?? x.quantity)}</span> },
+                  { label: 'معامل التكعيب', align: 'center', render: (x) => <span className="num">{String(x.cubic_factor ?? 1)}</span> },
+                  { label: 'الكمية النهائية', align: 'center', render: (x) => <span className="num">{formatMoney(x.quantity)}</span> },
                   { label: 'سعر الوحدة', align: 'end', render: (x) => <span className="num">{formatMoney(x.unit_price)}</span> },
                   { label: 'الإجمالي', align: 'end', render: (x) => <span className="num">{formatMoney(x.total_price)}</span> },
-                  { label: 'الإنجاز', align: 'center', width: '16mm', render: (x) => <span className="num">{Number(x.progress)}%</span> },
                 ]}
                 rows={items.data}
                 totals={[{ label: 'إجمالي البنود', value: formatMoney(fin?.items_total) }]}
@@ -280,7 +293,7 @@ const loaders: Record<string, Loader> = {
                 ...(pr.project_type === 'finishing' ? ([['أتعاب الشركة', fin?.company_fee]] as [string, number | null | undefined][]) : []),
                 ['المحصّل من الزبون', fin?.collected],
                 [Number(fin?.client_remaining) < 0 ? 'زيادة مدفوعة' : 'المتبقي على الزبون', Math.abs(Number(fin?.client_remaining ?? 0))],
-                ...(pr.project_type === 'contracting' ? ([['الربح حتى تاريخه', fin?.gross_profit_to_date]] as [string, number | null | undefined][]) : []),
+                ...(pr.project_type === 'contracting' ? ([['قيمة المشروع بعد التكاليف', Number(fin?.client_obligation ?? 0) - Number(fin?.direct_cost ?? 0)]] as [string, number | null | undefined][]) : []),
               ]}
             />
           </PrintSection>
@@ -297,7 +310,7 @@ const loaders: Record<string, Loader> = {
               />
             </PrintSection>
           )}
-          <Signatures items={[{ label: 'المحاسب' }, { label: 'المدير', name: company.signee_name ?? undefined }]} />
+          <Signatures items={[{ label: 'المدير', name: company.signee_name ?? undefined }]} />
         </PrintDocument>
       ),
     }
@@ -336,7 +349,6 @@ const loaders: Record<string, Loader> = {
               { label: 'الطرف الثاني', value: k.clients?.name },
               { label: 'المشروع', value: k.projects?.name },
               { label: 'الموقع', value: k.projects?.location },
-              ...(k.project_phases ? [{ label: 'المرحلة', value: `${k.project_phases.name} (${k.project_phases.reference_number ?? ''})` }] : []),
               { label: 'مدة التنفيذ', value: k.start_date ? `من ${formatDate(k.start_date)}${k.end_date ? ` إلى ${formatDate(k.end_date)}` : ''}` : null },
               { label: 'شروط الدفع', value: k.payment_terms, wide: true },
             ]}

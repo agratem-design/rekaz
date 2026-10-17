@@ -44,7 +44,7 @@ export function DataTable<T>({
   const align = (a?: Column<T>['align']) => (a === 'end' ? 'text-left' : a === 'center' ? 'text-center' : 'text-right')
   return (
     <Card className="overflow-hidden p-0">
-      {toolbar && <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">{toolbar}</div>}
+      {toolbar && <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-5 py-4">{toolbar}</div>}
       {loading ? (
         <TableSkeleton cols={Math.min(columns.length, 4)} />
       ) : error ? (
@@ -82,13 +82,13 @@ export function DataTable<T>({
                   className={cn('group transition-colors hover:bg-surface-2', onRowClick && 'cursor-pointer', rowClassName?.(row))}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} className={cn('border-b border-line px-4 py-2.5 align-middle', align(c.align), c.hideBelow && hide[c.hideBelow], c.className)}>
+                    <td key={c.key} className={cn('border-b border-line px-4 py-3.5 align-middle', align(c.align), c.hideBelow && hide[c.hideBelow], c.className)}>
                       {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? '—') || '—'}
                     </td>
                   ))}
                   {rowActions && (
                     <td className="border-b border-line px-2 py-1 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+                      <div className="flex justify-end gap-1">
                         {rowActions(row)}
                       </div>
                     </td>
