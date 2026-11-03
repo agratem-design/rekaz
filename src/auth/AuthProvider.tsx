@@ -29,8 +29,8 @@ export async function resolveLoginIdentifier(login: string): Promise<string> {
     return v
   }
   try {
-    const { data } = await supabase.rpc('get_auth_email_by_username', { p_identifier: v })
-    if (data) return data
+    const { data } = await (supabase.rpc as any)('get_auth_email_by_username', { p_identifier: v })
+    if (typeof data === 'string' && data) return data
   } catch {
     // fallback to local domain
   }

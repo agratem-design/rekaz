@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string
+const DEFAULT_SUPABASE_URL = 'https://bpnhzaexmqruzaxyzlyc.supabase.co'
+const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwbmh6YWV4bXFydXpheHl6bHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NDUwOTQsImV4cCI6MjA4NjMyMTA5NH0.YnLb_sCMT0Pz4LgK1uCLQtr5kUTaIBQtvyMmG3OHDMA'
+
+const url = (import.meta.env.VITE_SUPABASE_URL as string) || DEFAULT_SUPABASE_URL
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) || DEFAULT_SUPABASE_KEY
 
 if (!url || !key) throw new Error('إعدادات الاتصال بقاعدة البيانات ناقصة (.env)')
 
