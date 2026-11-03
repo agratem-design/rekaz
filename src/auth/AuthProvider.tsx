@@ -16,8 +16,32 @@ const AuthContext = createContext<AuthState | null>(null)
 
 // المستخدمون الجدد يُنشؤون بعنوان داخلي من اسم المستخدم؛ ويمكن الدخول بالبريد مباشرة أيضاً
 export const USERNAME_EMAIL_DOMAIN = 'rikaz.local'
+
+export async function resolveLoginIdentifier(login: string): Promise<string> {
+  const v = login.trim().toLowerCase()
+  if (v === 'admin' || v === 'rekazabdo' || v === 'admin@rikaz.local') {
+    return 'rekazabdo@admin.com'
+  }
+  if (v === 'tester' || v === 'tester@rikaz.local') {
+    return 'tester@rikaz.local'
+  }
+  if (v.includes('@')) {
+    return v
+  }
+  try {
+    const { data } = await supabase.rpc('get_auth_email_by_username', { p_identifier: v })
+    if (data) return data
+  } catch {
+    // fallback to local domain
+  }
+  return `${v}@${USERNAME_EMAIL_DOMAIN}`
+}
+
 export function loginToEmail(login: string) {
   const v = login.trim().toLowerCase()
+  if (v === 'admin' || v === 'rekazabdo' || v === 'admin@rikaz.local') {
+    return 'rekazabdo@admin.com'
+  }
   return v.includes('@') ? v : `${v}@${USERNAME_EMAIL_DOMAIN}`
 }
 
@@ -69,8 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     hasRole: (...wanted) => wanted.some((r) => roles.includes(r)),
     signIn: async (login, password) => {
-      const { error } = await supabase.auth.signInWithPassword({ email: loginToEmail(login), password })
-      if (error) throw error
+      const email = await resolveLoginIdentifier(login)
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        // إذا كان خطأ وكان الحساب admin، جرب أيضاً admin@rikaz.local
+        if (!login.includes('@') && email !== `${login.trim().toLowerCase()}@${USERNAME_EMAIL_DOMAIN}`) {
+          const fallbackEmail = `${login.trim().toLowerCase()}@${USERNAME_EMAIL_DOMAIN}`
+          const fallbackRes = await supabase.auth.signInWithPassword({ email: fallbackEmail, password })
+          if (!fallbackRes.error) return
+        }
+        throw error
+      }
     },
     signOut: async () => {
       await supabase.auth.signOut()
