@@ -11,6 +11,7 @@ import { options, paymentMethodLabels, rateUnitLabels } from '@/lib/labels'
 import { newKey, useProjectsFinancials } from '@/lib/queries'
 import { errorMessage, supabase, type Enums } from '@/lib/supabase'
 import { PrintOptions } from '../receipts/ReceiptForm'
+import { useTechnicianProjects } from '../payments/settlementData'
 import { useTechnicianBalance } from './techData'
 
 const refresh = (qc: ReturnType<typeof useQueryClient>) => {
@@ -175,10 +176,10 @@ export function WorkForm({ phaseId, open, onClose, technicianId, projectId, item
 }
 
 // ───────────── صرف دفعة لفني / استلام مبلغ من فني ─────────────
-export function TechCashForm({ open, onClose, technicianId, projectId, direction }: { open: boolean; onClose: () => void; technicianId?: string; projectId?: string; direction: 'pay' | 'receive' }) {
+export function TechCashForm({ open, onClose, technicianId, projectId, direction, treasuryId, defaultAmount }: { open: boolean; onClose: () => void; technicianId?: string; projectId?: string; direction: 'pay' | 'receive'; treasuryId?: string; defaultAmount?: number }) {
   const qc = useQueryClient()
   const projects = useProjectsFinancials()
-  const blank = () => ({ technician_id: technicianId ?? '', project_id: projectId ?? '', amount: '', date: todayISO(), method: 'cash' as Enums<'payment_method'>, treasury_id: '', notes: '' })
+  const blank = () => ({ technician_id: technicianId ?? '', project_id: projectId ?? '', amount: defaultAmount ? String(defaultAmount) : '', date: todayISO(), method: 'cash' as Enums<'payment_method'>, treasury_id: treasuryId ?? '', notes: '' })
   const [f, setF] = useState(blank)
   const [key, setKey] = useState(newKey)
   const [dirty, setDirty] = useState(false)
@@ -188,6 +189,8 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
   const bal = useTechnicianBalance(f.technician_id || undefined)
   const due = Number(bal.data?.[0]?.balance_due ?? 0)
   const project = (projects.data ?? []).find((p) => p.id === f.project_id)
+  const onProject = useTechnicianProjects({ technicianId: f.technician_id || undefined, projectId: f.project_id || undefined }, Boolean(f.technician_id && f.project_id))
+  const projectDue = Number(onProject.data?.[0]?.balance_due ?? 0)
   const pay = direction === 'pay'
 
   useEffect(() => {
@@ -196,7 +199,7 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
     setKey(newKey())
     setDirty(false)
     setErrors({})
-  }, [open, technicianId, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, technicianId, projectId, treasuryId, defaultAmount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch: Partial<typeof f>) => {
     setF((p) => ({ ...p, ...patch }))
@@ -246,7 +249,7 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
         workspace
         open={open}
         title={pay ? 'صرف دفعة لفني' : 'استلام مبلغ من فني'}
-        description={pay ? 'تخفض مستحق الفني وتخصم من الخزينة. المشروع سياق للعرض فقط.' : 'إرجاع زائد أو وديعة من الفني: تُضاف للخزينة وتزيد مستحقه'}
+        description={pay ? 'تخفض مستحق الفني وتخصم من الخزينة. اختر المشروع لتُحسب في حسابه هناك، أو اتركها على حسابه العام.' : 'إرجاع زائد أو وديعة من الفني: تُضاف للخزينة وتزيد مستحقه'}
         dirty={dirty}
         onClose={onClose}
         footer={
@@ -273,6 +276,11 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
             <KeyValue label={due >= 0 ? 'المستحق للفني حالياً' : 'مقدم عند الفني'}>
               <Money value={Math.abs(due)} className="font-semibold" />
             </KeyValue>
+            {pay && f.project_id && (
+              <KeyValue label={`رصيده في ${project?.name ?? 'هذا المشروع'}`}>
+                <Money value={projectDue} className="font-semibold" />
+              </KeyValue>
+            )}
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -292,7 +300,7 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
             </Select>
           </Field>
           {pay && (
-            <Field label="المشروع (سياق للعرض)">
+            <Field label="المشروع">
               <Select value={f.project_id} disabled={Boolean(projectId)} onChange={(e) => set({ project_id: e.target.value, treasury_id: '' })}>
                 <option value="">— على حساب الفني العام —</option>
                 {(projects.data ?? []).map((p) => (
@@ -304,7 +312,7 @@ export function TechCashForm({ open, onClose, technicianId, projectId, direction
             </Field>
           )}
         </div>
-        <TreasuryPicker label={pay ? 'الخزينة المخصوم منها' : 'الخزينة المستلمة'} value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={pay ? (project?.project_type ?? null) : null} required error={errors.treasury} />
+        <TreasuryPicker label={pay ? 'الخزينة المخصوم منها' : 'الخزينة المستلمة'} value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={pay ? (project?.project_type ?? null) : null} required error={errors.treasury} need={pay ? Number(f.amount) || undefined : undefined} />
         </EntryCard>
         <EntryDetails title="ملاحظات إضافية (اختياري)">
         <Field label="ملاحظات">

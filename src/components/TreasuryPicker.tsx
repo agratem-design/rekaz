@@ -6,9 +6,10 @@ import type { Enums } from '@/lib/supabase'
 import { Field, Select } from './ui'
 
 // اختيار الحساب مباشرة مع مساره؛ يشمل الفروع المتداخلة دون اختيار الرئيسية أولاً.
-export function TreasuryPicker({ value, onChange, domain, required, error, label = 'الخزينة' }: {
+// need: مبلغ الصرف المطلوب، للتنبيه قبل الحفظ إن كان الرصيد لا يغطيه.
+export function TreasuryPicker({ value, onChange, domain, required, error, label = 'الخزينة', need }: {
   value: string; onChange: (id: string) => void; domain?: Enums<'treasury_domain'> | null
-  required?: boolean; error?: string | null; label?: string
+  required?: boolean; error?: string | null; label?: string; need?: number
 }) {
   const { data, isLoading } = useTreasuriesWithBalance()
   const selected = (data ?? []).find((t) => t.id === value)
@@ -29,7 +30,10 @@ export function TreasuryPicker({ value, onChange, domain, required, error, label
     }
     return names.join(' / ')
   }
-  return <Field label={label} required={required} error={error}
+  const short = selected?.balance != null && need != null && need > selected.balance
+  const none = !isLoading && !available.length && domain
+  return <Field label={label} required={required}
+    error={error ?? (none ? `لا توجد خزينة مستخدمة في قطاع ${domainLabels[domain]}؛ أنشئها من الخزائن والحسابات` : short ? `الرصيد المتاح ${formatMoney(selected.balance)} د.ل لا يكفي؛ ستُرفض العملية ما لم يُسمح بذلك من الإعدادات` : null)}
     hint={selected?.balance != null ? `الرصيد المتاح: ${formatMoney(selected.balance)} د.ل${domain ? ` · قطاع ${domainLabels[domain]}` : ''}` : domain ? `خزائن قطاع ${domainLabels[domain]} فقط` : 'اختر الخزينة أو الحساب المصرفي مباشرة؛ يظهر مسار الفرع بجانب اسمه.'}>
     <Select value={value} disabled={isLoading} aria-invalid={Boolean(error)} onChange={(e) => onChange(e.target.value)}>
       <option value="">{isLoading ? 'جارٍ التحميل…' : 'اختر الخزينة أو الحساب'}</option>

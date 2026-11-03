@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Banknote, Printer, Split } from 'lucide-react'
+import { Banknote, FolderInput, Printer, Split } from 'lucide-react'
+import { AssignProjectDialog } from '@/components/AssignProjectDialog'
 import { Modal } from '@/components/dialog'
 import { DataTable } from '@/components/DataTable'
 import { ReverseButton, useRpc } from '@/components/pickers'
@@ -17,7 +18,7 @@ export function useSupplierPayments(supplierId?: string) {
     queryFn: async () => {
       let q = supabase
         .from('supplier_payments')
-        .select('*, suppliers(name), treasuries(name), supplier_payment_allocations(id, amount, status, purchase_id, purchases(invoice_no, description))')
+        .select('*, suppliers(name), treasuries(name), projects(name), supplier_payment_allocations(id, amount, status, purchase_id, purchases(invoice_no, description))')
         .order('payment_date', { ascending: false })
         .order('created_at', { ascending: false })
       if (supplierId) q = q.eq('supplier_id', supplierId)
@@ -35,6 +36,7 @@ export type SupplierPaymentRow = NonNullable<ReturnType<typeof useSupplierPaymen
 export function SupplierPaymentsTable({ supplierId, onNew }: { supplierId?: string; onNew?: () => void }) {
   const { data, isLoading, error, refetch } = useSupplierPayments(supplierId)
   const [allocating, setAllocating] = useState<SupplierPaymentRow | null>(null)
+  const [assigning, setAssigning] = useState<string | null>(null)
   const reverse = useRpc((a: { id: string; reason: string }) => supabase.rpc('reverse_supplier_payment', { p_payment_id: a.id, p_reason: a.reason, p_date: todayISO() }), {
     success: 'تم إلغاء الدفعة بقيد عكسي',
   })
@@ -56,6 +58,7 @@ export function SupplierPaymentsTable({ supplierId, onNew }: { supplierId?: stri
             label: 'التوزيع',
             render: (p) => (
               <div className="space-y-0.5 text-xs">
+                {p.projects?.name && <div className="font-medium">على مشروع {p.projects.name}</div>}
                 {p.supplier_payment_allocations
                   .filter((a) => a.status === 'posted')
                   .map((a) => (
@@ -82,6 +85,11 @@ export function SupplierPaymentsTable({ supplierId, onNew }: { supplierId?: stri
                 <Split className="size-4" />
               </Button>
             )}
+            {p.status === 'posted' && p.unallocated > 0 && !p.project_id && (
+              <Button variant="ghost" size="icon" className="size-8" aria-label="نقل الدفعة إلى مشروع" title="نقل الدفعة على الحساب إلى مشروع" onClick={() => setAssigning(p.id)}>
+                <FolderInput className="size-4" />
+              </Button>
+            )}
             {p.status === 'posted' && (
               <ReverseButton title="إلغاء الدفعة؟" message="تُلغى الدفعة وتوزيعاتها وتعود قيمتها إلى الخزينة بقيد عكسي بتاريخ اليوم." onReverse={(reason) => reverse.mutate({ id: p.id, reason })} />
             )}
@@ -89,6 +97,7 @@ export function SupplierPaymentsTable({ supplierId, onNew }: { supplierId?: stri
         )}
       />
       {allocating && <AllocateAdvance payment={allocating} onClose={() => setAllocating(null)} />}
+      {assigning && <AssignProjectDialog kind="supplier" paymentId={assigning} onClose={() => setAssigning(null)} />}
     </>
   )
 }

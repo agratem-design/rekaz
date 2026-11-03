@@ -117,12 +117,12 @@ export const financeLoaders: Record<string, Loader> = {
 
   // ───────────── سند صرف دفعة مورد ─────────────
   async 'supplier-payment'(id) {
-    const p = await one(supabase.from('supplier_payments').select('*, suppliers(name), supplier_payment_allocations(amount, status, purchases(invoice_no, description))').eq('id', id).single())
+    const p = await one(supabase.from('supplier_payments').select('*, suppliers(name), projects(name), supplier_payment_allocations(amount, status, purchases(invoice_no, description))').eq('id', id).single())
     const allocs = p.supplier_payment_allocations.filter((a) => a.status === 'posted' || p.status === 'reversed')
     const allocated = allocs.reduce((a, x) => a + Number(x.amount), 0)
     const about = allocs.length
       ? `سداد ${allocs.map((a) => (a.purchases?.invoice_no ? `فاتورة #${a.purchases.invoice_no}` : (a.purchases?.description ?? 'فاتورة'))).join('، ')}${Number(p.amount) - allocated > 0 ? ` ومقدم ${formatMoney(Number(p.amount) - allocated)} د.ل` : ''}`
-      : 'دفعة مقدمة على حساب المورد'
+      : p.projects?.name ? 'دفعة مقدمة' : 'دفعة مقدمة على حساب المورد'
     return voucher({
       title: 'سند صرف دفعة مورد',
       id: p.id,
@@ -130,7 +130,7 @@ export const financeLoaders: Record<string, Loader> = {
       partyLabel: 'صرفنا إلى السيد/ة',
       party: p.suppliers?.name,
       partyName: p.suppliers?.name,
-      about,
+      about: p.projects?.name ? `${about} — مشروع «${p.projects.name}»` : about,
       info: [
         { label: 'طريقة الدفع', value: paymentMethodLabels[p.method] },
         ...(p.reference ? [{ label: 'المرجع', value: p.reference }] : []),
@@ -181,6 +181,24 @@ export const financeLoaders: Record<string, Loader> = {
     })
   },
 
+  // ───────────── إيصال استلام من مورد ─────────────
+  async 'supplier-refund'(id) {
+    const r = await one(supabase.from('supplier_refunds').select('*, suppliers(name), projects(name)').eq('id', id).single())
+    return voucher({
+      title: 'إيصال استلام من مورد',
+      id: r.id,
+      date: r.refund_date,
+      partyLabel: 'استلمنا من السيد/ة',
+      party: r.suppliers?.name,
+      partyName: r.suppliers?.name,
+      about: `${r.notes ?? 'استرداد مرتجع أو دفعة زائدة'}${r.projects?.name ? ` — مشروع «${r.projects.name}»` : ''}`,
+      info: [{ label: 'طريقة الدفع', value: paymentMethodLabels[r.method] }],
+      amount: Number(r.amount),
+      cancel: r,
+      signs: ['توقيع الدافع', 'توقيع المستلم / أمين الصندوق'],
+    })
+  },
+
   // ───────────── سند صرف مصروف ─────────────
   async expense(id) {
     const e = await one(
@@ -214,12 +232,12 @@ export const financeLoaders: Record<string, Loader> = {
   async transfer(id) {
     const t = await one(supabase.from('transfers').select('*, from:treasuries!transfers_from_treasury_id_fkey(name), to:treasuries!transfers_to_treasury_id_fkey(name)').eq('id', id).single())
     return voucher({
-      title: 'إشعار تحويل مالي',
+      title: t.kind === 'loan' ? 'إشعار سلفة بين الخزائن' : t.kind === 'repayment' ? 'إشعار سداد سلفة بين الخزائن' : 'إشعار تحويل مالي',
       id: t.id,
       date: t.transfer_date,
       partyLabel: 'من خزينة',
       party: t.from?.name,
-      about: `تحويل إلى «${t.to?.name}»`,
+      about: `${t.kind === 'loan' ? 'سلفة' : t.kind === 'repayment' ? 'سداد سلفة' : 'تحويل'} إلى «${t.to?.name}»`,
       info: t.notes ? [{ label: 'ملاحظات', value: t.notes, wide: true }] : [],
       amount: Number(t.amount),
       cancel: t,
@@ -335,21 +353,24 @@ export const financeLoaders: Record<string, Loader> = {
 
   // ───────────── كشوف الحساب ─────────────
   async 'supplier-statement'(id) {
-    const [s, b, p, pay] = await Promise.all([
+    const [s, b, p, pay, ref] = await Promise.all([
       one(supabase.from('suppliers').select('*').eq('id', id).single()),
       one(supabase.from('supplier_balances').select('*').eq('supplier_id', id).maybeSingle()),
       one(supabase.from('purchases').select('*, projects(name)').eq('supplier_id', id).eq('status', 'posted').order('invoice_date')),
-      one(supabase.from('supplier_payments').select('*').eq('supplier_id', id).eq('status', 'posted').order('payment_date')),
+      one(supabase.from('supplier_payments').select('*, projects(name)').eq('supplier_id', id).eq('status', 'posted').order('payment_date')),
+      one(supabase.from('supplier_refunds').select('*, projects(name)').eq('supplier_id', id).eq('status', 'posted').order('refund_date')),
     ])
     type L = { date: string; label: string; debit: number; credit: number }
     const lines: L[] = [
       ...p.map((x) => ({ date: x.invoice_date, label: `${x.kind === 'return' ? 'مرتجع' : 'فاتورة'} ${x.invoice_no ?? ''} ${x.description ?? ''}${x.projects?.name ? ` (${x.projects.name})` : ''}`, debit: x.kind === 'return' ? 0 : Number(x.total_amount), credit: x.kind === 'return' ? Number(x.total_amount) : 0 })),
-      ...pay.map((x) => ({ date: x.payment_date, label: `سند صرف ${x.reference ?? ''}`, debit: 0, credit: Number(x.amount) })),
+      ...pay.map((x) => ({ date: x.payment_date, label: `سند صرف ${x.reference ?? ''}${x.projects?.name ? ` (${x.projects.name})` : ''}`, debit: 0, credit: Number(x.amount) })),
+      ...ref.map((x) => ({ date: x.refund_date, label: `مبلغ مستلم من المورد${x.projects?.name ? ` (${x.projects.name})` : ''}`, debit: Number(x.amount), credit: 0 })),
     ].sort((a, c) => a.date.localeCompare(c.date))
     return statement('كشف حساب مورد', s.name, lines, [
       { label: 'إجمالي الفواتير', value: formatMoney(Number(b?.invoiced ?? 0) - Number(b?.returned ?? 0)) },
       { label: 'المدفوع', value: formatMoney(b?.paid) },
       { label: 'منه مقدم غير موزع', value: formatMoney(b?.unallocated_advance) },
+      ...(Number(b?.refunded) > 0 ? [{ label: 'مستلم من المورد', value: formatMoney(b?.refunded) }] : []),
       { label: 'المستحق للمورد', value: formatMoney(b?.balance_due) },
     ], ['له', 'منه'])
   },

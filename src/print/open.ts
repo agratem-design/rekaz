@@ -20,4 +20,5 @@ export const sourcePrintKind: Record<string, string> = {
   employee_advance: 'employee-advance',
   advance_repayment: 'employee-advance',
   custody_return: 'custody-return',
+  supplier_refund: 'supplier-refund',
 }

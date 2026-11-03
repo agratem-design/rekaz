@@ -1,5 +1,5 @@
 import {
-  Banknote, Boxes, DatabaseBackup, Building2, ClipboardList, FileSignature, FileText, HardHat, LayoutDashboard, Landmark, LayoutGrid,
+  Banknote, Boxes, DatabaseBackup, Building2, ClipboardList, FileSignature, FileText, HandCoins, HardHat, LayoutDashboard, Landmark, LayoutGrid,
   Package, Paintbrush, Receipt, Ruler, ScrollText, Settings, Shapes, ShoppingCart, Tags, Truck, UserCog, Users, Wallet, Wrench, ArrowLeftRight, type LucideIcon,
 } from 'lucide-react'
 import type { AppRole } from './lib/supabase'
@@ -43,6 +43,7 @@ export const navSections: NavSection[] = [
     title: 'المالية',
     items: [
       { path: '/treasuries', label: 'الخزائن والحسابات', icon: Landmark, roles: FIN, keywords: 'الخزينة البنك' },
+      { path: '/payments', label: 'الصرف والتسديد', icon: HandCoins, roles: FIN, keywords: 'سداد تسديد مستحقات صرف سند فواتير الموردين الفنيين العمالة الرواتب' },
       { path: '/receipts', label: 'إيصالات المقبوضات', icon: Banknote, roles: FIN, keywords: 'القبض الدفعات التسديد' },
       { path: '/purchases', label: 'مركز الفواتير', icon: ShoppingCart, roles: FIN, keywords: 'المشتريات السداد الموردين سند صرف' },
       { path: '/expenses', label: 'المصروفات العامة', icon: Receipt, roles: FIN, keywords: 'مصروف' },

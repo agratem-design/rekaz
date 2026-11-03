@@ -17,12 +17,14 @@ const n = (v: unknown) => Number(v ?? 0)
 export const reportLoaders: Record<string, Loader> = {
   // ───────────── الملخص المالي العام ─────────────
   async 'financial-summary'() {
-    const [t, c, s, tech, cu] = await Promise.all([
+    const [t, c, s, tech, cu, pay, adv] = await Promise.all([
       q(supabase.from('treasury_balances').select('*').order('name')),
       q(supabase.from('client_balances').select('*')),
       q(supabase.from('supplier_balances').select('*')),
       q(supabase.from('technician_balances').select('*')),
       q(supabase.from('custody_balances').select('*').eq('is_closed', false)),
+      q(supabase.from('payroll_balances').select('remaining').eq('status', 'posted')),
+      q(supabase.from('employee_advance_balances').select('remaining')),
     ])
     const cash = t.reduce((a, x) => a + n(x.balance), 0)
     const receivable = c.reduce((a, x) => a + n(x.total_due), 0)
@@ -30,6 +32,8 @@ export const reportLoaders: Record<string, Loader> = {
     const supDue = s.reduce((a, x) => a + Math.max(n(x.balance_due), 0), 0)
     const techDue = tech.reduce((a, x) => a + Math.max(n(x.balance_due), 0), 0)
     const custody = cu.reduce((a, x) => a + n(x.remaining), 0)
+    const payrollDue = pay.reduce((a, x) => a + n(x.remaining), 0)
+    const advances = adv.reduce((a, x) => a + n(x.remaining), 0)
     return {
       title: 'الملخص المالي العام',
       render: (company, st) => (
@@ -54,11 +58,13 @@ export const reportLoaders: Record<string, Loader> = {
                 ['النقدية في الخزائن', cash],
                 ['مستحق على الزبائن', receivable],
                 ['عهد مفتوحة لدى الموظفين والمهندسين', custody],
+                ['سلف لدى الموظفين', advances],
                 ['مستحق للموردين', -supDue],
                 ['مستحق للفنيين', -techDue],
+                ['رواتب معتمدة غير مصروفة', -payrollDue],
                 ['أرصدة دائنة وزيادات للزبائن', -credits],
               ]}
-              totals={[{ label: 'الصافي', value: formatMoney(cash + receivable + custody - supDue - techDue - credits) }]}
+              totals={[{ label: 'الصافي', value: formatMoney(cash + receivable + custody + advances - supDue - techDue - payrollDue - credits) }]}
             />
           </PrintSection>
           <Signatures items={[{ label: 'المدير', name: company.signee_name ?? undefined }]} />

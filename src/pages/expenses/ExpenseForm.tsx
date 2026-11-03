@@ -15,7 +15,7 @@ import { PrintOptions } from '../receipts/ReceiptForm'
 import { useCustodies, useExpenseCategories } from './expenseData'
 
 // مصروف من خزينة أو من عهدة. مصروف المشروع يدخل تكلفته، والعام لا يدخل أي مشروع.
-export function ExpenseForm({ phaseId, open, onClose, projectId, custodyId }: { phaseId?: string; open: boolean; onClose: () => void; projectId?: string; custodyId?: string }) {
+export function ExpenseForm({ phaseId, open, onClose, projectId, custodyId, treasuryId }: { phaseId?: string; open: boolean; onClose: () => void; projectId?: string; custodyId?: string; treasuryId?: string }) {
   const qc = useQueryClient()
   const cats = useExpenseCategories()
   const custodies = useCustodies()
@@ -26,7 +26,7 @@ export function ExpenseForm({ phaseId, open, onClose, projectId, custodyId }: { 
     date: todayISO(),
     category_id: '',
     source: (custodyId ? 'custody' : 'treasury') as 'treasury' | 'custody',
-    treasury_id: '',
+    treasury_id: treasuryId ?? '',
     custody_id: custodyId ?? '',
     project_id: projectId ?? '',
     phase_id: phaseId === 'unassigned' ? '' : phaseId ?? '',
@@ -53,7 +53,7 @@ export function ExpenseForm({ phaseId, open, onClose, projectId, custodyId }: { 
     setKey(newKey())
     setDirty(false)
     setErrors({})
-  }, [open, projectId, custodyId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, projectId, custodyId, treasuryId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCustodies = (custodies.data ?? []).filter((c) => c.status === 'posted' && !c.is_closed && (c.remaining > 0 || c.id === f.custody_id))
   const custody = openCustodies.find((c) => c.id === f.custody_id)
@@ -195,7 +195,7 @@ export function ExpenseForm({ phaseId, open, onClose, projectId, custodyId }: { 
             />
           )}
           {f.source === 'treasury' ? (
-            <TreasuryPicker label="الخزينة" value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury} />
+            <TreasuryPicker label="الخزينة" value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury} need={Number(f.amount) || undefined} />
           ) : (
             <>
               <Field label="العهدة" required error={errors.custody} hint="المصروف من العهدة لا يحرك أي خزينة؛ يخفض المتبقي في العهدة">

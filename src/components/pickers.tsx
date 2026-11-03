@@ -273,5 +273,5 @@ export function useRpc<A>(fn: (args: A) => PromiseLike<{ error: unknown }>, opts
 
 export const financeKeys = [
   'purchases', 'purchase_balances', 'supplier_balances', 'supplier_payments', 'supplier', 'technician_balances', 'technician', 'technician_work', 'technician_payments',
-  'expenses', 'custodies', 'transfers', 'treasuries', 'treasury_entries', 'project', 'project_financials', 'dashboard', 'client_receipts', 'client_balances',
+  'expenses', 'custodies', 'transfers', 'treasuries', 'treasury_entries', 'project', 'project_financials', 'dashboard', 'client_receipts', 'client_balances', 'reports',
 ]

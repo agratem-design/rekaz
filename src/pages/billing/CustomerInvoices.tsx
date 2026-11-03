@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/DataTable'
@@ -18,7 +19,7 @@ export function useCustomerInvoices(filter: { projectId?: string; clientId?: str
   return useQuery({
     queryKey: ['customer_invoices', filter.projectId ?? null, filter.clientId ?? null],
     queryFn: async () => {
-      let q = supabase.from('customer_invoices').select('*').order('created_at')
+      let q = supabase.from('customer_invoices').select('*, projects(name)').order('project_id').order('created_at')
       if (filter.projectId) q = q.eq('project_id', filter.projectId)
       if (filter.clientId) q = q.eq('client_id', filter.clientId)
       const { data, error } = await q
@@ -36,6 +37,7 @@ export function CustomerInvoices({ projectId, clientId }: { projectId?: string; 
     <DataTable rows={invoices.data} getKey={(r) => r.id} loading={invoices.isLoading} error={invoices.error ? errorMessage(invoices.error) : null} onRetry={() => invoices.refetch()}
       empty={<EmptyState icon={FileText} title="لا توجد فواتير مصدرة بعد">حتى إصدار فاتورة، يبقى الاستحقاق التقديري من البنود أو العقود أو تكلفة التشطيبات.</EmptyState>}
       columns={[
+        ...(!projectId ? [{ key: 'project', label: 'المشروع', render: (r: NonNullable<typeof invoices.data>[number]) => (r.project_id ? <Link to={`/projects/${r.project_id}/invoices`} className="font-medium hover:underline">{r.projects?.name}</Link> : <span className="text-muted">ملخص عام</span>) }] : []),
         { key: 'number', label: 'الرقم والتاريخ', render: (r) => <div><span className="num font-medium">{r.invoice_number ?? (r.source_filename ? 'بلا رقم في المصدر' : 'بدون رقم')}</span><p className="num mt-1 text-xs text-muted">{formatDate(r.invoice_date)}</p></div> },
         { key: 'title', label: 'المستند', render: (r) => <div><p className="font-medium">{r.title}</p><p className="mt-1 text-xs text-muted">{r.source_filename?.replace(/^\uFFFD+/, '')}</p></div> },
         { key: 'type', label: 'النوع', render: (r) => <Badge tone={r.document_type === 'summary' ? 'neutral' : 'brand'}>{invoiceTypeLabels[r.document_type]}</Badge> },

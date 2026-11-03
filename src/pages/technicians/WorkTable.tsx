@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Hammer, Printer } from 'lucide-react'
+import { Hammer, Printer, Split } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable } from '@/components/DataTable'
 import { AmountCell, ReverseButton, useRpc } from '@/components/pickers'
@@ -9,6 +10,7 @@ import { rateUnitLabels } from '@/lib/labels'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { openPrint } from '@/print/open'
 import { useTechnicianWork, type WorkRow } from './techData'
+import { WorkAdjustDialog } from './WorkAdjustDialog'
 
 export function WorkTable({ phaseId, itemId, technicianId, projectId, onNew }: { phaseId?: string; itemId?: string; technicianId?: string; projectId?: string; onNew?: () => void }) {
   const { hasRole } = useAuth()
@@ -17,7 +19,9 @@ export function WorkTable({ phaseId, itemId, technicianId, projectId, onNew }: {
   const reverse = useRpc((a: { id: string; reason: string }) => supabase.rpc('reverse_technician_work', { p_work_id: a.id, p_reason: a.reason }), { success: 'تم إلغاء سجل الأعمال والمستحقات' })
   const shown = (data ?? []).filter((w) => (!phaseId || (phaseId === 'unassigned' ? !w.phase_id : w.phase_id === phaseId)) && (!itemId || w.project_item_id === itemId))
   const total = shown.filter((w) => w.status === 'posted').reduce((a, w) => a + Number(w.amount), 0)
+  const [adjusting, setAdjusting] = useState<WorkRow | null>(null)
   return (
+    <>
     <DataTable
       rows={shown}
       getKey={(w) => w.id}
@@ -75,9 +79,16 @@ export function WorkTable({ phaseId, itemId, technicianId, projectId, onNew }: {
               <Printer className="size-4" />
             </Button>
           )}
+          {finance && w.status === 'posted' && (
+            <Button variant="ghost" size="icon" className="size-8" aria-label="تعديل أو تقسيم العمل" title="زيادة أو إنقاص أو تقسيم بين فنيين" onClick={() => setAdjusting(w)}>
+              <Split className="size-4" />
+            </Button>
+          )}
           {finance && w.status === 'posted' && <ReverseButton title="إلغاء سجل الأعمال والمستحقات؟" message="يُخصم من مستحق الفني ومن تكلفة المشروع." onReverse={(reason) => reverse.mutate({ id: w.id, reason })} />}
         </div>
       )}
     />
+    {adjusting && <WorkAdjustDialog work={adjusting} onClose={() => setAdjusting(null)} />}
+    </>
   )
 }

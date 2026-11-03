@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Banknote, Paperclip, Printer, RotateCcw, ShoppingCart } from 'lucide-react'
+import { BadgeCheck, Banknote, Paperclip, Printer, RotateCcw, ShoppingCart } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable, RecordCount } from '@/components/DataTable'
 import { ReverseButton, useRpc } from '@/components/pickers'
@@ -12,7 +12,7 @@ import { SupplierPaymentForm } from '../suppliers/SupplierPaymentForm'
 import { PurchaseForm } from './PurchaseForm'
 import { purchaseKindLabels, purchaseKindTone, usePurchases, type PurchaseRow } from './purchaseData'
 
-type Status = 'all' | 'open' | 'paid' | 'reversed'
+type Status = 'all' | 'open' | 'paid' | 'pending' | 'reversed'
 type Kind = 'all' | 'material' | 'service' | 'return'
 
 export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phaseId?: string; projectId?: string; supplierId?: string; onNew?: () => void }) {
@@ -25,6 +25,8 @@ export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phas
   const [paying, setPaying] = useState<PurchaseRow | null>(null)
   const [returning, setReturning] = useState<PurchaseRow | null>(null)
   const reverse = useRpc((a: { id: string; reason: string }) => supabase.rpc('reverse_purchase', { p_purchase_id: a.id, p_reason: a.reason }), { success: 'تم إلغاء الفاتورة' })
+  const admin = hasRole('admin')
+  const approve = useRpc((id: string) => supabase.rpc('approve_purchase', { p_purchase_id: id }), { success: 'تم اعتماد الفاتورة' })
 
   const all = (data ?? []).filter((r) => !phaseId || (phaseId === 'unassigned' ? !r.phase_id : r.phase_id === phaseId))
   const q = search.trim()
@@ -34,6 +36,7 @@ export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phas
     if (status !== 'all' && p.status === 'reversed') return false
     if (status === 'open' && !(p.kind !== 'return' && p.remaining > 0)) return false
     if (status === 'paid' && !(p.kind === 'return' || p.remaining <= 0)) return false
+    if (status === 'pending' && p.approved_at) return false
     return !q || (p.suppliers?.name ?? '').includes(q) || (p.description ?? '').includes(q) || (p.invoice_no ?? '').includes(q) || (p.projects?.name ?? '').includes(q)
   })
   const posted = shown.filter((p) => p.status === 'posted')
@@ -70,6 +73,7 @@ export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phas
                 { value: 'all', label: 'الكل' },
                 { value: 'open', label: 'مستحق' },
                 { value: 'paid', label: 'مدفوع' },
+                { value: 'pending', label: 'بانتظار الاعتماد' },
                 { value: 'reversed', label: 'ملغى' },
               ]}
             />
@@ -106,6 +110,7 @@ export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phas
                   )}
                 </div>
                 <div className="text-xs text-muted">
+                  {p.status === 'posted' && (p.approved_at ? <span className="text-olive-700 dark:text-olive-400">معتمدة · </span> : <span className="text-amber-700 dark:text-amber-400">بانتظار الاعتماد · </span>)}
                   {p.invoice_no && <span className="num">#{p.invoice_no} </span>}
                   {Array.isArray(p.lines) && p.lines.length > 0 && <span>· {p.lines.length} مادة</span>}
                 </div>
@@ -179,6 +184,11 @@ export function PurchasesTable({ phaseId, projectId, supplierId, onNew }: { phas
                   <Button variant="ghost" size="icon" className="size-8" aria-label="طباعة الفاتورة" title="طباعة الفاتورة" onClick={() => openPrint('purchase', p.id)}>
                     <Printer className="size-4" />
                   </Button>
+                  {admin && p.status === 'posted' && !p.approved_at && (
+                    <Button variant="ghost" size="icon" className="size-8" aria-label="اعتماد الفاتورة" title="اعتماد الفاتورة بعد مراجعتها" onClick={() => approve.mutate(p.id)}>
+                      <BadgeCheck className="size-4" />
+                    </Button>
+                  )}
                   {p.status === 'posted' && p.kind !== 'return' && p.remaining > 0 && (
                     <Button variant="ghost" size="icon" className="size-8" aria-label="سداد دفعة" title="سداد دفعة" onClick={() => setPaying(p)}>
                       <Banknote className="size-4" />

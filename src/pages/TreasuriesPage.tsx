@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Building, Landmark, Pencil, Plus, Power, Printer, ScrollText, Wallet } from 'lucide-react'
+import { ArrowUpFromLine, Banknote, Building, Landmark, Pencil, Plus, Power, Printer, ScrollText, Wallet } from 'lucide-react'
 import { openPrint, sourcePrintKind } from '@/print/open'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
@@ -11,6 +11,9 @@ import type { Json } from '@/lib/database.types'
 import { formatDate, todayISO } from '@/lib/format'
 import { domainLabels, options, treasuryKindLabels } from '@/lib/labels'
 import { errorMessage, supabase, type Tables, type Views } from '@/lib/supabase'
+
+// النماذج المالية تُحمَّل عند أول صرف فقط، فهذه الصفحة ضمن الحزمة الأساسية
+const PaymentChooser = lazy(() => import('./payments/PaymentChooser').then((m) => ({ default: m.PaymentChooser })))
 
 type Treasury = Tables<'treasuries'>
 type Form = Partial<Treasury> & { opening?: string; opening_date?: string }
@@ -28,6 +31,7 @@ export const sourceLabels: Record<string, string> = {
   payroll_slip: 'راتب',
   employee_advance: 'سلفة موظف',
   advance_repayment: 'سداد سلفة',
+  supplier_refund: 'مبلغ من مورد',
 }
 
 export function TreasuriesPage() {
@@ -38,6 +42,12 @@ export function TreasuriesPage() {
   const [dirty, setDirty] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
   const [statementOf, setStatementOf] = useState<Views<'treasury_balances'> | null>(null)
+  const [paying, setPaying] = useState<{ treasuryId?: string } | null>(null)
+  const [chooserLoaded, setChooserLoaded] = useState(false)
+  const pay = (treasuryId?: string) => {
+    setChooserLoaded(true)
+    setPaying({ treasuryId })
+  }
 
   const list = useQuery({
     queryKey: ['treasuries'],
@@ -80,16 +90,23 @@ export function TreasuriesPage() {
       description="الرصيد محسوب من الحركات المسجلة فقط، ولا يُعدَّل يدوياً"
       actions={
         canWrite && (
-          <Button
-            onClick={() => {
-              setEditing({ kind: 'cash', is_active: true })
-              setDirty(false)
-              setNameError(null)
-            }}
-          >
-            <Plus className="size-4" />
-            خزينة جديدة
-          </Button>
+          <>
+            <Button onClick={() => pay()}>
+              <ArrowUpFromLine className="size-4" />
+              صرف من الخزينة
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditing({ kind: 'cash', is_active: true })
+                setDirty(false)
+                setNameError(null)
+              }}
+            >
+              <Plus className="size-4" />
+              خزينة جديدة
+            </Button>
+          </>
         )
       }
     />
@@ -162,7 +179,7 @@ export function TreasuriesPage() {
                 {canWrite && <div className="flex justify-end border-b border-line px-4 py-2"><Button variant="soft" size="sm" disabled={!root.is_active} onClick={() => { setEditing({ parent_id: root.id, domain: root.domain, kind: 'cash', is_active: true }); setDirty(false); setNameError(null) }}><Plus className="size-4" />إضافة خزينة فرعية</Button></div>}
                 <ul className="divide-y divide-line">
                   {[root, ...children].map((t) => (
-                    <li key={t.id} className="group flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <li key={t.id} className="group flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
                       <span className={cn('rounded-md p-1.5', t.kind === 'bank' ? 'bg-sky-50 text-sky-600 dark:bg-sky-950/50' : 'bg-sand-50 text-sand-600 dark:bg-sand-700/20')}>
                         {t.kind === 'bank' ? <Building className="size-3.5" /> : <Banknote className="size-3.5" />}
                       </span>
@@ -175,11 +192,14 @@ export function TreasuriesPage() {
                         </div>
                       </div>
                       <Money value={t.balance} className="font-medium" />
+                      <div className="ms-auto flex items-center">
                       <Button variant="ghost" size="icon" className="size-8" aria-label="كشف الحركات" title="كشف الحركات" onClick={() => setStatementOf(t.view)}>
                         <ScrollText className="size-4" />
                       </Button>
                       {canWrite && (
-                        <><Button
+                        <><Button variant="ghost" size="icon" className="size-8" aria-label={`صرف من ${t.name}`} title="صرف من هذه الخزينة" disabled={!t.is_active} onClick={() => pay(t.id)}>
+                          <ArrowUpFromLine className="size-4" />
+                        </Button><Button
                           variant="ghost"
                           size="icon"
                           className="size-8"
@@ -196,6 +216,7 @@ export function TreasuriesPage() {
                           if (await ask({ title: t.is_active ? 'إيقاف الخزينة؟' : 'تفعيل الخزينة؟', message: t.is_active ? 'تبقى الحركات السابقة محفوظة. يتطلب الإيقاف رصيداً صفراً وإيقاف الفروع أولاً، ويمكن إعادة التفعيل لاحقاً.' : 'ستظهر الخزينة مجدداً في نماذج القبض والصرف.', confirmLabel: t.is_active ? 'إيقاف الخزينة' : 'تفعيل الخزينة', tone: 'primary' })) save.mutate({ ...t, is_active: !t.is_active })
                         }}><Power className="size-4" /></Button></>
                       )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -293,6 +314,11 @@ export function TreasuriesPage() {
       <SidePanel open={statementOf !== null} size="lg" title={`كشف ${statementOf?.name ?? ''}`} description="كل الحركات والرصيد بعد كل حركة" onClose={() => setStatementOf(null)}>
         {statementOf && <Statement treasuryId={statementOf.treasury_id!} />}
       </SidePanel>
+      {chooserLoaded && (
+        <Suspense fallback={null}>
+          <PaymentChooser open={paying !== null} treasuryId={paying?.treasuryId} onClose={() => setPaying(null)} />
+        </Suspense>
+      )}
     </div>
   )
 }

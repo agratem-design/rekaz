@@ -27,7 +27,15 @@ export type Database = {
         }
         Insert: never
         Update: never
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customer_invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_log: {
         Row: {
@@ -1618,6 +1626,8 @@ export type Database = {
       }
       purchases: {
         Row: {
+          approved_by: string | null
+          approved_at: string | null
           attachment_path: string | null
           created_at: string
           created_by: string | null
@@ -1641,6 +1651,8 @@ export type Database = {
           total_amount: number
         }
         Insert: {
+          approved_by?: string | null
+          approved_at?: string | null
           attachment_path?: string | null
           created_at?: string
           created_by?: string | null
@@ -1664,6 +1676,8 @@ export type Database = {
           total_amount: number
         }
         Update: {
+          approved_by?: string | null
+          approved_at?: string | null
           attachment_path?: string | null
           created_at?: string
           created_by?: string | null
@@ -1827,6 +1841,82 @@ export type Database = {
           },
         ]
       }
+      supplier_refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          idempotency_key: string
+          method: Database["public"]["Enums"]["payment_method"]
+          notes: string | null
+          project_id: string | null
+          refund_date: string
+          reversal_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          status: Database["public"]["Enums"]["record_status"]
+          supplier_id: string
+          treasury_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          idempotency_key?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          notes?: string | null
+          project_id?: string | null
+          refund_date?: string
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          status?: Database["public"]["Enums"]["record_status"]
+          supplier_id?: string
+          treasury_id?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          idempotency_key?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          notes?: string | null
+          project_id?: string | null
+          refund_date?: string
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          status?: Database["public"]["Enums"]["record_status"]
+          supplier_id?: string
+          treasury_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_refunds_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_refunds_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_refunds_treasury_id_fkey"
+            columns: ["treasury_id"]
+            isOneToOne: false
+            referencedRelation: "treasuries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_payments: {
         Row: {
           amount: number
@@ -1837,6 +1927,7 @@ export type Database = {
           method: Database["public"]["Enums"]["payment_method"]
           notes: string | null
           payment_date: string
+          project_id: string | null
           reference: string | null
           reversal_reason: string | null
           reversed_at: string | null
@@ -1854,6 +1945,7 @@ export type Database = {
           method?: Database["public"]["Enums"]["payment_method"]
           notes?: string | null
           payment_date: string
+          project_id?: string | null
           reference?: string | null
           reversal_reason?: string | null
           reversed_at?: string | null
@@ -1871,6 +1963,7 @@ export type Database = {
           method?: Database["public"]["Enums"]["payment_method"]
           notes?: string | null
           payment_date?: string
+          project_id?: string | null
           reference?: string | null
           reversal_reason?: string | null
           reversed_at?: string | null
@@ -1880,6 +1973,13 @@ export type Database = {
           treasury_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_payments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplier_payments_supplier_id_fkey"
             columns: ["supplier_id"]
@@ -2337,6 +2437,7 @@ export type Database = {
       }
       transfers: {
         Row: {
+          kind: string
           amount: number
           created_at: string
           created_by: string | null
@@ -2352,6 +2453,7 @@ export type Database = {
           transfer_date: string
         }
         Insert: {
+          kind?: string
           amount: number
           created_at?: string
           created_by?: string | null
@@ -2367,6 +2469,7 @@ export type Database = {
           transfer_date: string
         }
         Update: {
+          kind?: string
           amount?: number
           created_at?: string
           created_by?: string | null
@@ -2786,6 +2889,7 @@ export type Database = {
           project_id: string | null
           purchase_id: string | null
           remaining: number | null
+          returned: number | null
           supplier_id: string | null
           total_amount: number | null
         }
@@ -2836,6 +2940,7 @@ export type Database = {
       }
       supplier_balances: {
         Row: {
+          refunded: number | null
           balance_due: number | null
           invoiced: number | null
           name: string | null
@@ -2843,6 +2948,54 @@ export type Database = {
           returned: number | null
           supplier_id: string | null
           unallocated_advance: number | null
+        }
+        Relationships: []
+      }
+      project_cash_position: {
+        Row: {
+          paid_expenses: number | null
+          paid_payroll: number | null
+          paid_suppliers: number | null
+          paid_technicians: number | null
+          project_id: string | null
+          received: number | null
+          total_paid: number | null
+          cash_position: number | null
+          unpaid_dues: number | null
+        }
+        Relationships: []
+      }
+      supplier_project_balances: {
+        Row: {
+          refunded: number | null
+          balance_due: number | null
+          invoiced: number | null
+          paid: number | null
+          project_id: string | null
+          returned: number | null
+          supplier_id: string | null
+          unallocated_advance: number | null
+        }
+        Relationships: []
+      }
+      technician_project_balances: {
+        Row: {
+          balance_due: number | null
+          earned: number | null
+          paid: number | null
+          project_id: string | null
+          received_back: number | null
+          technician_id: string | null
+        }
+        Relationships: []
+      }
+      treasury_loans: {
+        Row: {
+          borrower_id: string | null
+          lender_id: string | null
+          lent: number | null
+          outstanding: number | null
+          repaid: number | null
         }
         Relationships: []
       }
@@ -2968,6 +3121,40 @@ export type Database = {
         }
         Returns: string
       }
+      pay_supplier_on_project: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_key: string
+          p_method?: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string
+          p_project_id: string
+          p_reference?: string
+          p_supplier_id: string
+          p_treasury_id: string
+        }
+        Returns: string
+      }
+      rework_technician_work: {
+        Args: { p_key: string; p_parts: Json; p_reason: string; p_work_id: string }
+        Returns: string
+      }
+      approve_purchase: { Args: { p_purchase_id: string }; Returns: undefined }
+      assign_payment_to_project: { Args: { p_kind: string; p_payment_id: string; p_project_id: string }; Returns: undefined }
+      receive_from_supplier: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_key: string
+          p_method?: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string
+          p_project_id?: string
+          p_supplier_id: string
+          p_treasury_id: string
+        }
+        Returns: string
+      }
+      reverse_supplier_refund: { Args: { p_date?: string; p_reason: string; p_refund_id: string }; Returns: undefined }
       pay_technician: {
         Args: {
           p_amount: number
@@ -3151,6 +3338,7 @@ export type Database = {
           p_date: string
           p_from: string
           p_key: string
+          p_kind?: string
           p_notes?: string
           p_to: string
         }

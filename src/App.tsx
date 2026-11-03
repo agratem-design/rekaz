@@ -24,6 +24,7 @@ const ClientDetailPage = lazy(() => named(import('./pages/clients/ClientDetailPa
 const SettingsPage = lazy(() => named(import('./pages/SettingsPage'), 'SettingsPage'))
 const UsersPage = lazy(() => named(import('./pages/UsersPage'), 'UsersPage'))
 const AuditPage = lazy(() => named(import('./pages/AuditPage'), 'AuditPage'))
+const PaymentsPage = lazy(() => named(import('./pages/payments/PaymentsPage'), 'PaymentsPage'))
 const PurchasesPage = lazy(() => named(import('./pages/purchases/PurchasesPage'), 'PurchasesPage'))
 const ExpensesPage = lazy(() => named(import('./pages/expenses/ExpensesPage'), 'ExpensesPage'))
 const TransfersPage = lazy(() => named(import('./pages/TransfersPage'), 'TransfersPage'))
@@ -44,6 +45,7 @@ const pages: Record<string, React.ComponentType> = {
   '/projects/contracting': () => <ProjectsPage key="contracting" type="contracting" />,
   '/projects/finishing': () => <ProjectsPage key="finishing" type="finishing" />,
   '/contracts': ContractsPage,
+  '/payments': PaymentsPage,
   '/receipts': ReceiptsPage,
   '/purchases': PurchasesPage,
   '/expenses': ExpensesPage,

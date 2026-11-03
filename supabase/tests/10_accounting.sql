@@ -216,7 +216,8 @@ select test.eq('P15 ربح البند حتى تاريخه = المكتسب − �
 
 select public.reverse_supplier_payment((select id from public.supplier_payments where idempotency_key = 'c1000000-0000-0000-0000-000000000001'), 'خطأ');
 select test.eq('P16 إلغاء دفعة المورد يعيد الخزينة', test.bal('10000000-0000-0000-0000-000000000001'), 4000);
-select test.eq('P17 ويعيد المتبقي على الفاتورة', (select remaining from public.purchase_balances where purchase_id = (select id from public.purchases where idempotency_key = 'c0000000-0000-0000-0000-000000000001')), 700);
+-- 1000 − مرتجع 200 − المدفوع المتبقي 300
+select test.eq('P17 ويعيد المتبقي على الفاتورة', (select remaining from public.purchase_balances where purchase_id = (select id from public.purchases where idempotency_key = 'c0000000-0000-0000-0000-000000000001')), 500);
 
 -- ---------------------------------------------------------------------------
 -- الفنيون والتشطيبات

@@ -9,19 +9,22 @@ import { PartyPicker, financeKeys } from '@/components/pickers'
 import { Button, EmptyState, Field, Input, KeyValue, Money, Select, Textarea } from '@/components/ui'
 import { formatDate, formatMoney, todayISO } from '@/lib/format'
 import { options, paymentMethodLabels } from '@/lib/labels'
-import { newKey } from '@/lib/queries'
+import { newKey, useProjectsFinancials } from '@/lib/queries'
 import { errorMessage, supabase, type Enums } from '@/lib/supabase'
+import { useSupplierProjects } from '../payments/settlementData'
 import { PrintOptions } from '../receipts/ReceiptForm'
 import { purchaseKindLabels, usePurchases } from '../purchases/purchaseData'
 
-// سداد مورد: لفاتورة محددة، أو على الحساب بتوزيع صريح على الفواتير، والجزء غير الموزع يبقى مقدماً ظاهراً للمورد
-export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: { open: boolean; onClose: () => void; supplierId?: string; purchaseId?: string }) {
+// سداد مورد: على مشروع دون اختيار فاتورة، أو لفاتورة محددة، أو على الحساب بتوزيع صريح، والجزء غير الموزع يبقى مقدماً ظاهراً للمورد
+export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId, treasuryId, projectId, defaultAmount }: { open: boolean; onClose: () => void; supplierId?: string; purchaseId?: string; treasuryId?: string; projectId?: string; defaultAmount?: number }) {
   const qc = useQueryClient()
+  const projects = useProjectsFinancials()
+  const project = projectId ? (projects.data ?? []).find((p) => p.id === projectId) : undefined
   const [supplier, setSupplier] = useState(supplierId ?? '')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayISO())
   const [method, setMethod] = useState<Enums<'payment_method'>>('cash')
-  const [treasury, setTreasury] = useState('')
+  const [treasury, setTreasury] = useState(treasuryId ?? '')
   const [reference, setReference] = useState('')
   const [notes, setNotes] = useState('')
   const [alloc, setAlloc] = useState<Record<string, string>>({})
@@ -32,21 +35,23 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
   const [printId, setPrintId] = useState<string | null>(null)
   const purchases = usePurchases({ supplierId: supplier || undefined })
   const open_ = (purchases.data ?? []).filter((p) => p.status === 'posted' && p.kind !== 'return' && p.remaining > 0).sort((a, b) => a.invoice_date.localeCompare(b.invoice_date))
+  const onProject = useSupplierProjects({ supplierId: supplier || undefined, projectId }, Boolean(projectId && supplier))
+  const projectDue = Number(onProject.data?.[0]?.balance_due ?? 0)
 
   useEffect(() => {
     if (!open) return
     setSupplier(supplierId ?? '')
-    setAmount('')
+    setAmount(defaultAmount ? String(defaultAmount) : '')
     setDate(todayISO())
     setMethod('cash')
-    setTreasury('')
+    setTreasury(treasuryId ?? '')
     setReference('')
     setNotes('')
     setAlloc({})
     setKey(newKey())
     setDirty(false)
     setErrors({})
-  }, [open, supplierId])
+  }, [open, supplierId, treasuryId, defaultAmount])
 
   // فاتورة محددة مسبقاً: نملأ المبلغ بالمتبقي عليها
   useEffect(() => {
@@ -63,7 +68,7 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
   const amt = Number(amount) || 0
   const advance = Math.round((amt - allocated) * 1000) / 1000
   const projectTypes = new Set(open_.filter((p) => Number(alloc[p.id]) > 0 && p.projects).map((p) => p.projects!.project_type))
-  const domain = projectTypes.size === 1 ? [...projectTypes][0] : null
+  const domain = project ? project.project_type : projectTypes.size === 1 ? [...projectTypes][0] : null
 
   const autoAllocate = () => {
     let left = amt
@@ -89,22 +94,19 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
     setErrors(e)
     if (Object.keys(e).length) return
     setBusy(true)
-    const { data, error } = await supabase.rpc('pay_supplier', {
-      p_key: key,
-      p_supplier_id: supplier,
-      p_treasury_id: treasury,
-      p_amount: amt,
-      p_date: date,
-      p_allocations: Object.entries(alloc)
-        .filter(([, v]) => Number(v) > 0)
-        .map(([purchase_id, v]) => ({ purchase_id, amount: Number(v) })),
-      p_method: method,
-      p_reference: (reference.trim() || null) as string,
-      p_notes: (notes.trim() || null) as string,
-    })
+    const shared = { p_key: key, p_supplier_id: supplier, p_treasury_id: treasury, p_amount: amt, p_date: date, p_method: method, p_reference: (reference.trim() || null) as string, p_notes: (notes.trim() || null) as string }
+    const { data, error } = projectId
+      ? await supabase.rpc('pay_supplier_on_project', { ...shared, p_project_id: projectId })
+      : await supabase.rpc('pay_supplier', {
+          ...shared,
+          p_allocations: Object.entries(alloc)
+            .filter(([, v]) => Number(v) > 0)
+            .map(([purchase_id, v]) => ({ purchase_id, amount: Number(v) })),
+        })
     setBusy(false)
     if (error) return toast.error(errorMessage(error)) // المفتاح يبقى؛ إعادة المحاولة لا تكرر الدفعة
-    toast.success(advance > 0 ? `تم تسجيل الدفعة، وبقي ${formatMoney(advance)} د.ل مقدماً للمورد` : 'تم تسجيل الدفعة')
+    const extra = projectId ? Math.round((amt - Math.max(projectDue, 0)) * 1000) / 1000 : advance
+    toast.success(extra > 0 ? `تم تسجيل الدفعة، وبقي ${formatMoney(extra)} د.ل مقدماً للمورد` : 'تم تسجيل الدفعة')
     for (const k of financeKeys) qc.invalidateQueries({ queryKey: [k] })
     setPrintId(data as string)
     onClose()
@@ -117,7 +119,7 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
         open={open}
         size="lg"
         title="سداد دفعة للمورد"
-        description="تخفض مستحق المورد وتخصم من الخزينة. لا تغيّر تكلفة أي مشروع."
+        description={project ? `على مشروع «${project.name}» دون اختيار فاتورة: تغطي فواتيره فيه من الأقدم، والزيادة تبقى مقدماً على المشروع.` : 'تخفض مستحق المورد وتخصم من الخزينة. لا تغيّر تكلفة أي مشروع.'}
         dirty={dirty}
         onClose={onClose}
         footer={
@@ -133,8 +135,17 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
       >
         <EntryLayout summary={<div className="space-y-3">
           <KeyValue label="مبلغ الدفعة"><Money value={amt} /></KeyValue>
-          <KeyValue label="الموزع على الفواتير"><Money value={allocated} /></KeyValue>
-          <KeyValue label="يبقى مقدماً للمورد"><Money value={Math.max(advance, 0)} /></KeyValue>
+          {project ? (
+            <>
+              <KeyValue label="مستحقه في هذا المشروع"><Money value={Math.max(projectDue, 0)} /></KeyValue>
+              <KeyValue label="الرصيد بعد الدفعة"><Money value={projectDue - amt} /></KeyValue>
+            </>
+          ) : (
+            <>
+              <KeyValue label="الموزع على الفواتير"><Money value={allocated} /></KeyValue>
+              <KeyValue label="يبقى مقدماً للمورد"><Money value={Math.max(advance, 0)} /></KeyValue>
+            </>
+          )}
         </div>}>
         <Section title="الدفعة">
           <PartyPicker table="suppliers" value={supplier} onChange={(id) => (setSupplier(id), setAlloc({}), touch())} error={errors.supplier} disabled={Boolean(supplierId)} />
@@ -158,11 +169,11 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
               <Input value={reference} onChange={(e) => (setReference(e.target.value), touch())} placeholder="رقم الصك أو الحوالة" />
             </Field>
           </div>
-          <TreasuryPicker label="الخزينة المخصوم منها" value={treasury} onChange={(id) => (setTreasury(id), touch())} domain={domain} required error={errors.treasury} />
+          <TreasuryPicker label="الخزينة المخصوم منها" value={treasury} onChange={(id) => (setTreasury(id), touch())} domain={domain} required error={errors.treasury} need={amt || undefined} />
         </Section>
 
-        <Section title="التوزيع على الفواتير المفتوحة">
-          {!supplier ? (
+        <Section title={project ? 'الملاحظات' : 'التوزيع على الفواتير المفتوحة'}>
+          {project ? null : !supplier ? (
             <p className="text-sm text-muted">اختر المورد لعرض فواتيره غير المسددة.</p>
           ) : !open_.length ? (
             <EmptyState title="لا توجد فواتير مفتوحة لهذا المورد">المبلغ كاملاً يُسجَّل دفعة مقدمة تظهر في رصيد المورد حتى توزَّع لاحقاً.</EmptyState>
@@ -205,17 +216,19 @@ export function SupplierPaymentForm({ open, onClose, supplierId, purchaseId }: {
               {errors.alloc && <p className="text-xs text-red-600">{errors.alloc}</p>}
             </>
           )}
-          <div className="rounded-lg bg-surface-2 px-4 py-2">
-            <KeyValue label="مبلغ الدفعة">
-              <Money value={amt} />
-            </KeyValue>
-            <KeyValue label="الموزع على الفواتير">
-              <Money value={allocated} />
-            </KeyValue>
-            <KeyValue label="يبقى مقدماً للمورد">
-              <Money value={Math.max(advance, 0)} className="font-semibold" />
-            </KeyValue>
-          </div>
+          {!project && (
+            <div className="rounded-lg bg-surface-2 px-4 py-2">
+              <KeyValue label="مبلغ الدفعة">
+                <Money value={amt} />
+              </KeyValue>
+              <KeyValue label="الموزع على الفواتير">
+                <Money value={allocated} />
+              </KeyValue>
+              <KeyValue label="يبقى مقدماً للمورد">
+                <Money value={Math.max(advance, 0)} className="font-semibold" />
+              </KeyValue>
+            </div>
+          )}
           <Field label="ملاحظات">
             <Textarea value={notes} onChange={(e) => (setNotes(e.target.value), touch())} />
           </Field>

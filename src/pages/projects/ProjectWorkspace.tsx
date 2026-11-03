@@ -13,6 +13,7 @@ import { StageNotice } from '../ComingSoonPage'
 import { ReceiptForm } from '../receipts/ReceiptForm'
 import { ReceiptsTable } from '../receipts/ReceiptsTable'
 import { ContractsList } from '../contracts/ContractsList'
+import { ProjectAccountsTab } from './ProjectAccountsTab'
 import { ProjectForm } from './ProjectForm'
 import { OverviewTab } from './OverviewTab'
 import { PhasesTab } from './PhasesTab'
@@ -64,6 +65,7 @@ export function ProjectWorkspace() {
   const tabs = [
     { key: '', label: 'مراحل المشروع', icon: Layers },
     { key: 'overview', label: 'خلاصة المشروع', icon: FolderKanban },
+    ...(finance ? [{ key: 'accounts', label: 'الحسابات والتسديد', icon: Banknote }] : []),
     ...(contracting ? [{ key: 'items', label: 'بنود المقاولات', icon: Package }] : []),
     { key: 'purchases', label: contracting ? 'المشتريات' : 'المشتريات والخدمات', icon: ShoppingCart },
     { key: 'expenses', label: 'المصروفات', icon: Coins },
@@ -72,7 +74,7 @@ export function ProjectWorkspace() {
     { key: 'equipment', label: 'المعدات', icon: Wrench, muted: true },
   ]
   const requested = tabs.some((t) => t.key === tab) ? tab : ''
-  const projectSections = ['', 'overview', 'invoices', 'payments', 'contracts']
+  const projectSections = ['', 'overview', 'accounts', 'invoices', 'payments', 'contracts']
   const active = projectSections.includes(requested) || phaseId ? requested : ''
   const visibleTabs = phaseId ? tabs : tabs.filter((t) => projectSections.includes(t.key))
   const f = p.fin
@@ -165,6 +167,7 @@ export function ProjectWorkspace() {
       <div className="mt-5" key={`${p.id}-${phaseId ?? 'project'}-${active}`} >
         {active === '' && <PhasesTab project={p} />}
         {active === 'overview' && <OverviewTab p={p} onReceipt={() => setReceipt(true)} />}
+        {active === 'accounts' && <ProjectAccountsTab project={p} onReceipt={() => setReceipt(true)} />}
         {active === 'items' && <ItemsTab project={p} phaseId={phaseId} />}
         {active === 'phases' && <PhasesTab project={p} />}
         {active === 'purchases' && <ProjectPurchasesTab project={p} phaseId={phaseId} />}

@@ -10,7 +10,7 @@ export const businessLoaders:Record<string,Loader>={
  'payroll-slip':async(id)=>{
   const r=await supabase.from('payroll_balances').select('*').eq('id',id).single();if(r.error)throw r.error;const s=r.data
   const e=await supabase.from('employees').select('name').eq('id',s.employee_id).single();if(e.error)throw e.error
-  return {title:'قسيمة راتب',number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title="قسيمة راتب" number={ref(id)} date={s.period} cancelled={cancelled(s)}>
+  return {title:'قسيمة راتب',number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title="قسيمة راتب" number={ref(id)} date={formatDate(s.period)} cancelled={cancelled(s)}>
    <InfoGrid items={[{label:'الموظف',value:e.data.name},{label:'شهر الاستحقاق',value:s.period.slice(0,7)}]}/>
    <PrintTable columns={[{label:'البيان',render:(r:[string,number])=>r[0]},{label:'القيمة',align:'end',render:r=><Money value={r[1]}/>}]} rows={[["الراتب الأساسي",s.base_salary],["البدلات",s.allowances],["الاستقطاعات",s.deductions],["استرداد السلفة",s.advance_deduction],["المدفوع",s.paid],["المتبقي للصرف",s.remaining]]}/>
    <AmountBox amount={s.net_amount} label="صافي الراتب"/><p className="pd-small">القسيمة بيان استحقاق، وليست إثباتًا لصرف كامل الصافي. المدفوع موضح أعلاه.</p><Signatures items={[{label:'الموظف',name:e.data.name}]}/>
@@ -21,13 +21,13 @@ export const businessLoaders:Record<string,Loader>={
   const slip=await supabase.from('payroll_slips').select('*').eq('id',p.slip_id).single();if(slip.error)throw slip.error
   const e=await supabase.from('employees').select('name').eq('id',slip.data.employee_id).single();if(e.error)throw e.error
   const t=await supabase.from('treasuries').select('name').eq('id',p.treasury_id).single();if(t.error)throw t.error
-  return {title:'سند صرف راتب',number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title="سند صرف راتب" number={ref(id)} date={p.payment_date} cancelled={cancelled(p)} compact><InfoGrid items={[{label:'المستلم',value:e.data.name},{label:'راتب شهر',value:slip.data.period.slice(0,7)},{label:'الخزينة',value:t.data.name},{label:'البيان',value:p.notes}]}/><AmountBox amount={p.amount}/><Signatures items={[{label:'المستلم',name:e.data.name}]}/></PrintDocument>}
+  return {title:'سند صرف راتب',number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title="سند صرف راتب" number={ref(id)} date={formatDate(p.payment_date)} cancelled={cancelled(p)} compact><InfoGrid items={[{label:'المستلم',value:e.data.name},{label:'راتب شهر',value:slip.data.period.slice(0,7)},{label:'الخزينة',value:t.data.name},{label:'البيان',value:p.notes}]}/><AmountBox amount={p.amount}/><Signatures items={[{label:'المستلم',name:e.data.name}]}/></PrintDocument>}
  },
  'employee-advance':async(id)=>{
   const r=await supabase.from('employee_advances').select('*').eq('id',id).single();if(r.error)throw r.error;const a=r.data
   const e=await supabase.from('employees').select('name').eq('id',a.employee_id).single();if(e.error)throw e.error
   const title=a.kind==='repayment'?'سند رد سلفة موظف':a.kind==='opening'?'بيان سلفة سابقة':'سند صرف سلفة موظف'
-  return {title,number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title={title} number={ref(id)} date={a.entry_date} cancelled={cancelled(a)} compact><InfoGrid items={[{label:'الموظف',value:e.data.name},{label:'البيان',value:a.notes}]}/><AmountBox amount={a.amount}/><Signatures items={[{label:'الموظف',name:e.data.name}]}/></PrintDocument>}
+  return {title,number:ref(id),render:(company,settings)=><PrintDocument company={company} settings={settings} title={title} number={ref(id)} date={formatDate(a.entry_date)} cancelled={cancelled(a)} compact><InfoGrid items={[{label:'الموظف',value:e.data.name},{label:'البيان',value:a.notes}]}/><AmountBox amount={a.amount}/><Signatures items={[{label:'الموظف',name:e.data.name}]}/></PrintDocument>}
  },
  'equipment-rental':async(id)=>{
   const r=await supabase.from('equipment_rentals').select('*').eq('id',id).single();if(r.error)throw r.error;const a=r.data

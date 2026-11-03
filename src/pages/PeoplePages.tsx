@@ -2,7 +2,7 @@ import { PayrollPage } from './business/PayrollPage'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Briefcase, Building2, CalendarDays, HardHat, Link2, Mail, Package, Phone, Plus, Wallet } from 'lucide-react'
+import { Briefcase, Building2, CalendarDays, HardHat, Link2, Mail, Package, Phone, Plus, Printer, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/auth/AuthProvider'
 import { DataTable } from '@/components/DataTable'
@@ -10,6 +10,7 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorState, Field,
 import { formatDate } from '@/lib/format'
 import { projectStatusLabels, projectStatusTone } from '@/lib/labels'
 import { errorMessage, supabase } from '@/lib/supabase'
+import { openPrint } from '@/print/open'
 import { IssueForm } from './CustodiesPage'
 import { useCustodies, type CustodyRow } from './expenses/expenseData'
 
@@ -19,6 +20,11 @@ function CustodyList({ rows, onIssue }: { rows: CustodyRow[]; onIssue?: () => vo
       rows={rows}
       getKey={(c) => c.id}
       rowClassName={(c) => c.status === 'reversed' && 'text-faint line-through'}
+      rowActions={(c) => (
+        <Button variant="ghost" size="icon" className="size-8" aria-label="طباعة كشف العهدة" title="طباعة كشف العهدة (يشمل الإرجاعات)" onClick={() => openPrint('custody-statement', c.id)}>
+          <Printer className="size-4" />
+        </Button>
+      )}
       empty={<EmptyState icon={Wallet} title="لا توجد عهد" action={onIssue && <Button onClick={onIssue}>صرف عهدة</Button>} />}
       columns={[
         { key: 'date', label: 'التاريخ', render: (c) => <span className="num text-muted">{formatDate(c.issue_date)}</span> },

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Coins, Lock, Plus, Printer, Undo2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/DataTable'
@@ -106,19 +106,20 @@ export function CustodiesPage() {
   )
 }
 
-export function IssueForm({ open, onClose, holderType, holderId }: { open: boolean; onClose: () => void; holderType?: 'employee' | 'engineer'; holderId?: string }) {
+export function IssueForm({ open, onClose, holderType, holderId, treasuryId }: { open: boolean; onClose: () => void; holderType?: 'employee' | 'engineer'; holderId?: string; treasuryId?: string }) {
   const qc = useQueryClient()
   const projects = useProjectsFinancials()
   const engineers = useEngineers()
   const employees = useQuery({
-    queryKey: ['employees'],
+    // مفتاح مستقل: هذه القائمة بلا راتب، ومسير الرواتب يقرأ الراتب من ['employees']
+    queryKey: ['employees', 'picker'],
     queryFn: async () => {
       const { data, error } = await supabase.from('employees').select('id, name, is_active').order('name')
       if (error) throw error
       return data
     },
   })
-  const blank = () => ({ holderType: (holderType ?? 'employee') as 'employee' | 'engineer', holder: holderId ?? '', project_id: '', treasury_id: '', amount: '', date: todayISO(), purpose: '' })
+  const blank = () => ({ holderType: (holderType ?? 'employee') as 'employee' | 'engineer', holder: holderId ?? '', project_id: '', treasury_id: treasuryId ?? '', amount: '', date: todayISO(), purpose: '' })
   const [f, setF] = useState(blank)
   const [key, setKey] = useState(newKey)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -225,7 +226,7 @@ export function IssueForm({ open, onClose, holderType, holderId }: { open: boole
               <Input type="date" value={f.date} onChange={(e) => set({ date: e.target.value })} />
             </Field>
           </div>
-          <TreasuryPicker label="الخزينة" value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury} />
+          <TreasuryPicker label="الخزينة" value={f.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury} need={Number(f.amount) || undefined} />
         </Section>
       </SidePanel>
       {printId && <PrintOptions kind="custody" id={printId} title="تم صرف العهدة" message="هل تريد طباعة سند صرف العهدة؟" onClose={() => setPrintId(null)} />}
@@ -342,18 +343,31 @@ function ReturnCash({ custody, onClose }: { custody: CustodyRow; onClose: () => 
   const [date, setDate] = useState(todayISO())
   const [notes, setNotes] = useState('')
   const [key] = useState(newKey)
+  const [printId, setPrintId] = useState<string | null>(null)
+  const qc = useQueryClient()
   const amt = Number(amount)
-  const ret = useRpc(
-    () => supabase.rpc('return_custody_cash', { p_key: key, p_custody_id: custody.id, p_treasury_id: treasury, p_amount: amt, p_date: date, p_notes: (notes.trim() || null) as string }),
-    { success: 'تم إرجاع المبلغ إلى الخزينة', onDone: onClose },
-  )
+  // الدالة تُرجع معرّف سند الإرجاع، فنعرضه للطباعة بعد الحفظ
+  const ret = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('return_custody_cash', { p_key: key, p_custody_id: custody.id, p_treasury_id: treasury, p_amount: amt, p_date: date, p_notes: (notes.trim() || null) as string })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: (id) => {
+      toast.success('تم إرجاع المبلغ إلى الخزينة')
+      for (const k of financeKeys) qc.invalidateQueries({ queryKey: [k] })
+      setPrintId(id)
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  })
+  if (printId) return <PrintOptions kind="custody-return" id={printId} title="تم الإرجاع" message="هل تريد طباعة سند الإرجاع الآن؟" onClose={onClose} />
   return (
     <Modal
       title="إرجاع نقدي من العهدة"
       onClose={onClose}
       footer={
         <>
-          <Button loading={ret.isPending} disabled={!treasury || !(amt > 0) || amt > custody.remaining} onClick={() => ret.mutate(undefined)}>
+          <Button loading={ret.isPending} disabled={!treasury || !(amt > 0) || amt > custody.remaining} onClick={() => ret.mutate()}>
             إرجاع
           </Button>
           <Button variant="secondary" onClick={onClose}>

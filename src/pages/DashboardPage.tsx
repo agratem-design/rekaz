@@ -11,7 +11,7 @@ import { formatMoney, todayLong } from '@/lib/format'
 const sum = (xs: (number | null)[]) => xs.reduce<number>((a, b) => a + Number(b ?? 0), 0)
 
 async function load(finance: boolean) {
-  const [projects, staffing, treasuries, clients, suppliers, techs, custodies] = await Promise.all([
+  const [projects, staffing, treasuries, clients, suppliers, techs, custodies, payroll] = await Promise.all([
     supabase.from('project_financials').select('*').in('status', ['planned', 'active', 'on_hold']).order('name'),
     supabase.from('project_item_staffing').select('missing_count').gt('missing_count', 0),
     finance ? supabase.from('treasury_balances').select('*').order('name') : null,
@@ -19,8 +19,9 @@ async function load(finance: boolean) {
     finance ? supabase.from('supplier_balances').select('balance_due, unallocated_advance') : null,
     finance ? supabase.from('technician_balances').select('balance_due') : null,
     finance ? supabase.from('custody_balances').select('remaining').eq('is_closed', false) : null,
+    finance ? supabase.from('payroll_balances').select('remaining').eq('status', 'posted').gt('remaining', 0) : null,
   ])
-  for (const r of [projects, staffing, treasuries, clients, suppliers, techs, custodies]) if (r?.error) throw r.error
+  for (const r of [projects, staffing, treasuries, clients, suppliers, techs, custodies, payroll]) if (r?.error) throw r.error
   return {
     projects: projects.data ?? [],
     understaffed: staffing.data?.length ?? 0,
@@ -30,6 +31,7 @@ async function load(finance: boolean) {
     supplierDue: sum((suppliers?.data ?? []).map((s) => Math.max(Number(s.balance_due), 0))),
     techDue: sum((techs?.data ?? []).map((t) => Math.max(Number(t.balance_due), 0))),
     openCustodies: custodies?.data?.length ?? 0,
+    payrollDue: sum((payroll?.data ?? []).map((s) => s.remaining)),
   }
 }
 
@@ -80,6 +82,7 @@ export function DashboardPage() {
   if (data.understaffed > 0)
     alerts.push({ tone: 'amber', icon: Wrench, text: <>{data.understaffed} تخصص في بنود المشاريع خطة العمالة فيه ناقصة</>, to: '/projects/contracting', action: 'المشاريع' })
   if (data.openCustodies > 0) alerts.push({ tone: 'blue', icon: Wallet, text: <>{data.openCustodies} عهدة مفتوحة لم تُسوَّ</>, to: '/custodies', action: 'العهد' })
+  if (data.payrollDue > 0) alerts.push({ tone: 'amber', icon: Wallet, text: <>رواتب معتمدة لم تُصرف بمجموع <Money value={data.payrollDue} /></>, to: '/payments', action: 'الصرف والتسديد' })
 
   return (
     <div className="space-y-6">
@@ -88,8 +91,8 @@ export function DashboardPage() {
       <div className={cn('grid grid-cols-2 gap-2 sm:gap-3', finance ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
         {finance && <StatCard icon={Landmark} label="إجمالي الخزائن" value={<Money value={sum(data.treasuries.map((t) => t.balance))} />} to="/treasuries" hint={`${data.treasuries.length} خزينة وحساب`} />}
         {finance && <StatCard icon={Users} label="مستحق على الزبائن" value={<Money value={data.clientDue} />} to="/clients" tone="sand" />}
-        {finance && <StatCard icon={Truck} label="مستحق للموردين" value={<Money value={data.supplierDue} />} to="/suppliers" tone="blue" />}
-        {finance && <StatCard icon={Wrench} label="مستحق للفنيين" value={<Money value={data.techDue} />} to="/technicians" tone="blue" />}
+        {finance && <StatCard icon={Truck} label="مستحق للموردين" value={<Money value={data.supplierDue} />} to="/payments" tone="blue" />}
+        {finance && <StatCard icon={Wrench} label="مستحق للفنيين" value={<Money value={data.techDue} />} to="/payments" tone="blue" />}
         <StatCard icon={Building2} label="مشاريع قائمة" value={<span className="num">{data.projects.length}</span>} to="/projects/contracting" />
       </div>
 

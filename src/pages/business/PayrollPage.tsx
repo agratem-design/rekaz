@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Briefcase, Plus, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/DataTable'
-import { BusinessForm, type BusinessField } from '@/components/BusinessForm'
+import { BusinessForm } from '@/components/BusinessForm'
 import { SidePanel } from '@/components/SidePanel'
 import { EntryCard } from '@/components/EntryWorkspace'
 import { ReverseButton } from '@/components/pickers'
@@ -14,10 +14,8 @@ import { newKey, useProjectsFinancials } from '@/lib/queries'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { formatDate, todayISO } from '@/lib/format'
 import { openPrint } from '@/print/open'
+import { employeeAdvanceDialog, payrollPaymentDialog, type Dialog } from './payrollDialogs'
 
-type Dialog = { action:string;title:string;initial:Record<string,string>;fields:BusinessField[];scope?:string }
-const dateField:BusinessField={key:'date',label:'التاريخ',type:'date',required:true}
-const notesField:BusinessField={key:'notes',label:'البيان والملاحظات',type:'notes'}
 export function PayrollPage({employeeId}: {employeeId?:string}) {
  const employees=useQuery({queryKey:['employees'],queryFn:async()=>{const r=await supabase.from('employees').select('*').order('name');if(r.error)throw r.error;return r.data}})
  const slips=useBusinessTable('payroll_balances'),advances=useBusinessTable('employee_advances'),balances=useBusinessTable('employee_advance_balances'),payments=useBusinessTable('payroll_payments')
@@ -28,7 +26,7 @@ export function PayrollPage({employeeId}: {employeeId?:string}) {
  const paymentRows=(payments.data??[]).filter(p=>!employeeId||(slips.data??[]).some(s=>s.id===p.slip_id&&s.employee_id===employeeId)).sort((a,b)=>b.payment_date.localeCompare(a.payment_date))
  const outstanding=(balances.data??[]).filter(b=>!employeeId||b.employee_id===employeeId).reduce((s,b)=>s+Number(b.remaining),0)
  const reverse=async(action:string,id:string,reason:string)=>{if(busy)return;setBusy(true);try{await businessCommand(action,{id,reason,date:todayISO()},newKey());refresh();toast.success('تم الإلغاء بقيد عكسي')}catch(e){toast.error(errorMessage(e))}finally{setBusy(false)}}
- const advance=()=>setDialog({action:'employee_advance',title:'سلفة موظف أو رد سلفة',scope:employeeId,initial:{employee_id:employeeId??'',kind:'advance',amount:'',treasury_id:'',date:todayISO(),notes:''},fields:[{key:'employee_id',label:'الموظف',type:'select',required:true,options:(employees.data??[]).filter(e=>e.is_active).map(e=>({value:e.id,label:`${e.name} — سلفة متبقية ${balances.data?.find(b=>b.employee_id===e.id)?.remaining??0}`}))},{key:'kind',label:'نوع الحركة',type:'select',required:true,options:[{value:'advance',label:'صرف سلفة من الخزينة'},{value:'repayment',label:'رد سلفة إلى الخزينة'}]},{key:'amount',label:'المبلغ',type:'number',required:true,min:0.001},{key:'treasury_id',label:'الخزينة',type:'treasury',required:true},dateField,notesField]})
+ const advance=()=>setDialog(employeeAdvanceDialog((employees.data??[]).filter(e=>e.is_active).map(e=>({value:e.id,label:`${e.name} — سلفة متبقية ${balances.data?.find(b=>b.employee_id===e.id)?.remaining??0}`})),employeeId))
  const error=employees.error??slips.error??advances.error??payments.error
  if(error)return <ErrorState message={`تعذر تحميل الرواتب: ${errorMessage(error)}`} onRetry={()=>{employees.refetch();refresh()}}/>
  return <div dir="rtl" className="space-y-5">
@@ -40,10 +38,10 @@ export function PayrollPage({employeeId}: {employeeId?:string}) {
    {key:'name',label:'الموظف',render:s=>names.get(s.employee_id)},{key:'period',label:'الشهر',render:s=>s.period.slice(0,7)},
    {key:'gross',label:'الأساسي والبدلات',align:'end',render:s=><Money value={Number(s.base_salary)+Number(s.allowances)}/>},{key:'deduction',label:'الاستقطاعات / السلفة',render:s=><span><Money value={s.deductions}/> / <Money value={s.advance_deduction}/></span>},
    {key:'net',label:'الصافي',align:'end',render:s=><Money value={s.net_amount}/>},{key:'paid',label:'المدفوع',align:'end',render:s=><Money value={s.paid}/>},{key:'remaining',label:'المتبقي',align:'end',render:s=><Money value={s.remaining}/>}
-  ]} rowActions={s=><><Button variant="ghost" size="icon" aria-label="طباعة قسيمة الراتب" onClick={()=>openPrint('payroll-slip',s.id)}><Printer className="size-4"/></Button>{s.status==='posted'&&<><Button size="sm" disabled={Number(s.remaining)<=0} onClick={()=>setDialog({action:'payroll_payment',title:'صرف راتب',scope:s.id,initial:{slip_id:s.id,amount:String(s.remaining),treasury_id:'',date:todayISO(),notes:''},fields:[{key:'amount',label:'المبلغ المدفوع',type:'number',required:true,min:0.001},{key:'treasury_id',label:'الخزينة المخصوم منها',type:'treasury',required:true},dateField,notesField]})}>صرف</Button><ReverseButton title="إلغاء قسيمة الراتب؟" onReverse={reason=>reverse('reverse_payroll_slip',s.id,reason)}/></>}</>}/>}
-  {tab==='advances'&&<><Card><div className="flex flex-wrap gap-5">{(balances.data??[]).filter(b=>(!employeeId||b.employee_id===employeeId)&&Number(b.remaining)!==0).map(b=><div key={b.employee_id}><span className="text-sm text-muted">{names.get(b.employee_id)}</span><Money value={b.remaining} className="ms-3 font-semibold"/></div>)}</div></Card><DataTable rows={advanceRows} getKey={a=>a.id} columns={[{key:'employee',label:'الموظف',render:a=>names.get(a.employee_id)},{key:'date',label:'التاريخ',render:a=>formatDate(a.entry_date)},{key:'kind',label:'الحركة',render:a=>({advance:'صرف سلفة',repayment:'رد سلفة',opening:'رصيد سابق'}[a.kind])},{key:'amount',label:'المبلغ',render:a=><Money value={a.amount}/>},{key:'notes',label:'البيان',render:a=>a.notes},{key:'status',label:'الحالة',render:a=>a.status==='posted'?'سارية':'ملغاة'}]} rowActions={a=>a.status==='posted'&&<ReverseButton title="إلغاء حركة السلفة؟" onReverse={reason=>reverse('reverse_employee_advance',a.id,reason)}/>}/></>}
+  ]} rowActions={s=><><Button variant="ghost" size="icon" aria-label="طباعة قسيمة الراتب" onClick={()=>openPrint('payroll-slip',s.id)}><Printer className="size-4"/></Button>{s.status==='posted'&&<><Button size="sm" disabled={Number(s.remaining)<=0} onClick={()=>setDialog(payrollPaymentDialog(s))}>صرف</Button><ReverseButton title="إلغاء قسيمة الراتب؟" onReverse={reason=>reverse('reverse_payroll_slip',s.id,reason)}/></>}</>}/>}
+  {tab==='advances'&&<><Card><div className="flex flex-wrap gap-5">{(balances.data??[]).filter(b=>(!employeeId||b.employee_id===employeeId)&&Number(b.remaining)!==0).map(b=><div key={b.employee_id}><span className="text-sm text-muted">{names.get(b.employee_id)}</span><Money value={b.remaining} className="ms-3 font-semibold"/></div>)}</div></Card><DataTable rows={advanceRows} getKey={a=>a.id} columns={[{key:'employee',label:'الموظف',render:a=>names.get(a.employee_id)},{key:'date',label:'التاريخ',render:a=>formatDate(a.entry_date)},{key:'kind',label:'الحركة',render:a=>({advance:'صرف سلفة',repayment:'رد سلفة',opening:'رصيد سابق'}[a.kind])},{key:'amount',label:'المبلغ',render:a=><Money value={a.amount}/>},{key:'notes',label:'البيان',render:a=>a.notes},{key:'status',label:'الحالة',render:a=>a.status==='posted'?'سارية':'ملغاة'}]} rowActions={a=><>{<Button variant="ghost" size="icon" aria-label="طباعة سند السلفة" title="طباعة سند السلفة" onClick={()=>openPrint('employee-advance',a.id)}><Printer className="size-4"/></Button>}{a.status==='posted'&&<ReverseButton title="إلغاء حركة السلفة؟" onReverse={reason=>reverse('reverse_employee_advance',a.id,reason)}/>}</>}/></>}
   {tab==='payments'&&<DataTable rows={paymentRows} getKey={p=>p.id} columns={[{key:'employee',label:'الموظف',render:p=>names.get(slips.data?.find(s=>s.id===p.slip_id)?.employee_id??'')},{key:'date',label:'التاريخ',render:p=>formatDate(p.payment_date)},{key:'amount',label:'المبلغ',render:p=><Money value={p.amount}/>},{key:'status',label:'الحالة',render:p=>p.status==='posted'?'سارية':'ملغاة'}]} rowActions={p=><><Button variant="ghost" size="icon" aria-label="طباعة سند الراتب" onClick={()=>openPrint('payroll-payment',p.id)}><Printer className="size-4"/></Button>{p.status==='posted'&&<ReverseButton title="إلغاء صرف الراتب؟" onReverse={reason=>reverse('reverse_payroll_payment',p.id,reason)}/>}</>}/>}
-  {dialog&&<BusinessForm key={dialog.action+(dialog.scope??'')} {...dialog} onClose={()=>setDialog(null)}/>}
+  {dialog&&<BusinessForm key={dialog.action+(dialog.scope??'')} {...dialog} printKind={dialog.action==='payroll_payment'?'payroll-payment':'employee-advance'} onClose={()=>setDialog(null)}/>}
   {generating&&<PayrollRunForm month={month} employees={(employees.data??[]).filter(e=>e.is_active&&(!employeeId||e.id===employeeId))} onClose={()=>setGenerating(false)}/>}
  </div>
 }

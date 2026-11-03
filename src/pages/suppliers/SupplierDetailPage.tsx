@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Banknote, FileText, Phone, Plus, Printer, ReceiptText, ScrollText, ShoppingCart, Wallet } from 'lucide-react'
+import { ArrowDownToLine, Banknote, Building2, FileText, Phone, Plus, Printer, ReceiptText, ScrollText, ShoppingCart, Wallet } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
+import { ProjectBreakdown, type BreakdownRow } from '@/components/ProjectBreakdown'
 import { Avatar, Button, Card, EmptyState, ErrorState, Money, PageHeader, Skeleton, StatCard, Tabs } from '@/components/ui'
 import { formatDate } from '@/lib/format'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { openPrint } from '@/print/open'
+import { useSupplierProjects } from '../payments/settlementData'
 import { PurchaseForm } from '../purchases/PurchaseForm'
 import { PurchasesTable } from '../purchases/PurchasesTable'
 import { purchaseKindLabels, usePurchases } from '../purchases/purchaseData'
 import { SupplierPaymentForm } from './SupplierPaymentForm'
+import { SupplierRefundForm, SupplierRefundsTable, useSupplierRefunds } from './SupplierRefunds'
 import { SupplierPaymentsTable, useSupplierPayments } from './SupplierPaymentsTable'
 
 // كشف حساب مورد: الفواتير (+) والمرتجعات والدفعات (−) بالترتيب الزمني مع الرصيد بعد كل حركة
@@ -19,9 +22,11 @@ export function SupplierDetailPage() {
   const navigate = useNavigate()
   const { hasRole } = useAuth()
   const finance = hasRole('admin', 'accountant')
-  const [tab, setTab] = useState('statement')
+  const [tab, setTab] = useState('projects')
   const [invoice, setInvoice] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [payingOn, setPayingOn] = useState<BreakdownRow | null>(null)
+  const byProject = useSupplierProjects({ supplierId: id }, finance)
   const s = useQuery({
     queryKey: ['supplier', id],
     queryFn: async () => {
@@ -33,6 +38,8 @@ export function SupplierDetailPage() {
   })
   const purchases = usePurchases({ supplierId: id })
   const payments = useSupplierPayments(id)
+  const refunds = useSupplierRefunds(id)
+  const [refunding, setRefunding] = useState(false)
 
   if (s.isLoading) return <Skeleton className="h-64 w-full rounded-xl" />
   if (s.error)
@@ -59,7 +66,11 @@ export function SupplierDetailPage() {
       })),
     ...(payments.data ?? [])
       .filter((p) => p.status === 'posted')
-      .map((p) => ({ date: p.payment_date, created: p.created_at, label: `سند صرف${p.unallocated > 0 ? ' (يتضمن مقدماً)' : ''}${p.reference ? ` — ${p.reference}` : ''}`, debit: 0, credit: Number(p.amount) })),
+      .map((p) => ({ date: p.payment_date, created: p.created_at, label: `سند صرف${p.projects?.name ? ` على مشروع ${p.projects.name}` : ''}${p.unallocated > 0 ? ' (يتضمن مقدماً)' : ''}${p.reference ? ` — ${p.reference}` : ''}`, debit: 0, credit: Number(p.amount) })),
+    // المسترد من المورد يعيد ما كان لنا عنده، فيُقيد في جهة «له»
+    ...(refunds.data ?? [])
+      .filter((r) => r.status === 'posted')
+      .map((r) => ({ date: r.refund_date, created: r.created_at, label: `مبلغ مستلم من المورد${r.projects?.name ? ` (${r.projects.name})` : ''}`, debit: Number(r.amount), credit: 0 })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.created.localeCompare(b.created))
   let running = 0
   const withBal = lines.map((l) => ((running += l.debit - l.credit), { ...l, balance: running }))
@@ -92,6 +103,12 @@ export function SupplierDetailPage() {
                 <Banknote className="size-4" />
                 سداد دفعة للمورد
               </Button>
+              {Number(s.data?.bal?.balance_due ?? 0) < 0 && (
+                <Button variant="soft" onClick={() => setRefunding(true)}>
+                  <ArrowDownToLine className="size-4" />
+                  استلام مبلغ من المورد
+                </Button>
+              )}
               <Button variant="soft" onClick={() => setInvoice(true)}>
                 <Plus className="size-4" />
                 فاتورة مشتريات
@@ -116,12 +133,24 @@ export function SupplierDetailPage() {
         active={tab}
         onChange={setTab}
         items={[
+          { key: 'projects', label: 'حسب الزبون والمشروع', icon: Building2 },
           { key: 'statement', label: 'كشف الحساب', icon: ScrollText },
           { key: 'invoices', label: 'الفواتير', icon: FileText },
           { key: 'payments', label: 'سندات الصرف', icon: ReceiptText },
+          ...(refunds.data?.length ? [{ key: 'refunds', label: 'المستلم من المورد', icon: ArrowDownToLine }] : []),
         ]}
       />
       <div className="mt-4">
+        {tab === 'projects' && (
+          <ProjectBreakdown
+            rows={(byProject.data ?? []).map((r) => ({ projectId: r.project_id, billed: Number(r.invoiced) - Number(r.returned), paid: Number(r.paid), due: Number(r.balance_due) }))}
+            billedLabel="الفواتير"
+            loading={byProject.isLoading}
+            error={byProject.error}
+            onRetry={() => byProject.refetch()}
+            onPay={setPayingOn}
+          />
+        )}
         {tab === 'statement' && (
           <Card className="overflow-x-auto p-0">
             {!withBal.length ? (
@@ -156,9 +185,12 @@ export function SupplierDetailPage() {
         )}
         {tab === 'invoices' && <PurchasesTable supplierId={sup.id} onNew={() => setInvoice(true)} />}
         {tab === 'payments' && <SupplierPaymentsTable supplierId={sup.id} onNew={() => setPaying(true)} />}
+        {tab === 'refunds' && <SupplierRefundsTable supplierId={sup.id} />}
       </div>
       {finance && <PurchaseForm open={invoice} onClose={() => setInvoice(false)} supplierId={sup.id} />}
       {finance && <SupplierPaymentForm open={paying} onClose={() => setPaying(false)} supplierId={sup.id} />}
+      {finance && <SupplierRefundForm open={refunding} onClose={() => setRefunding(false)} supplierId={sup.id} />}
+      {finance && <SupplierPaymentForm open={payingOn !== null} onClose={() => setPayingOn(null)} supplierId={sup.id} projectId={payingOn?.projectId ?? undefined} defaultAmount={payingOn && payingOn.due > 0 ? payingOn.due : undefined} />}
     </div>
   )
 }

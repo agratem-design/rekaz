@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownToLine, Banknote, Hammer, Phone, Printer, ReceiptText, ScrollText, Wallet } from 'lucide-react'
+import { ArrowDownToLine, Banknote, Building2, FolderInput, Hammer, Phone, Printer, ReceiptText, ScrollText, Wallet } from 'lucide-react'
 import { useAuth } from '@/auth/AuthProvider'
+import { AssignProjectDialog } from '@/components/AssignProjectDialog'
 import { DataTable } from '@/components/DataTable'
+import { ProjectBreakdown, type BreakdownRow } from '@/components/ProjectBreakdown'
 import { AmountCell, ReverseButton, useRpc } from '@/components/pickers'
 import { Avatar, Button, Card, EmptyState, ErrorState, Money, PageHeader, Skeleton, StatCard, Tabs } from '@/components/ui'
 import { formatDate, todayISO } from '@/lib/format'
 import { paymentMethodLabels, rateUnitLabels } from '@/lib/labels'
 import { errorMessage, supabase } from '@/lib/supabase'
 import { openPrint } from '@/print/open'
+import { useTechnicianProjects } from '../payments/settlementData'
 import { TechCashForm, WorkForm } from './TechForms'
 import { WorkTable } from './WorkTable'
 import { useTechnicianBalance, useTechnicianPayments, useTechnicianReceipts, useTechnicianWork } from './techData'
@@ -19,8 +22,11 @@ export function TechnicianDetailPage() {
   const navigate = useNavigate()
   const { hasRole } = useAuth()
   const finance = hasRole('admin', 'accountant')
-  const [tab, setTab] = useState(finance ? 'statement' : 'work')
+  const [tab, setTab] = useState(finance ? 'projects' : 'work')
   const [form, setForm] = useState<'work' | 'pay' | 'receive' | null>(null)
+  const [payingOn, setPayingOn] = useState<BreakdownRow | null>(null)
+  const [assigning, setAssigning] = useState<string | null>(null)
+  const byProject = useTechnicianProjects({ technicianId: id }, finance)
   const t = useQuery({
     queryKey: ['technician', id],
     queryFn: async () => {
@@ -126,12 +132,22 @@ export function TechnicianDetailPage() {
         active={tab}
         onChange={setTab}
         items={[
-          ...(finance ? [{ key: 'statement', label: 'كشف الحساب', icon: ScrollText }] : []),
+          ...(finance ? [{ key: 'projects', label: 'حسب الزبون والمشروع', icon: Building2 }, { key: 'statement', label: 'كشف الحساب', icon: ScrollText }] : []),
           { key: 'work', label: 'الأعمال والمستحقات', icon: Hammer },
           ...(finance ? [{ key: 'payments', label: 'سندات الصرف', icon: ReceiptText }, { key: 'receipts', label: 'المستلم من الفني', icon: ArrowDownToLine }] : []),
         ]}
       />
       <div className="mt-4">
+        {tab === 'projects' && (
+          <ProjectBreakdown
+            rows={(byProject.data ?? []).map((r) => ({ projectId: r.project_id, billed: Number(r.earned), paid: Number(r.paid) - Number(r.received_back), due: Number(r.balance_due) }))}
+            billedLabel="الأعمال"
+            loading={byProject.isLoading}
+            error={byProject.error}
+            onRetry={() => byProject.refetch()}
+            onPay={setPayingOn}
+          />
+        )}
         {tab === 'statement' && (
           <Card className="overflow-x-auto p-0">
             {!ledger.length ? (
@@ -174,7 +190,7 @@ export function TechnicianDetailPage() {
             empty={<EmptyState icon={ReceiptText} title="لا توجد دفعات" />}
             columns={[
               { key: 'date', label: 'التاريخ', render: (p) => <span className="num text-muted">{formatDate(p.payment_date)}</span> },
-              { key: 'project', label: 'المشروع (سياق)', render: (p) => p.projects?.name ?? <span className="text-muted">على الحساب</span> },
+              { key: 'project', label: 'المشروع', render: (p) => p.projects?.name ?? <span className="text-muted">على الحساب</span> },
               { key: 'treasury', label: 'الخزينة', hideBelow: 'md', render: (p) => p.treasuries?.name },
               { key: 'method', label: 'الطريقة', hideBelow: 'lg', render: (p) => paymentMethodLabels[p.method] },
               { key: 'amount', label: 'المبلغ', align: 'end', render: (p) => <AmountCell value={p.amount} reversed={p.status === 'reversed'} /> },
@@ -184,6 +200,11 @@ export function TechnicianDetailPage() {
                 <Button variant="ghost" size="icon" className="size-8" aria-label="طباعة السند" title="طباعة السند" onClick={() => openPrint('technician-payment', p.id)}>
                   <Printer className="size-4" />
                 </Button>
+                {p.status === 'posted' && !p.context_project_id && (
+                  <Button variant="ghost" size="icon" className="size-8" aria-label="نقل الدفعة إلى مشروع" title="نقل الدفعة على الحساب إلى مشروع" onClick={() => setAssigning(p.id)}>
+                    <FolderInput className="size-4" />
+                  </Button>
+                )}
                 {p.status === 'posted' && <ReverseButton title="إلغاء الدفعة؟" onReverse={(reason) => revPay.mutate({ id: p.id, reason })} />}
               </>
             )}
@@ -215,6 +236,8 @@ export function TechnicianDetailPage() {
       </div>
       <WorkForm open={form === 'work'} onClose={() => setForm(null)} technicianId={tech.id} />
       {finance && <TechCashForm open={form === 'pay' || form === 'receive'} direction={form === 'receive' ? 'receive' : 'pay'} onClose={() => setForm(null)} technicianId={tech.id} />}
+      {assigning && <AssignProjectDialog kind="technician" paymentId={assigning} onClose={() => setAssigning(null)} />}
+      {finance && <TechCashForm open={payingOn !== null} direction="pay" onClose={() => setPayingOn(null)} technicianId={tech.id} projectId={payingOn?.projectId ?? undefined} defaultAmount={payingOn && payingOn.due > 0 ? payingOn.due : undefined} />}
     </div>
   )
 }

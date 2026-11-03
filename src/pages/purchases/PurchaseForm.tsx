@@ -387,7 +387,7 @@ export function PurchaseForm({ open, onClose, phaseId, projectId, supplierId, ki
                       </Select>
                     </Field>
                   </div>
-                  <TreasuryPicker label="الخزينة المخصوم منها" value={form.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury_id} />
+                  <TreasuryPicker label="الخزينة المخصوم منها" value={form.treasury_id} onChange={(id) => set({ treasury_id: id })} domain={project?.project_type ?? null} required error={errors.treasury_id} need={Number(form.pay_amount) || undefined} />
                   <Field label="المرجع (رقم الصك أو الحوالة)">
                     <Input value={form.reference} onChange={(e) => set({ reference: e.target.value })} />
                   </Field>
