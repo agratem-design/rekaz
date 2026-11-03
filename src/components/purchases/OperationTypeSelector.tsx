@@ -28,12 +28,6 @@ export const OperationTypeSelector: React.FC<OperationTypeSelectorProps> = ({
       icon: <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
     },
     {
-      type: "service",
-      title: "خدمة مورد خارجية",
-      description: "تسجيل خدمات الموردين الخارجيين وفواتير الخدمات المتعددة",
-      icon: <Wrench className="h-6 w-6 text-purple-600 dark:text-purple-400" />,
-    },
-    {
       type: "labor",
       title: "عمل فني / عمالة يومية",
       description: "تسجيل فواتير المصنعيات، أجور الفنيين، واليوميات المباشرة للمشروع",

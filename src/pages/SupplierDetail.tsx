@@ -556,7 +556,7 @@ export default function SupplierDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `PAY-${data?.payment_id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                receiptNumber: `PAY-${data.payment_id.toUpperCase()}`,
                 date: payDate,
                 type: "payment",
                 amount: paidAmt,
@@ -1536,7 +1536,7 @@ export default function SupplierDetail() {
                               onClick={() =>
                                 openReceiptPrintWindow(
                                   {
-                                    receiptNumber: `PAY-${pay.id.slice(0, 8)}`,
+                                    receiptNumber: `PAY-${pay.id.toUpperCase()}`,
                                     date: pay.date,
                                     type: "payment",
                                     amount: Number(pay.amount || 0),
@@ -1587,7 +1587,7 @@ export default function SupplierDetail() {
                               onClick={() =>
                                 openReceiptPrintWindow(
                                   {
-                                    receiptNumber: `DIR-${pay.id.slice(0, 8)}`,
+                                    receiptNumber: `PAY-${pay.id.toUpperCase()}`,
                                     date: pay.date,
                                     type: "payment",
                                     amount: Number(pay.amount || 0),
@@ -1684,7 +1684,7 @@ export default function SupplierDetail() {
                               onClick={() =>
                                 openReceiptPrintWindow(
                                   {
-                                    receiptNumber: `PAY-${st.paymentRecord.id.slice(0, 8)}`,
+                                    receiptNumber: `PAY-${st.paymentRecord.id.toUpperCase()}`,
                                     date: st.paymentRecord.date,
                                     type: "payment",
                                     amount: Number(st.paymentRecord.amount || 0),

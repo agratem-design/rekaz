@@ -1,3 +1,4 @@
+import { treasuryReceiptNumber } from "@/lib/receiptIdentity";
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -82,6 +83,7 @@ const TreasuryDetail = () => {
   const [txDateTo, setTxDateTo] = useState("");
   const [txPeriodPreset, setTxPeriodPreset] = useState<"today"|"week"|"month"|"year"|"custom"|"all">("all");
   const [txTypeFilter, setTxTypeFilter] = useState("all");
+  const [receiptSearch, setReceiptSearch] = useState("");
 
   const applyPreset = (preset: "today"|"week"|"month"|"year"|"all") => {
     const now = new Date();
@@ -137,7 +139,7 @@ const TreasuryDetail = () => {
         : "withdrawal";
         
     openReceiptPrintWindow({
-      receiptNumber: `TX-${tx.id.slice(0, 8)}`,
+      receiptNumber: treasuryReceiptNumber(tx),
       date: tx.date,
       type: type,
       amount: Number(tx.amount || 0),
@@ -155,7 +157,7 @@ const TreasuryDetail = () => {
     const totalPaid = paidAmount + commission;
 
     openReceiptPrintWindow({
-      receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.slice(0, 8).toUpperCase()}`,
+      receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.toUpperCase()}`,
       date: p.date || new Date().toISOString(),
       type: "payment",
       amount: totalPaid > 0 ? totalPaid : Number(p.total_amount) || 0,
@@ -326,6 +328,8 @@ const TreasuryDetail = () => {
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
     return transactions.filter(tx => {
+      const search = receiptSearch.trim().toLowerCase();
+      if (search && ![treasuryReceiptNumber(tx), tx.description, tx.reference_id].some(value => value?.toLowerCase().includes(search))) return false;
       // فلتر التاريخ
       if (txDateFrom && tx.date < txDateFrom) return false;
       if (txDateTo && tx.date > txDateTo) return false;
@@ -338,7 +342,7 @@ const TreasuryDetail = () => {
       if (txTypeFilter === "transfer") return tx.source === "transfer";
       return true;
     });
-  }, [transactions, txDateFrom, txDateTo, txTypeFilter]);
+  }, [transactions, txDateFrom, txDateTo, txTypeFilter, receiptSearch]);
 
   const periodStats = useMemo(() => {
     const totalIn = filteredTransactions.filter(t => t.type === "deposit").reduce((s, t) => s + Number(t.amount), 0);
@@ -671,6 +675,7 @@ const TreasuryDetail = () => {
               <option value="transfer">تحويلات</option>
             </select>
           </div>
+          <Input aria-label="البحث برقم الواصل أو وصف الحركة" placeholder="البحث برقم الواصل أو وصف الحركة" value={receiptSearch} onChange={event => setReceiptSearch(event.target.value)} className="mt-3" />
           {/* إجماليات الفترة */}
           <div className="grid grid-cols-3 gap-3 mt-3 p-3 bg-muted/30 rounded-xl border border-border/40">
             <div className="text-center">
@@ -781,6 +786,7 @@ const TreasuryDetail = () => {
                             </TableCell>
                             <TableCell>
                               {translateSource(tx.source) || "-"}
+                              <p dir="ltr" className="text-[10px] text-muted-foreground break-all text-right">{treasuryReceiptNumber(tx)}</p>
                               {tx.reference_type === 'transfer' && tx.reference_id && (() => {
                                 const linked = allTreasuries?.find((t: any) => t.id === tx.reference_id);
                                 return linked ? (

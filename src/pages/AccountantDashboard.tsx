@@ -49,7 +49,7 @@ const AccountantDashboard = () => {
 
   const handlePrintReceipt = (purchase: any) => {
     openReceiptPrintWindow({
-      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.slice(0, 8)}`,
+      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.toUpperCase()}`,
       date: purchase.date,
       type: "payment",
       amount: Number(purchase.paid_amount || 0),
@@ -143,9 +143,8 @@ const AccountantDashboard = () => {
     const fd = new FormData(e.currentTarget);
     updatePurchaseMutation.mutate({
       id: editingPurchase.id,
+      // paid_amount / status are derived on the server from payment records
       data: {
-        paid_amount: Number(fd.get("paid_amount")),
-        status: fd.get("status") as string,
         invoice_number: (fd.get("invoice_number") as string) || null,
         notes: (fd.get("notes") as string) || null,
       },
@@ -488,6 +487,8 @@ const AccountantDashboard = () => {
                   name="paid_amount"
                   type="number"
                   defaultValue={editingPurchase.paid_amount}
+                  readOnly
+                  disabled
                   min={0}
                   max={editingPurchase.total_amount}
                   step="0.01"
@@ -495,7 +496,8 @@ const AccountantDashboard = () => {
               </div>
               <div className="space-y-2">
                 <Label>حالة الفاتورة</Label>
-                <Select name="status" defaultValue={editingPurchase.status || "due"}>
+                <p className="text-[11px] text-muted-foreground">المدفوع والحالة يُحسبان تلقائياً من سندات الصرف. لتسجيل دفعة استخدم زر السداد في صفحة مشتريات المشروع.</p>
+                <Select name="status" defaultValue={editingPurchase.status || "due"} disabled>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

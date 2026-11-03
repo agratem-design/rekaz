@@ -99,7 +99,7 @@ const AllProjectExpenses = () => {
 
   const handlePrintPurchaseReceipt = (purchase: any) => {
     openReceiptPrintWindow({
-      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.slice(0, 8)}`,
+      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.toUpperCase()}`,
       date: purchase.date,
       type: "payment",
       amount: Number(purchase.paid_amount || 0),
@@ -112,7 +112,7 @@ const AllProjectExpenses = () => {
 
   const handlePrintExpenseReceipt = (expense: any) => {
     openReceiptPrintWindow({
-      receiptNumber: expense.invoice_number || `EXP-${expense.id.slice(0, 8)}`,
+      receiptNumber: expense.invoice_number || `EXP-${expense.id.toUpperCase()}`,
       date: expense.date,
       type: "expense",
       amount: Number(expense.amount || 0),
@@ -778,7 +778,7 @@ const AllProjectExpenses = () => {
               </div>
               <div className="space-y-1.5">
                 <Label>حالة الدفع</Label>
-                <Select value={purchaseForm.status} onValueChange={(v) => setPurchaseForm(f => ({ ...f, status: v }))}>
+                <Select disabled value={purchaseForm.status} onValueChange={(v) => setPurchaseForm(f => ({ ...f, status: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="paid">مدفوع</SelectItem>

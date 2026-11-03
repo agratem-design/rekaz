@@ -33,6 +33,11 @@ export function openSalarySlipPrintWindow(
   slip: SalarySlipPrintData,
   settings: CompanySettings | null | undefined
 ): Window | null {
+  const escape = (value: string) => value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
+  slip = { ...slip, slipNumber: escape(slip.slipNumber), employeeName: escape(slip.employeeName),
+    payrollTitle: escape(slip.payrollTitle), department: slip.department && escape(slip.department),
+    position: slip.position && escape(slip.position), phone: slip.phone && escape(slip.phone),
+    treasuryName: slip.treasuryName && escape(slip.treasuryName), notes: slip.notes && escape(slip.notes) };
   const monthName = MONTH_NAMES[(slip.month - 1) % 12] || `${slip.month}`;
   const title = `قسيمة راتب - ${slip.employeeName} (${monthName} ${slip.year})`;
 
@@ -45,7 +50,7 @@ export function openSalarySlipPrintWindow(
       <!-- Title Block -->
       <div style="text-align: center; border-bottom: 2px solid #b4a078; padding-bottom: 12px; margin-bottom: 20px;">
         <h2 class="print-report-title" style="margin: 0 0 6px 0; font-size: 20px; font-weight: 800; color: #1a1a1a;">
-          قسيمة مفردات المرتب الشهري
+          ${isPaid ? 'واصل صرف واستلام راتب' : 'قسيمة مفردات المرتب الشهري - غير مصروفة'}
         </h2>
         <div class="print-report-subtitle" style="font-size: 14px; font-weight: 600; color: #b4a078;">
           مسير رواتب شهر: ${monthName} ${slip.year} (${slip.payrollTitle})
@@ -72,6 +77,10 @@ export function openSalarySlipPrintWindow(
             <td style="padding: 5px 8px; font-weight: 600; color: #333;">${slip.position || '-'}</td>
             <td style="padding: 5px 8px; color: #666; font-weight: 600;">رقم الهاتف:</td>
             <td style="padding: 5px 8px; font-family: monospace; direction: ltr; text-align: right;">${slip.phone || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 8px; color: #666; font-weight: 600;">تاريخ الصرف:</td>
+            <td style="padding: 5px 8px;" colspan="3">${isPaid ? slip.disbursementDate || '-' : 'لم يتم الصرف؛ هذه القسيمة ليست إثبات استلام'}</td>
           </tr>
           ${slip.treasuryName ? `
           <tr>

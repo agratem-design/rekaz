@@ -101,7 +101,7 @@ export default function Custody() {
 
     openReceiptPrintWindow(
       {
-        receiptNumber: `CUST-${record.id.slice(0, 8)}`,
+        receiptNumber: `CUST-${record.id.toUpperCase()}`,
         date: record.date,
         type: "custody",
         amount: Number(record.amount),

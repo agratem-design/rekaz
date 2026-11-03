@@ -186,7 +186,7 @@ const ProjectExpenses = () => {
   const handlePrintExpenseReceipt = (expense: any) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `EXP-${expense.id.slice(0, 8)}`,
+        receiptNumber: `EXP-${expense.id.toUpperCase()}`,
         date: expense.date,
         type: "expense",
         amount: Number(expense.amount),

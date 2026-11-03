@@ -61,7 +61,7 @@ const Transfers = () => {
   const handlePrintReceipt = (it: TransferRow) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `TRF-${it.id.slice(0, 8)}`,
+        receiptNumber: `TRF-${it.id.toUpperCase()}`,
         date: it.date,
         type: it.type === "loan" ? "advance" : "custody",
         amount: Number(it.amount),

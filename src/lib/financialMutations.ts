@@ -15,6 +15,6 @@ export async function financialRpc<T = Record<string, unknown>>(name: string, ar
 
 export function invalidateFinancialQueries(queryClient: QueryClient) {
   return queryClient.invalidateQueries({
-    predicate: query => /client|project|technician|supplier|payment|purchase|expense|income|credit|debt|treasur|financial/.test(String(query.queryKey[0])),
+    predicate: query => /client|project|technician|supplier|payment|purchase|expense|income|credit|debt|treasur|financial|employee|payroll|custod/.test(String(query.queryKey[0])),
   });
 }

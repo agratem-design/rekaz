@@ -68,7 +68,7 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
   const handlePrint = (e: Deposit) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `DEP-${e.id.slice(0, 8)}`,
+        receiptNumber: `DEP-${e.id.toUpperCase()}`,
         date: e.date,
         type: e.entry_type === "receipt" ? "technician_deposit" : "technician_refund",
         amount: Number(e.amount),
@@ -85,8 +85,8 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
     if (!Number.isFinite(value) || value <= 0 || !treasury || !mode) throw new Error("أدخل مبلغاً موجباً واختر الخزينة.");
     if (mode === "refund" && value > available) throw new Error("المبلغ يتجاوز رصيد الوديعة المتاح.");
     const payload = { technician_id: technicianId, treasury_id: treasury, entry_type: mode, amount: value, date, payment_method: method, notes: notes || null };
-    return financialRpc("record_technician_deposit_v2", { p_payload: payload, p_request_key: operation.getKey(payload) });
-  }, onSuccess: () => {
+    return financialRpc<{ id: string }>("record_technician_deposit_v2", { p_payload: payload, p_request_key: operation.getKey(payload) });
+  }, onSuccess: (saved) => {
     const currentMode = mode;
     const currentAmount = Number(amount);
     const currentDate = date;
@@ -100,7 +100,7 @@ export function TechnicianDepositsPanel({ technicianId }: { technicianId: string
         onClick: () => {
           openReceiptPrintWindow(
             {
-              receiptNumber: `DEP-${Date.now().toString().slice(-6)}`,
+              receiptNumber: `DEP-${saved.id.toUpperCase()}`,
               date: currentDate,
               type: currentMode === "receipt" ? "technician_deposit" : "technician_refund",
               amount: currentAmount,

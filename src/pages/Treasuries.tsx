@@ -1,3 +1,4 @@
+import { treasuryReceiptNumber } from "@/lib/receiptIdentity";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -309,6 +310,7 @@ const Treasuries = () => {
 
       const q = txSearchQuery.trim().toLowerCase();
       const matchesSearch = !q || (
+        treasuryReceiptNumber(tx).toLowerCase().includes(q) ||
         (tx.description && tx.description.toLowerCase().includes(q)) ||
         (tx.notes && tx.notes.toLowerCase().includes(q)) ||
         (tx.treasuries?.name && tx.treasuries.name.toLowerCase().includes(q)) ||
@@ -513,7 +515,7 @@ const Treasuries = () => {
         : "withdrawal";
         
     openReceiptPrintWindow({
-      receiptNumber: `TX-${tx.id.slice(0, 8)}`,
+      receiptNumber: treasuryReceiptNumber(tx),
       date: tx.date,
       type: type,
       amount: Number(tx.amount || 0),
@@ -528,7 +530,7 @@ const Treasuries = () => {
     const isLoan = item.type === "loan";
     openReceiptPrintWindow(
       {
-        receipt_number: `TRF-${item.id.slice(0, 8).toUpperCase()}`,
+        receipt_number: `TRF-${item.id.toUpperCase()}`,
         type: isLoan ? "advance" : "custody",
         amount: Number(item.amount) || 0,
         date: item.date || new Date().toISOString(),
@@ -1348,6 +1350,7 @@ const Treasuries = () => {
                         </TableCell>
                         <TableCell className="text-xs max-w-xs truncate">
                           <span className="font-medium text-foreground">{tx.description || tx.source_details || "حركة مالية"}</span>
+                          <p dir="ltr" className="text-[10px] text-muted-foreground break-all text-right">{treasuryReceiptNumber(tx)}</p>
                           {tx.notes && <p className="text-[10px] text-muted-foreground truncate">{tx.notes}</p>}
                         </TableCell>
                         <TableCell className={`text-sm font-bold whitespace-nowrap ${isDeposit ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>

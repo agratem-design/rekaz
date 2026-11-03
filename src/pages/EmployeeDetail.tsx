@@ -1,3 +1,4 @@
+import { receiptNumber } from "@/lib/receiptIdentity";
 import { useState, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -403,7 +404,7 @@ export default function EmployeeDetail() {
   const handlePrintAdvanceReceipt = (adv: AdvanceRecord) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `ADV-${adv.id.slice(0, 8)}`,
+        receiptNumber: receiptNumber("ADV", adv.id),
         date: adv.disbursement_date,
         type: "advance",
         amount: Number(adv.amount),
@@ -419,7 +420,7 @@ export default function EmployeeDetail() {
   const handlePrintCustodyReceipt = (c: CustodyRecord) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `CUST-${c.id.slice(0, 8)}`,
+        receiptNumber: receiptNumber("CUST", c.id),
         date: c.date,
         type: "custody",
         amount: Number(c.amount),
@@ -456,7 +457,7 @@ export default function EmployeeDetail() {
       if (!amount || amount <= 0) throw new Error("يرجى إدخال مبلغ صحيح للسلفة");
       if (!vars.treasury_id) throw new Error("يرجى اختيار الخزينة المنصرف منها");
 
-      return await financialRpc("disburse_employee_advance", {
+      return await financialRpc<string>("disburse_employee_advance", {
         p_employee_id: id!,
         p_amount: amount,
         p_treasury_id: vars.treasury_id,
@@ -465,7 +466,7 @@ export default function EmployeeDetail() {
         p_date: vars.disbursement_date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (savedId, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-advances", id] });
       const advanceAmount = parseFloat(vars.amount);
@@ -476,7 +477,7 @@ export default function EmployeeDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `ADV-${Date.now().toString().slice(-6)}`,
+                receiptNumber: receiptNumber("ADV", savedId),
                 date: vars.disbursement_date || new Date().toISOString().split("T")[0],
                 type: "advance",
                 amount: advanceAmount,
@@ -512,7 +513,7 @@ export default function EmployeeDetail() {
       }
       if (!vars.treasury_id) throw new Error("يرجى اختيار الخزينة المودع فيها");
 
-      return await financialRpc("repay_employee_advance", {
+      return await financialRpc<string>("repay_employee_advance", {
         p_advance_id: selectedAdvance.id,
         p_amount: amount,
         p_treasury_id: vars.treasury_id,
@@ -520,7 +521,7 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (savedId, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-advances", id] });
       queryClient.invalidateQueries({ queryKey: ["employee-repayments", id] });
@@ -532,7 +533,7 @@ export default function EmployeeDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `REP-${Date.now().toString().slice(-6)}`,
+                receiptNumber: receiptNumber("REP", savedId),
                 date: vars.date || new Date().toISOString().split("T")[0],
                 type: "advance_repayment",
                 amount: repayAmt,
@@ -563,7 +564,7 @@ export default function EmployeeDetail() {
       if (!selectedSlip) throw new Error("لم يتم تحديد القسيمة");
       if (!vars.treasury_id) throw new Error("يرجى اختيار خزينة الصرف");
 
-      return await financialRpc("disburse_payroll_slip", {
+      return await financialRpc("disburse_payroll_slip_v2", {
         p_slip_id: selectedSlip.id,
         p_treasury_id: vars.treasury_id,
         p_date: vars.date || new Date().toISOString().split("T")[0],
@@ -588,7 +589,7 @@ export default function EmployeeDetail() {
       if (!amount || amount <= 0) throw new Error("يرجى إدخال مبلغ صحيح للعهدة");
       if (!vars.treasury_id) throw new Error("يرجى تحديد الخزينة المنصرف منها");
 
-      return await financialRpc("issue_employee_custody", {
+      return await financialRpc<string>("issue_employee_custody", {
         p_holder_type: "employee",
         p_holder_id: id!,
         p_amount: amount,
@@ -598,7 +599,7 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (savedId, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-custodies", id] });
       const custodyAmt = parseFloat(vars.amount);
@@ -610,7 +611,7 @@ export default function EmployeeDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `CUST-${Date.now().toString().slice(-6)}`,
+                receiptNumber: receiptNumber("CUST", savedId),
                 date: vars.date || new Date().toISOString().split("T")[0],
                 type: "custody",
                 amount: custodyAmt,
@@ -647,7 +648,7 @@ export default function EmployeeDetail() {
       }
       if (!vars.treasury_id) throw new Error("يرجى تحديد الخزينة المودع فيها");
 
-      return await financialRpc("settle_custody_cash_return", {
+      return await financialRpc<string>("settle_custody_cash_return", {
         p_custody_id: selectedCustody.id,
         p_return_amount: amount,
         p_treasury_id: vars.treasury_id,
@@ -655,7 +656,7 @@ export default function EmployeeDetail() {
         p_date: vars.date || new Date().toISOString().split("T")[0],
       });
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (savedId, vars) => {
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["employee-custodies", id] });
       const returnAmt = parseFloat(vars.amount);
@@ -666,7 +667,7 @@ export default function EmployeeDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `SET-${Date.now().toString().slice(-6)}`,
+                receiptNumber: receiptNumber("SET", savedId),
                 date: vars.date || new Date().toISOString().split("T")[0],
                 type: "custody_settlement",
                 amount: returnAmt,
@@ -696,7 +697,7 @@ export default function EmployeeDetail() {
     if (!employee) return;
     openSalarySlipPrintWindow(
       {
-        slipNumber: slip.id.substring(0, 8).toUpperCase(),
+        slipNumber: receiptNumber("SAL", slip.id),
         month: slip.payroll?.month || 1,
         year: slip.payroll?.year || new Date().getFullYear(),
         payrollTitle: slip.payroll?.title || "مسير رواتب",
@@ -1146,7 +1147,7 @@ export default function EmployeeDetail() {
                         {formatCurrencyLYD(slip.net_salary)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {slip.treasury?.name || "-"}
+                        {slip.treasury_id ? <Link className="cursor-pointer text-primary hover:underline" to={`/treasuries/${slip.treasury_id}`}>{slip.treasury?.name || "خزينة الصرف"}</Link> : "لم يُصرف"}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge
@@ -1303,6 +1304,37 @@ export default function EmployeeDetail() {
             )}
           </div>
         </TabsContent>
+
+        <section dir="rtl" className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h3 className="font-bold text-sm">سجل سداد السلف ووصولات الاستلام</h3>
+          <p className="text-xs text-muted-foreground">الاستقطاع من الراتب تسوية للسلفة؛ السداد النقدي وحده يمثل قبضاً في الخزينة.</p>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader><TableRow><TableHead>رقم الواصل / التسوية</TableHead><TableHead>التاريخ</TableHead><TableHead>المبلغ</TableHead><TableHead>طريقة السداد</TableHead><TableHead>الخزينة</TableHead><TableHead>طباعة</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {repayments.map(rep => <TableRow key={rep.id}>
+                  <TableCell className="font-mono text-xs break-all">{receiptNumber("REP", rep.id)}</TableCell>
+                  <TableCell>{rep.date}</TableCell><TableCell>{formatCurrencyLYD(rep.amount)}</TableCell>
+                  <TableCell>{rep.payroll_slip_id ? "خصم من الراتب" : "سداد نقدي"}</TableCell>
+                  <TableCell>{rep.treasury_id ? <Link className="text-primary cursor-pointer hover:underline" to={`/treasuries/${rep.treasury_id}`}>{rep.treasury?.name || "الخزينة"}</Link> : "تسوية دون حركة نقدية"}</TableCell>
+                  <TableCell><Button variant="outline" size="sm" className="gap-2 cursor-pointer" onClick={() => {
+                    if (rep.payroll_slip_id) {
+                      const slip = slips.find(item => item.id === rep.payroll_slip_id);
+                      if (slip) handlePrintSalarySlip(slip);
+                      else toast.error("تعذر العثور على قسيمة الراتب المرتبطة");
+                      return;
+                    }
+                    openReceiptPrintWindow({ receiptNumber: receiptNumber("REP", rep.id), date: rep.date,
+                      type: "advance_repayment", amount: rep.amount, paidToOrBy: employee.name,
+                      treasuryName: rep.treasury?.name, description: `سداد السلفة ${receiptNumber("ADV", rep.advance_id)}`,
+                      notes: rep.notes || undefined }, companySettings);
+                  }}><Printer className="h-4 w-4" />{rep.payroll_slip_id ? "واصل الراتب" : "طباعة الواصل"}</Button></TableCell>
+                </TableRow>)}
+                {repayments.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">لا توجد تسويات أو وصولات سداد مسجلة</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
 
         {/* 3. Custody Tab */}
         <TabsContent value="custody" className="space-y-4">
@@ -1723,7 +1755,7 @@ export default function EmployeeDetail() {
           <DialogHeader>
             <DialogTitle>صرف قسيمة الراتب</DialogTitle>
             <DialogDescription>
-              سيتم خصم صافي الراتب من الخزينة المحددة وتسجيل سداد قسط السلفة تلقائياً إن وجد.
+              يُعاد احتساب السلف المتبقية عند الصرف، ثم يُخصم صافي الراتب من الخزينة المختارة. قد يتغير الصافي المعروض إذا سُددت سلفة بعد إعداد القسيمة.
             </DialogDescription>
           </DialogHeader>
           <form

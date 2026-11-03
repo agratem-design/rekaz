@@ -603,7 +603,7 @@ export default function TechnicianDetail() {
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `PAY-${data?.payment_id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                receiptNumber: `PAY-${data.payment_id.toUpperCase()}`,
                 date: payDate,
                 type: "salary",
                 amount: paidAmt,
@@ -1605,7 +1605,7 @@ export default function TechnicianDetail() {
                                   onClick={() =>
                                     openReceiptPrintWindow(
                                       {
-                                        receiptNumber: `PAY-${pay.id.slice(0, 8)}`,
+                                        receiptNumber: `PAY-${pay.id.toUpperCase()}`,
                                         date: pay.date,
                                         type: "salary",
                                         amount: Number(pay.amount || 0),
@@ -1686,7 +1686,7 @@ export default function TechnicianDetail() {
                               onClick={() =>
                                 openReceiptPrintWindow(
                                   {
-                                    receiptNumber: `EXP-${pay.id.slice(0, 8)}`,
+                                    receiptNumber: `EXP-${pay.id.toUpperCase()}`,
                                     date: pay.date,
                                     type: "salary",
                                     amount: Number(pay.amount || 0),
@@ -1792,7 +1792,7 @@ export default function TechnicianDetail() {
                               onClick={() =>
                                 openReceiptPrintWindow(
                                   {
-                                    receiptNumber: `PAY-${st.paymentRecord.id.slice(0, 8)}`,
+                                    receiptNumber: `PAY-${st.paymentRecord.id.toUpperCase()}`,
                                     date: st.paymentRecord.date,
                                     type: "salary",
                                     amount: Number(st.paymentRecord.amount || 0),

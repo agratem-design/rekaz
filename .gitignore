@@ -24,6 +24,12 @@ test-results/screenshots/
 .vscode/*
 !.vscode/extensions.json
 .idea
+.claude/
+_v2_incoming/
+business-stage/
+backups/claude-*/
+supabase/.temp/
+*.zip
 .DS_Store
 *.suo
 *.ntvs*

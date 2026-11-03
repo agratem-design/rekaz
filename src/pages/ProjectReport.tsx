@@ -184,7 +184,9 @@ const ProjectReport = () => {
             notes,
             purchase_type,
             title,
-            suppliers (name)
+            suppliers (name),
+            technicians (name),
+            project_items (name)
           )
         `)
         .eq("purchases.project_id", id!);
@@ -363,10 +365,12 @@ const ProjectReport = () => {
 
   // Map purchase payments
   purchasePayments.forEach((pay) => {
-    const isCheck = pay.payment_method === "check";
+    const isCheck = pay.payment_method === "check" || pay.payment_method === "cheque";
     const item = {
-      description: pay.purchases?.notes || pay.purchases?.title || pay.notes || "شراء مواد/أعمال",
-      supplier: pay.purchases?.suppliers?.name || "مورد غير محدد",
+      description: pay.purchases?.title || (pay.purchases?.purchase_type === "labor" ? "أعمال عمالة" : "شراء مواد/أعمال"),
+      projectItem: pay.purchases?.project_items?.name || "",
+      supplier: pay.purchases?.suppliers?.name || pay.purchases?.technicians?.name || "غير محدد",
+      notes: pay.purchases?.notes || pay.notes || "",
       invoice_number: pay.purchases?.invoice_number || "-",
       amount: Number(pay.amount || 0),
       date: pay.date,
@@ -380,9 +384,11 @@ const ProjectReport = () => {
 
   // Map expenses
   expenses.forEach((exp) => {
-    const isCheck = exp.payment_method === "check";
+    const isCheck = exp.payment_method === "check" || exp.payment_method === "cheque";
     const item = {
       description: exp.description || "مصروف إضافي",
+      projectItem: "",
+      notes: exp.notes || "",
       supplier: exp.suppliers?.name || exp.technicians?.name || "-",
       invoice_number: exp.invoice_number || "-",
       amount: Number(exp.amount || 0),
@@ -721,9 +727,10 @@ const ProjectReport = () => {
                      <thead>
                        <tr className="bg-slate-100 font-bold border-b border-gray-300">
                          <th className="p-2 border border-gray-200 w-[6%]">ر.م</th>
-                         <th className="p-2 border border-gray-200 text-right w-[50%]">البند</th>
-                         <th className="p-2 border border-gray-200 w-[20%]">المورد/العامل</th>
-                         <th className="p-2 border border-gray-200 w-[12%]">رقم الفاتورة</th>
+                         <th className="p-2 border border-gray-200 text-right w-[34%]">عنوان الفاتورة</th>
+                         <th className="p-2 border border-gray-200 w-[18%]">المورد / الفني</th>
+                         <th className="p-2 border border-gray-200 w-[10%]">رقم الفاتورة</th>
+                         <th className="p-2 border border-gray-200 text-right w-[20%]">ملاحظات</th>
                          <th className="p-2 border border-gray-200 w-[12%]">القيمة</th>
                        </tr>
                      </thead>
@@ -731,16 +738,20 @@ const ProjectReport = () => {
                        {cashTransactions.map((t, idx) => (
                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                            <td className="p-2 border border-gray-200">{idx + 1}</td>
-                           <td className="p-2 border border-gray-200 text-right font-medium">{t.description}</td>
+                           <td className="p-2 border border-gray-200 text-right font-medium">
+                             {t.description}
+                             {t.projectItem && <div className="text-[10px] text-muted-foreground">البند: {t.projectItem}</div>}
+                           </td>
                            <td className="p-2 border border-gray-200 font-semibold">{t.supplier}</td>
                            <td className="p-2 border border-gray-200">{t.invoice_number}</td>
+                           <td className="p-2 border border-gray-200 text-right text-[11px] text-muted-foreground">{t.notes || "-"}</td>
                            <td className="p-2 border border-gray-200 font-bold text-foreground">{t.amount.toLocaleString()}</td>
                          </tr>
                        ))}
                      </tbody>
                      <tfoot>
                        <tr className="bg-blue-50 font-bold text-blue-900 text-sm">
-                         <td colSpan={4} className="p-2 border border-gray-200 text-right">إجمالي الفواتير المسددة نقداً</td>
+                         <td colSpan={5} className="p-2 border border-gray-200 text-right">إجمالي الفواتير المسددة نقداً</td>
                          <td className="p-2 border border-gray-200 font-black">{totalCash.toLocaleString()} د.ل</td>
                        </tr>
                      </tfoot>
@@ -761,9 +772,10 @@ const ProjectReport = () => {
                      <thead>
                        <tr className="bg-slate-100 font-bold border-b border-gray-300">
                          <th className="p-2 border border-gray-200 w-[6%]">ر.م</th>
-                         <th className="p-2 border border-gray-200 text-right w-[50%]">البند</th>
-                         <th className="p-2 border border-gray-200 w-[20%]">المورد/العامل</th>
-                         <th className="p-2 border border-gray-200 w-[12%]">رقم الفاتورة</th>
+                         <th className="p-2 border border-gray-200 text-right w-[34%]">عنوان الفاتورة</th>
+                         <th className="p-2 border border-gray-200 w-[18%]">المورد / الفني</th>
+                         <th className="p-2 border border-gray-200 w-[10%]">رقم الفاتورة</th>
+                         <th className="p-2 border border-gray-200 text-right w-[20%]">ملاحظات</th>
                          <th className="p-2 border border-gray-200 w-[12%]">القيمة</th>
                        </tr>
                      </thead>
@@ -771,16 +783,20 @@ const ProjectReport = () => {
                        {checkTransactions.map((t, idx) => (
                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                            <td className="p-2 border border-gray-200">{idx + 1}</td>
-                           <td className="p-2 border border-gray-200 text-right font-medium">{t.description}</td>
+                           <td className="p-2 border border-gray-200 text-right font-medium">
+                             {t.description}
+                             {t.projectItem && <div className="text-[10px] text-muted-foreground">البند: {t.projectItem}</div>}
+                           </td>
                            <td className="p-2 border border-gray-200 font-semibold">{t.supplier}</td>
                            <td className="p-2 border border-gray-200">{t.invoice_number}</td>
+                           <td className="p-2 border border-gray-200 text-right text-[11px] text-muted-foreground">{t.notes || "-"}</td>
                            <td className="p-2 border border-gray-200 font-bold text-foreground">{t.amount.toLocaleString()}</td>
                          </tr>
                        ))}
                      </tbody>
                      <tfoot>
                        <tr className="bg-blue-50 font-bold text-blue-900 text-sm">
-                         <td colSpan={4} className="p-2 border border-gray-200 text-right">إجمالي الفواتير المسددة بصك</td>
+                         <td colSpan={5} className="p-2 border border-gray-200 text-right">إجمالي الفواتير المسددة بصك</td>
                          <td className="p-2 border border-gray-200 font-black">{totalCheck.toLocaleString()} د.ل</td>
                        </tr>
                      </tfoot>
@@ -894,9 +910,10 @@ const ProjectReport = () => {
                     <thead>
                       <tr>
                         <th style={{ width: "6%", textAlign: "center" }}>ر.م</th>
-                        <th style={{ textAlign: "right" }}>البند</th>
-                        <th style={{ width: "20%", textAlign: "center" }}>المورد/العامل</th>
-                        <th style={{ width: "12%", textAlign: "center" }}>رقم الفاتورة</th>
+                        <th style={{ textAlign: "right" }}>عنوان الفاتورة</th>
+                        <th style={{ width: "18%", textAlign: "center" }}>المورد / الفني</th>
+                        <th style={{ width: "11%", textAlign: "center" }}>رقم الفاتورة</th>
+                        <th style={{ width: "20%", textAlign: "right" }}>ملاحظات</th>
                         <th style={{ width: "15%", textAlign: "center" }}>القيمة</th>
                       </tr>
                     </thead>
@@ -904,16 +921,20 @@ const ProjectReport = () => {
                       {cashTransactions.map((t, idx) => (
                         <tr key={idx}>
                           <td style={{ textAlign: "center" }}>{idx + 1}</td>
-                          <td style={{ textAlign: "right" }}>{t.description}</td>
+                          <td style={{ textAlign: "right" }}>
+                            {t.description}
+                            {t.projectItem && <div style={{ fontSize: "8pt", color: "#666" }}>البند: {t.projectItem}</div>}
+                          </td>
                           <td style={{ textAlign: "center", fontWeight: "bold" }}>{t.supplier}</td>
                           <td style={{ textAlign: "center" }}>{t.invoice_number}</td>
+                          <td style={{ textAlign: "right", fontSize: "8.5pt", color: "#444" }}>{t.notes || "-"}</td>
                           <td style={{ textAlign: "center", fontWeight: "bold" }}>{t.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr>
-                        <td colSpan={4} style={{ textAlign: "right", fontWeight: "bold" }}>إجمالي الفواتير المسددة نقداً</td>
+                        <td colSpan={5} style={{ textAlign: "right", fontWeight: "bold" }}>إجمالي الفواتير المسددة نقداً</td>
                         <td style={{ textAlign: "center", fontWeight: "bold" }}>{formatCurrencyLYD(totalCash)}</td>
                       </tr>
                     </tfoot>
@@ -929,9 +950,10 @@ const ProjectReport = () => {
                     <thead>
                       <tr>
                         <th style={{ width: "6%", textAlign: "center" }}>ر.م</th>
-                        <th style={{ textAlign: "right" }}>البند</th>
-                        <th style={{ width: "20%", textAlign: "center" }}>المورد/العامل</th>
-                        <th style={{ width: "12%", textAlign: "center" }}>رقم الفاتورة</th>
+                        <th style={{ textAlign: "right" }}>عنوان الفاتورة</th>
+                        <th style={{ width: "18%", textAlign: "center" }}>المورد / الفني</th>
+                        <th style={{ width: "11%", textAlign: "center" }}>رقم الفاتورة</th>
+                        <th style={{ width: "20%", textAlign: "right" }}>ملاحظات</th>
                         <th style={{ width: "15%", textAlign: "center" }}>القيمة</th>
                       </tr>
                     </thead>
@@ -939,16 +961,20 @@ const ProjectReport = () => {
                       {checkTransactions.map((t, idx) => (
                         <tr key={idx}>
                           <td style={{ textAlign: "center" }}>{idx + 1}</td>
-                          <td style={{ textAlign: "right" }}>{t.description}</td>
+                          <td style={{ textAlign: "right" }}>
+                            {t.description}
+                            {t.projectItem && <div style={{ fontSize: "8pt", color: "#666" }}>البند: {t.projectItem}</div>}
+                          </td>
                           <td style={{ textAlign: "center", fontWeight: "bold" }}>{t.supplier}</td>
                           <td style={{ textAlign: "center" }}>{t.invoice_number}</td>
+                          <td style={{ textAlign: "right", fontSize: "8.5pt", color: "#444" }}>{t.notes || "-"}</td>
                           <td style={{ textAlign: "center", fontWeight: "bold" }}>{t.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr>
-                        <td colSpan={4} style={{ textAlign: "right", fontWeight: "bold" }}>إجمالي الفواتير المسددة بصك</td>
+                        <td colSpan={5} style={{ textAlign: "right", fontWeight: "bold" }}>إجمالي الفواتير المسددة بصك</td>
                         <td style={{ textAlign: "center", fontWeight: "bold" }}>{formatCurrencyLYD(totalCheck)}</td>
                       </tr>
                     </tfoot>

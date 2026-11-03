@@ -130,6 +130,7 @@ export const MaterialPurchaseForm: React.FC<MaterialPurchaseFormProps> = ({
   // Form State
   const [supplierId, setSupplierId] = useState<string>(editingPurchase?.supplier_id || "");
   const [invoiceNumber, setInvoiceNumber] = useState<string>(editingPurchase?.invoice_number || "");
+  const [invoiceTitle, setInvoiceTitle] = useState<string>(editingPurchase?.title || "");
   const [date, setDate] = useState<string>(
     editingPurchase?.date || new Date().toISOString().split("T")[0]
   );
@@ -189,12 +190,13 @@ export const MaterialPurchaseForm: React.FC<MaterialPurchaseFormProps> = ({
     return Boolean(
       supplierId ||
       invoiceNumber ||
+      invoiceTitle ||
       directTotal ||
       items.some((i) => i.name.trim() || i.price > 0) ||
       notes ||
       hasPaidNow
     );
-  }, [supplierId, invoiceNumber, directTotal, items, notes, hasPaidNow]);
+  }, [supplierId, invoiceNumber, invoiceTitle, directTotal, items, notes, hasPaidNow]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -270,6 +272,7 @@ export const MaterialPurchaseForm: React.FC<MaterialPurchaseFormProps> = ({
         supplier_id: supplierId,
         date,
         invoice_number: invoiceNumber.trim() || null,
+        title: invoiceTitle.trim() || null,
         purchase_type: "material",
         items: validItems.length > 0 ? JSON.parse(JSON.stringify(validItems)) : null,
         total_amount: calculatedTotal,
@@ -470,6 +473,17 @@ export const MaterialPurchaseForm: React.FC<MaterialPurchaseFormProps> = ({
           <FileText className="h-4 w-4 text-primary" />
           بيانات الفاتورة
         </Label>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">عنوان الفاتورة (يظهر في الفاتورة المطبوعة)</Label>
+          <Input
+            value={invoiceTitle}
+            onChange={(e) => setInvoiceTitle(e.target.value)}
+            placeholder="مثال: مواد سباكة الدور الأرضي"
+            className="text-right"
+            disabled={saveMutation.isPending}
+          />
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">

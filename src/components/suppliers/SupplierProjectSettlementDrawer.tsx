@@ -202,7 +202,7 @@ export const SupplierProjectSettlementDrawer: React.FC<SupplierProjectSettlement
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       paymentOperation.reset();
       invalidateFinancialQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["supplier-payments-list", supplierId] });
@@ -217,9 +217,13 @@ export const SupplierProjectSettlementDrawer: React.FC<SupplierProjectSettlement
         action: {
           label: "طباعة سند الصرف",
           onClick: () => {
+            if (!data?.payment_id) {
+              toast.error("اطبع وصولات الدفعات المحفوظة من سجل دفعات المورد");
+              return;
+            }
             openReceiptPrintWindow(
               {
-                receiptNumber: `PAY-${Date.now().toString().slice(-6)}`,
+                receiptNumber: `PAY-${data.payment_id.toUpperCase()}`,
                 date: paymentDate,
                 type: "payment",
                 amount: calculatedTotalAllocated,

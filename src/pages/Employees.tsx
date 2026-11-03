@@ -1,3 +1,4 @@
+import { receiptNumber } from "@/lib/receiptIdentity";
 import { useState, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -379,7 +380,7 @@ export default function Employees() {
   const handlePrintAdvanceReceipt = (adv: AdvanceRecord) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `ADV-${adv.id.slice(0, 8)}`,
+        receiptNumber: receiptNumber("ADV", adv.id),
         date: adv.disbursement_date,
         type: "advance",
         amount: Number(adv.amount),
@@ -395,7 +396,7 @@ export default function Employees() {
   const handlePrintCustodyReceipt = (c: CustodyRecord) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `CUST-${c.id.slice(0, 8)}`,
+        receiptNumber: receiptNumber("CUST", c.id),
         date: c.date,
         type: "custody",
         amount: Number(c.amount),
@@ -485,7 +486,7 @@ export default function Employees() {
   // Payroll Mutations
   const generatePayrollMutation = useMutation({
     mutationFn: async (vars: typeof payrollForm) => {
-      return await financialRpc("generate_monthly_payroll", {
+      return await financialRpc("generate_monthly_payroll_v2", {
         p_month: Number(vars.month),
         p_year: Number(vars.year),
         p_title: vars.title,
@@ -506,7 +507,7 @@ export default function Employees() {
       if (!selectedSlipToPay) throw new Error("لم يتم تحديد القسيمة");
       if (!vars.treasury_id) throw new Error("يرجى اختيار خزينة الصرف");
 
-      return await financialRpc("disburse_payroll_slip", {
+      return await financialRpc("disburse_payroll_slip_v2", {
         p_slip_id: selectedSlipToPay.id,
         p_treasury_id: vars.treasury_id,
         p_date: vars.date || new Date().toISOString().split("T")[0],
@@ -696,7 +697,7 @@ export default function Employees() {
     const parentPayroll = payrolls.find((p) => p.id === slip.payroll_id);
     openSalarySlipPrintWindow(
       {
-        slipNumber: slip.id.substring(0, 8).toUpperCase(),
+        slipNumber: receiptNumber("SAL", slip.id),
         month: parentPayroll?.month || 1,
         year: parentPayroll?.year || new Date().getFullYear(),
         payrollTitle: parentPayroll?.title || "مسير رواتب",
@@ -1134,7 +1135,7 @@ export default function Employees() {
                           </TableCell>
                           <TableCell>
                             <Badge variant={pr.status === "approved" ? "outline" : "secondary"} className={pr.status === "approved" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : ""}>
-                              {pr.status === "approved" ? "معتمد" : "مسودة"}
+                              {({ approved: "معتمد", draft: "مسودة", disbursed: "مصروف بالكامل", cancelled: "ملغى" } as Record<string, string>)[pr.status] || pr.status}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -1238,7 +1239,7 @@ export default function Employees() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {slip.treasury?.name || "-"}
+                          {slip.treasury_id ? <Link className="cursor-pointer text-primary hover:underline" to={`/treasuries/${slip.treasury_id}`}>{slip.treasury?.name || "خزينة الصرف"}</Link> : "لم يُصرف"}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -1744,7 +1745,7 @@ export default function Employees() {
           <DialogHeader>
             <DialogTitle>صرف قسيمة راتب الموظف</DialogTitle>
             <DialogDescription>
-              يتم خصم صافي الراتب فوراً من الخزينة المحددة وتسجيل استقطاع قسط السلفة إن وُجد.
+              يُعاد احتساب السلف المتبقية عند الصرف، ثم يُخصم صافي الراتب من الخزينة المختارة. قد يتغير الصافي المعروض إذا سُددت سلفة بعد إعداد القسيمة.
             </DialogDescription>
           </DialogHeader>
           <form

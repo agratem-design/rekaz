@@ -113,7 +113,7 @@ export default function Expenses() {
   const handlePrintExpenseReceipt = (e: ExpenseRow) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `EXP-${e.id.slice(0, 8)}`,
+        receiptNumber: `EXP-${e.id.toUpperCase()}`,
         date: e.date,
         type: "expense",
         amount: Number(e.amount),
@@ -130,7 +130,7 @@ export default function Expenses() {
   const handlePrintPurchaseReceipt = (p: PurchaseRow) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.slice(0, 8)}`,
+        receiptNumber: p.invoice_number ? `INV-${p.invoice_number}` : `PUR-${p.id.toUpperCase()}`,
         date: p.date,
         type: "payment",
         amount: Number(p.total_amount),
@@ -764,7 +764,7 @@ export default function Expenses() {
 
               <div>
                 <Label>الحالة</Label>
-                <select name="status" defaultValue={editingPurchase?.status ?? "due"} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <select name="status" disabled title="الحالة تُحسب تلقائياً من سندات الصرف" defaultValue={editingPurchase?.status ?? "due"} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                   <option value="paid">مدفوعة</option>
                   <option value="partial">جزئي</option>
                   <option value="due">مستحقة</option>

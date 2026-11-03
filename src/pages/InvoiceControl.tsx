@@ -186,7 +186,7 @@ export default function InvoiceControl() {
 
   const handlePrintReceipt = (purchase: any) => {
     openReceiptPrintWindow({
-      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.slice(0, 8)}`,
+      receiptNumber: purchase.invoice_number || `PUR-${purchase.id.toUpperCase()}`,
       date: purchase.date,
       type: "payment",
       amount: Number(purchase.paid_amount || 0),
@@ -519,7 +519,7 @@ export default function InvoiceControl() {
             </div>
             <div className="space-y-1.5">
               <Label>حالة الدفع</Label>
-              <Select value={form.status} onValueChange={(v) => setForm(f => ({ ...f, status: v }))}>
+              <Select disabled value={form.status} onValueChange={(v) => setForm(f => ({ ...f, status: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="paid">
@@ -578,22 +578,22 @@ export default function InvoiceControl() {
           </div>
           <DialogFooter className="flex justify-between items-center sm:justify-between w-full">
             <div>
-              {form.paid_amount > 0 && (
+              {editingPurchase && editingPurchase.paid_amount > 0 && (
                 <Button 
                   type="button" 
                   variant="outline" 
                   className="gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
                   onClick={() => {
                     openReceiptPrintWindow({
-                      receiptNumber: form.invoice_number || `PUR-${editingPurchase?.id?.slice(0,8) || 'NEW'}`,
-                      date: form.date,
+                      receiptNumber: `PUR-${editingPurchase.id.toUpperCase()}`,
+                      date: editingPurchase.date,
                       type: "payment",
-                      amount: form.paid_amount,
-                      paidToOrBy: suppliers.find((s: any) => s.id === form.supplier_id)?.name || "المورد",
-                      description: `دفعة من فاتورة مشتريات رقم ${form.invoice_number || '—'}`,
-                      projectName: projects.find((pr: any) => pr.id === form.project_id)?.name || undefined,
-                      treasuryName: treasuries.find((t: any) => t.id === form.treasury_id)?.name || undefined,
-                      notes: form.notes || undefined,
+                      amount: editingPurchase.paid_amount,
+                      paidToOrBy: suppliers.find((s: any) => s.id === editingPurchase.supplier_id)?.name || "المورد",
+                      description: `دفعة من فاتورة مشتريات رقم ${editingPurchase.invoice_number || '—'}`,
+                      projectName: projects.find((pr: any) => pr.id === editingPurchase.project_id)?.name || undefined,
+                      treasuryName: treasuries.find((t: any) => t.id === editingPurchase.treasury_id)?.name || undefined,
+                      notes: editingPurchase.notes || undefined,
                     }, companySettings);
                   }}
                 >

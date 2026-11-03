@@ -120,7 +120,7 @@ const CustodyDetail = () => {
     if (!custody) return;
     openReceiptPrintWindow(
       {
-        receipt_number: `CUST-${custody.id.slice(0, 8).toUpperCase()}`,
+        receipt_number: `CUST-${custody.id.toUpperCase()}`,
         type: "custody",
         amount: Number(custody.amount) || 0,
         date: custody.date || new Date().toISOString(),
@@ -165,7 +165,7 @@ const CustodyDetail = () => {
   const handlePrintRental = (rental: any) => {
     openReceiptPrintWindow(
       {
-        receipt_number: `RNT-${rental.id.slice(0, 8).toUpperCase()}`,
+        receipt_number: `RNT-${rental.id.toUpperCase()}`,
         type: "rental_payment",
         amount: Number(rental.total_amount) || 0,
         date: rental.start_date || new Date().toISOString(),

@@ -132,7 +132,7 @@ export const TechnicianProjectSettlementDrawer: React.FC<TechnicianProjectSettle
           onClick: () => {
             openReceiptPrintWindow(
               {
-                receiptNumber: `PAY-${data?.payment_id ? data.payment_id.slice(0, 8) : Date.now().toString().slice(-6)}`,
+                receiptNumber: `PAY-${data.payment_id.toUpperCase()}`,
                 date: paymentDate,
                 type: "salary",
                 amount: numPayAmount,

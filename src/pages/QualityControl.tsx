@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { openPrintWindow } from "@/lib/printStyles";
+import { receiptNumber } from "@/lib/receiptIdentity";
 import {
-  ClipboardCheck, Plus, Trash2, Edit2, CheckCircle2, XCircle,
+  ClipboardCheck, Plus, Trash2, Edit2, CheckCircle2, XCircle, Printer,
   AlertTriangle, Clock, X, Save, ChevronDown, ChevronUp, Circle,
 } from "lucide-react";
 
@@ -63,6 +65,34 @@ const QualityControl = () => {
   const [filterType, setFilterType] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newItemText, setNewItemText] = useState("");
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const printHandover = async (id: string) => {
+    setPrintingId(id);
+    try {
+      const [header, items, settings] = await Promise.all([
+        supabase.from("inspection_checklists").select("*, projects(name), project_phases(name)").eq("id", id).single(),
+        supabase.from("checklist_items").select("*").eq("checklist_id", id).order("order_index"),
+        supabase.from("company_settings").select("*").maybeSingle(),
+      ]);
+      if (header.error || items.error || settings.error) throw header.error || items.error || settings.error;
+      const c = header.data;
+      const escape = (value: unknown) => String(value ?? "-").replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
+      const rows = items.data.map(item => `<tr><td>${escape(item.item_text)}</td><td>${escape(ITEM_STATUSES.find(s => s.value === item.status)?.label || item.status)}</td></tr>`).join("");
+      const html = `<h2>محضر تسليم: ${escape(c.title)}</h2>
+        <p>رقم المحضر: ${receiptNumber("HND", c.id)}</p>
+        <p>المشروع: ${escape(c.projects?.name)} | المرحلة: ${escape(c.project_phases?.name)}</p>
+        <p>التاريخ: ${escape(c.inspection_date)} | المسؤول: ${escape(c.inspector_name)}</p>
+        <p>الحالة المسجلة: ${escape(STATUS_CONFIG[c.status]?.label || c.status)}</p>
+        ${c.status !== 'passed' ? '<p>هذا المحضر لا يثبت اكتمال التسليم؛ راجع الحالة والبنود أدناه.</p>' : ''}
+        <p>${escape(c.description)}</p><table class="print-table"><thead><tr><th>البند</th><th>الحالة</th></tr></thead><tbody>${rows}</tbody></table>
+        <p>ملاحظات: ${escape(c.notes)}</p><table style="width:100%;margin-top:50px"><tr><td>اسم وتوقيع المسلّم: ................</td><td>اسم وتوقيع المستلم: ................</td></tr></table>`;
+      if (!openPrintWindow(`محضر تسليم ${receiptNumber("HND", c.id)}`, html, settings.data)) {
+        toast({ title: "اسمح بفتح نافذة الطباعة ثم أعد المحاولة", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "تعذر تحميل محضر التسليم للطباعة", variant: "destructive" });
+    } finally { setPrintingId(null); }
+  };
 
   const { data: projects } = useQuery({
     queryKey: ["projects-list"],
@@ -395,7 +425,8 @@ const QualityControl = () => {
                         {isExpanded && totalItems > 0 && ` — ${passedItems}/${totalItems} عنصر اجتاز`}
                       </p>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-1 shrink-0 flex-wrap">
+                      {c.checklist_type === "handover" && <Button variant="outline" size="sm" disabled={printingId !== null} className="gap-1 cursor-pointer transition-all duration-200" onClick={() => printHandover(c.id)}><Printer className="h-4 w-4" />{printingId === c.id ? "جاري التحضير" : "طباعة واصل التسليم"}</Button>}
                       <Button variant="ghost" size="sm" className="gap-1 text-xs"
                         onClick={() => setExpandedId(isExpanded ? null : c.id)}>
                         {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

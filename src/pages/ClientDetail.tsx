@@ -802,31 +802,6 @@ export default function ClientDetail() {
 
   // Print Payment Receipt (إيصال قبض)
   const handlePrintReceipt = async (payment: any) => {
-    // 1. Fetch allocations for this payment on the fly
-    const { data: paymentAllocs } = await supabase
-      .from("client_payment_allocations")
-      .select("id, payment_id, reference_id, reference_type, amount, phase_id, phase:phase_id(name)")
-      .eq("payment_id", payment.id);
-
-    // 2. Fetch referenced purchases/items
-    const refIds = paymentAllocs?.map(a => a.reference_id) || [];
-    let refPurchases: any[] = [];
-    let refItems: any[] = [];
-
-    if (refIds.length > 0) {
-      const { data: purData } = await supabase
-        .from("purchases")
-        .select("id, invoice_number, suppliers:supplier_id(name)")
-        .in("id", refIds);
-      refPurchases = purData || [];
-
-      const { data: itemData } = await supabase
-        .from("project_items")
-        .select("id, name")
-        .in("id", refIds);
-      refItems = itemData || [];
-    }
-
     const clientName = client?.name || "بدون عميل";
     const companyName = companySettings?.company_name || "شركة الفارس الذهبي للدعاية";
     const dateStr = format(new Date(payment.date), "dd/MM/yyyy");
@@ -881,51 +856,7 @@ export default function ClientDetail() {
           </table>
         </div>
 
-        <!-- Allocations table if available -->
-        ${(() => {
-          if (!paymentAllocs || paymentAllocs.length === 0) return '';
-          
-          const processedAllocs = paymentAllocs.map(alloc => {
-            const purchase = refPurchases?.find(p => p.id === alloc.reference_id);
-            const item = refItems?.find(i => i.id === alloc.reference_id);
-            const phaseName = alloc.phase?.name || '';
-            const desc = alloc.reference_type === 'purchase' 
-              ? `شراء: ${purchase?.invoice_number ? `فاتورة رقم ${purchase.invoice_number}` : 'مشتريات'}` 
-              : alloc.reference_type === 'rental' 
-                ? 'إيجار معدات' 
-                : `بند: ${item?.name || 'بند مقاولات'}`;
-            
-            return {
-              desc,
-              phaseName,
-              amount: Number(alloc.amount)
-            };
-          });
 
-          return `
-          <div class="print-section" style="margin-bottom: 25px; font-family: 'Cairo', sans-serif;">
-            <div class="print-section-title" style="font-weight: bold; font-size: 12pt; color: ${companySettings?.print_section_title_color || '#7A5A10'}; border-bottom: 1.5px solid ${companySettings?.print_section_title_color || '#7A5A10'}; padding-bottom: 4px; margin-bottom: 8px;">تسوية وتوزيع الدفعة على المستندات:</div>
-            <table class="print-table" style="width: 100%; border-collapse: collapse; text-align: right; ${borderStyle}">
-              <thead>
-                <tr style="background-color: ${companySettings?.print_table_header_color || '#B4A078'}; color: ${companySettings?.print_header_text_color || '#ffffff'};">
-                  <th style="padding: 8px; ${borderStyle}">التفاصيل / المستند</th>
-                  <th style="padding: 8px; ${borderStyle}">المرحلة</th>
-                  <th style="padding: 8px; ${borderStyle} text-align: left;">المبلغ المستقطع</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${processedAllocs.map(r => `
-                  <tr>
-                    <td style="padding: 8px; ${borderStyle}">${r.desc}</td>
-                    <td style="padding: 8px; ${borderStyle}">${r.phaseName || "-"}</td>
-                    <td style="padding: 8px; ${borderStyle} text-align: left; font-weight: bold; font-family: 'Cairo', sans-serif;">${r.amount.toLocaleString()} د.ل</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-          `;
-        })()}
 
         <!-- Signatures -->
         <div style="margin-top: 60px; display: flex; justify-content: space-between; padding: 0 40px; font-family: 'Cairo', sans-serif;">

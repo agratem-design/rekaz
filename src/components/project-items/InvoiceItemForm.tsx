@@ -95,7 +95,11 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
   const queryClient = useQueryClient();
   const [addTechnicianOpen, setAddTechnicianOpen] = React.useState(false);
   const [addUnitOpen, setAddUnitOpen] = React.useState(false);
-  const guard = useUnsavedChangesGuard({ isDirty: Boolean(inlineItem.name || inlineItem.description || inlineItem.quantity || inlineItem.unit_price || inlineItem.technician_id), isSubmitting: saveMutation.isPending });
+  // Additional technicians queued for this item (saved together with the item)
+  const [queuedTechnicians, setQueuedTechnicians] = React.useState<Array<{
+    key: string; technician_id: string; name: string; rate_type: string; rate: number; quantity: number; total: number;
+  }>>([]);
+  const guard = useUnsavedChangesGuard({ isDirty: Boolean(inlineItem.name || inlineItem.description || inlineItem.quantity || inlineItem.unit_price || inlineItem.technician_id || queuedTechnicians.length > 0), isSubmitting: saveMutation.isPending });
 
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [contractItems, setContractItems] = React.useState<{ name: string; unit_price: number }[]>([]);
@@ -160,10 +164,10 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
   }, [inlineItem.engineer_id, inlineItem.description]);
 
   React.useEffect(() => {
-    if (inlineItem.technician_id || (editingItem && editingItemTechnicians.length > 0)) {
+    if (inlineItem.technician_id || queuedTechnicians.length > 0 || (editingItem && editingItemTechnicians.length > 0)) {
       setShowTechAssignment(true);
     }
-  }, [inlineItem.technician_id, editingItem, editingItemTechnicians]);
+  }, [inlineItem.technician_id, queuedTechnicians.length, editingItem, editingItemTechnicians]);
 
   // Calculate final quantities
   const qty = calculationMethod === "config" 
@@ -191,7 +195,38 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
     ? editingItemTechnicians.reduce((sum, t) => sum + (parseFloat(t.total_cost) || 0), 0)
     : 0;
   
-  const totalCost = inlineTechCost + existingTechsCost;
+  const queuedTechsCost = queuedTechnicians.reduce((sum, t) => sum + t.total, 0);
+  const totalCost = inlineTechCost + existingTechsCost + queuedTechsCost;
+
+  const buildInlineTechnicianPayload = () => {
+    if (!inlineItem.technician_id) return null;
+    const rate = parseFloat(inlineItem.technician_rate) || 0;
+    const rateType = inlineItem.technician_rate_type;
+    const quantity = rateType === "fixed" ? 1 : rateType === "piece" ? (parseFloat(inlineItem.technician_piece_qty) || 1) : qty;
+    return {
+      technician_id: inlineItem.technician_id,
+      rate_type: rateType === "unit" ? "meter" : rateType,
+      rate,
+      quantity,
+    };
+  };
+
+  const queueCurrentTechnician = () => {
+    const payload = buildInlineTechnicianPayload();
+    if (!payload) return;
+    if (payload.rate <= 0) {
+      toast({ title: "تنبيه", description: "أدخل سعر الفني قبل إضافة فني آخر", variant: "destructive" });
+      return;
+    }
+    const tech = technicians?.find((t: any) => t.id === payload.technician_id);
+    setQueuedTechnicians(prev => [...prev, {
+      key: `${payload.technician_id}-${Date.now()}`,
+      ...payload,
+      name: tech?.name || "فني",
+      total: payload.rate * payload.quantity,
+    }]);
+    setInlineItem(prev => ({ ...prev, technician_id: "", technician_rate_type: "unit", technician_rate: "", technician_piece_qty: "1" }));
+  };
   const netProfit = saleTotal - totalCost;
   const profitMargin = saleTotal > 0 ? (netProfit / saleTotal) * 100 : 0;
 
@@ -225,7 +260,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => guard.requestAction(handleCancelEdit)}
+            onClick={() => guard.requestAction(() => { setQueuedTechnicians([]); handleCancelEdit(); })}
             className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors border-dashed text-xs cursor-pointer rounded-lg"
           >
             <X className="h-4 w-4 ml-1" />
@@ -814,7 +849,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                 {/* Select Technician */}
                 <div>
                   <Label className="text-xs font-bold text-foreground/80 mb-1.5 block">
-                    {editingItem && editingItemTechnicians.length > 0 ? "تعيين فني إضافي" : "الفني المعين للبند"}
+                    {(editingItem && editingItemTechnicians.length > 0) || queuedTechnicians.length > 0 ? "تعيين فني إضافي" : "الفني المعين للبند"}
                   </Label>
                   <Select
                     dir="rtl"
@@ -831,7 +866,10 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                     </SelectTrigger>
                     <SelectContent className="z-[9999]">
                       <SelectItem value="none">بدون فني حالياً (إدخال لاحق)</SelectItem>
-                      {technicians?.filter(t => !editingItem || !editingItemTechnicians.some((et: any) => et.technician_id === t.id)).map((tech) => (
+                      {technicians?.filter(t =>
+                        !queuedTechnicians.some(q => q.technician_id === t.id) &&
+                        (!editingItem || !editingItemTechnicians.some((et: any) => et.technician_id === t.id))
+                      ).map((tech) => (
                         <SelectItem key={tech.id} value={tech.id}>
                           <div className="flex items-center gap-2">
                             <User className="h-3.5 w-3.5 text-amber-500" />
@@ -932,6 +970,51 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                         );
                       })()}
                     </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={queueCurrentTechnician}
+                      className="w-full h-8 text-xs gap-1 border-dashed text-primary cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      إضافة فني آخر لهذا البند
+                    </Button>
+                  </div>
+                )}
+
+                {/* Technicians queued to be saved with this item */}
+                {queuedTechnicians.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-muted-foreground block">
+                      فنيون سيُضافون مع الحفظ ({queuedTechnicians.length})
+                    </Label>
+                    {queuedTechnicians.map((qt) => (
+                      <div key={qt.key} className="flex items-center justify-between bg-background border border-border rounded-xl p-2.5 text-xs shadow-sm">
+                        <div className="min-w-0">
+                          <p className="font-bold text-foreground truncate">{qt.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+                            {rateTypeLabels[qt.rate_type] || qt.rate_type} · {qt.rate.toLocaleString()} د.ل × {qt.quantity.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="font-bold text-amber-700">{qt.total.toLocaleString()} د.ل</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive text-muted-foreground rounded-full cursor-pointer"
+                            onClick={() => setQueuedTechnicians(prev => prev.filter(t => t.key !== qt.key))}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {!inlineItem.technician_id && (
+                      <p className="text-[10px] text-muted-foreground">اختر فنياً آخر من القائمة أعلاه لإضافته، أو احفظ البند.</p>
+                    )}
                   </div>
                 )}
 
@@ -984,7 +1067,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
             )}
           </div>
 
-          {showTechAssignment && !inlineItem.technician_id && (!editingItem || editingItemTechnicians.length === 0) && (
+          {showTechAssignment && !inlineItem.technician_id && queuedTechnicians.length === 0 && (!editingItem || editingItemTechnicians.length === 0) && (
             <div className="bg-muted/40 p-4 rounded-xl border border-border/60 text-xs text-muted-foreground text-center flex items-center justify-center gap-2 font-semibold shadow-inner mt-4">
               <Info className="h-4.5 w-4.5 text-primary animate-pulse" />
               <span>لم يتم تعيين أي فني لهذا البند حتى الآن.</span>
@@ -1064,7 +1147,7 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
             <Button 
               type="button" 
               variant="outline" 
-              onClick={() => guard.requestAction(handleCancelEdit)}
+              onClick={() => guard.requestAction(() => { setQueuedTechnicians([]); handleCancelEdit(); })}
               className="h-12 px-5 border-dashed cursor-pointer rounded-xl transition-all"
             >
               إلغاء التعديل
@@ -1077,7 +1160,15 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
               if (!inlineItem.name.trim()) return;
               
               const finalQty = qty;
-              const techId = inlineItem.technician_id;
+              const currentTech = buildInlineTechnicianPayload();
+              if (currentTech && currentTech.rate <= 0) {
+                toast({ title: "تنبيه", description: "أدخل سعر الفني المختار أو أزل اختياره قبل الحفظ", variant: "destructive" });
+                return;
+              }
+              const allTechs = [
+                ...queuedTechnicians.map(({ technician_id, rate_type, rate, quantity }) => ({ technician_id, rate_type, rate, quantity })),
+                ...(currentTech ? [currentTech] : []),
+              ];
               
               let detectedType: any = inlineItem.measurement_type;
               if (calculationMethod === "config" && inlineItem.measurement_config_id) {
@@ -1101,15 +1192,13 @@ export const InvoiceItemForm: React.FC<InvoiceItemFormProps> = ({
                 measurement_factor: inlineItem.measurement_factor,
                 measurement_config_id: inlineItem.measurement_config_id || null,
                 component_values: inlineItem.component_values,
-                technician: techId ? { technician_id: techId,
-                  rate_type: inlineItem.technician_rate_type === "unit" ? "meter" : inlineItem.technician_rate_type,
-                  rate: parseFloat(inlineItem.technician_rate) || 0,
-                  quantity: inlineItem.technician_rate_type === "fixed" ? 1 : inlineItem.technician_rate_type === "piece"
-                    ? (parseFloat(inlineItem.technician_piece_qty) || 1) : finalQty } : null,
+                technician: allTechs[0] || null,
+                extra_technicians: allTechs.slice(1),
               }, {
                 onSuccess: () => {
                   setEditingItem(null);
                   setEditingItemTechnicians([]);
+                  setQueuedTechnicians([]);
                   setInlineItem({ generalItemId: "", name: "", description: "", measurement_type: "linear",
                     quantity: "", unit_price: "", notes: "", engineer_id: "", technician_id: "",
                     technician_rate_type: "unit", technician_rate: "", technician_piece_qty: "1",

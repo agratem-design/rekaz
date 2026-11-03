@@ -91,7 +91,7 @@ const ClientPayments = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const toggleExpand = (id: string) =>
-    setExpandedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
 
   // ── queries ─────────────────────────────────────────────────────────────
 
@@ -161,85 +161,17 @@ const ClientPayments = () => {
 
       const projectIds = projects.map(p => p.id);
 
-      // 2. Get all purchases (both non-rental and rental)
-      const { data: purchases } = await supabase
-        .from("purchases")
-        .select("id, project_id, total_amount, paid_amount, invoice_number, rental_id, date, phase_id")
-        .in("project_id", projectIds);
-
-      // 3. Get all project items (contracting items)
-      const { data: projectItems } = await supabase
-        .from("project_items")
-        .select("id, project_id, name, total_price, phase_id")
-        .in("project_id", projectIds);
-
-      // 4. Get all client payment allocations for these
-      const purchaseIds = purchases?.map(p => p.id) || [];
-      const itemIds = projectItems?.map(i => i.id) || [];
-      const allRefIds = [...purchaseIds, ...itemIds];
-
-      let existingAllocations: any[] = [];
-      if (allRefIds.length > 0) {
-        const { data: allocs } = await supabase
-          .from("client_payment_allocations")
-          .select("id, payment_id, reference_id, reference_type, amount, phase_id")
-          .in("reference_id", allRefIds);
-        existingAllocations = allocs || [];
-      }
-
-      const allocatedMap: Record<string, number> = {};
-      existingAllocations.forEach(a => {
-        allocatedMap[a.reference_id] = (allocatedMap[a.reference_id] || 0) + Number(a.amount);
-      });
-
-      // 5. Build unpaid invoices/items list
-      const unpaidInvoices: Array<{
-        id: string;
-        project_id: string;
-        type: "purchase" | "rental" | "item";
-        description: string;
-        total_amount: number;
-        paid_amount: number;
-        remaining: number;
-        date: string;
-        phase_id: string | null;
-      }> = [];
-
-      purchases?.forEach(p => {
-        const totalAllocated = allocatedMap[p.id] || 0;
-        const remaining = Number(p.total_amount) - totalAllocated;
-        if (remaining > 0) {
-          unpaidInvoices.push({
-            id: p.id,
-            project_id: p.project_id,
-            type: p.rental_id ? "rental" : "purchase",
-            description: p.rental_id ? "فاتورة إيجار معدات" : `فاتورة مشتريات ${p.invoice_number || ''}`.trim(),
-            total_amount: Number(p.total_amount),
-            paid_amount: totalAllocated,
-            remaining,
-            date: p.date || "",
-            phase_id: p.phase_id,
-          });
-        }
-      });
-
-      projectItems?.forEach(item => {
-        const totalAllocated = allocatedMap[item.id] || 0;
-        const remaining = Number(item.total_price) - totalAllocated;
-        if (remaining > 0) {
-          unpaidInvoices.push({
-            id: item.id,
-            project_id: item.project_id,
-            type: "item",
-            description: `بند مقاولات: ${item.name}`,
-            total_amount: Number(item.total_price),
-            paid_amount: totalAllocated,
-            remaining,
-            date: "", // Project items usually don't have date
-            phase_id: item.phase_id,
-          });
-        }
-      });
+      // 2. Client remaining per project (authoritative server calculation).
+      // Client receipts are independent from supplier / technician invoice payments:
+      // the remaining is (client obligation - client receipts - applied credit) only.
+      const remainingResults = await Promise.all(
+        projectIds.map(async (pid) => {
+          const { data, error } = await (supabase.rpc as any)("get_project_authoritative_remaining", { p_project_id: pid });
+          if (error) throw new Error(error.message || "تعذر حساب المتبقي على الزبون");
+          return [pid, Number(data || 0)] as const;
+        })
+      );
+      const outstandingPerProject: Record<string, number> = Object.fromEntries(remainingResults);
 
       // 6. Get all client payments already made for this client (whether project_id is null or not!)
       const { data: payments } = await supabase
@@ -247,37 +179,6 @@ const ClientPayments = () => {
         .select("id, project_id, amount, date, payment_method, notes, treasury_id").is("reversed_at", null)
         .eq("client_id", selectedClientId)
         .order("date", { ascending: false });
-
-      // Fetch payment allocations specifically for these client payments
-      const paymentIds = payments?.map(p => p.id) || [];
-      let clientPaymentAllocs: any[] = [];
-      if (paymentIds.length > 0) {
-        const { data: allocs } = await supabase
-          .from("client_payment_allocations")
-          .select("id, payment_id, reference_id, reference_type, amount, phase_id, phase:phase_id(name)")
-          .in("payment_id", paymentIds);
-        clientPaymentAllocs = allocs || [];
-      }
-
-      // Referenced items for display
-      const refIds = clientPaymentAllocs.map(a => a.reference_id);
-      let refPurchases: any[] = [];
-      if (refIds.length > 0) {
-        const { data: purData } = await supabase
-          .from("purchases")
-          .select("id, invoice_number, suppliers:supplier_id(name)")
-          .in("id", refIds);
-        refPurchases = purData || [];
-      }
-
-      let refItems: any[] = [];
-      if (refIds.length > 0) {
-        const { data: itemData } = await supabase
-          .from("project_items")
-          .select("id, name")
-          .in("id", refIds);
-        refItems = itemData || [];
-      }
 
       // Group totals
       const paidPerProject: Record<string, number> = {};
@@ -290,10 +191,6 @@ const ClientPayments = () => {
         }
       });
 
-      const outstandingPerProject: Record<string, number> = {};
-      unpaidInvoices.forEach(inv => {
-        outstandingPerProject[inv.project_id] = (outstandingPerProject[inv.project_id] || 0) + inv.remaining;
-      });
 
       // 7. Get client credit ledger entries for this client
       const { data: creditEntries } = await supabase
@@ -318,11 +215,11 @@ const ClientPayments = () => {
         availableCredit,
         totalCollected,
         totalDirectCreditCash,
-        invoices: unpaidInvoices,
+        invoices: [],
         payments: payments || [],
-        allocations: clientPaymentAllocs,
-        refPurchases,
-        refItems,
+        allocations: [],
+        refPurchases: [],
+        refItems: [],
       };
     },
     enabled: !!selectedClientId,
@@ -524,31 +421,6 @@ const ClientPayments = () => {
 
   // ── printing logic ───────────────────────────────────────────────────────
   const handlePrint = async (payment: any) => {
-    // 1. Fetch allocations for this payment on the fly
-    const { data: paymentAllocs } = await supabase
-      .from("client_payment_allocations")
-      .select("id, payment_id, reference_id, reference_type, amount, phase_id, phase:phase_id(name)")
-      .eq("payment_id", payment.id);
-
-    // 2. Fetch referenced purchases/items
-    const refIds = paymentAllocs?.map(a => a.reference_id) || [];
-    let refPurchases: any[] = [];
-    let refItems: any[] = [];
-
-    if (refIds.length > 0) {
-      const { data: purData } = await supabase
-        .from("purchases")
-        .select("id, invoice_number, suppliers:supplier_id(name)")
-        .in("id", refIds);
-      refPurchases = purData || [];
-
-      const { data: itemData } = await supabase
-        .from("project_items")
-        .select("id, name")
-        .in("id", refIds);
-      refItems = itemData || [];
-    }
-
     const clientName = payment.clients?.name || selectedClient?.name || "بدون عميل";
     const companyName = companySettings?.company_name || "شركة الفارس الذهبي للدعاية";
     const dateStr = format(new Date(payment.date), "dd/MM/yyyy");
@@ -597,51 +469,7 @@ const ClientPayments = () => {
           </table>
         </div>
 
-        <!-- Allocations table if available -->
-        ${(() => {
-          if (!paymentAllocs || paymentAllocs.length === 0) return '';
-          
-          const processedAllocs = paymentAllocs.map(alloc => {
-            const purchase = refPurchases?.find(p => p.id === alloc.reference_id);
-            const item = refItems?.find(i => i.id === alloc.reference_id);
-            const phaseName = alloc.phase?.name || '';
-            const desc = alloc.reference_type === 'purchase' 
-              ? `شراء: ${purchase?.invoice_number ? `فاتورة رقم ${purchase.invoice_number}` : 'مشتريات'}` 
-              : alloc.reference_type === 'rental' 
-                ? 'إيجار معدات' 
-                : `بند: ${item?.name || 'بند مقاولات'}`;
-            
-            return {
-              desc,
-              phaseName,
-              amount: Number(alloc.amount)
-            };
-          });
 
-          return `
-          <div class="print-section" style="margin-bottom: 25px; font-family: 'Tajawal', sans-serif;">
-            <div class="print-section-title" style="font-weight: bold; font-size: 12pt; color: ${companySettings?.print_section_title_color || '#7A5A10'}; border-bottom: 1.5px solid ${companySettings?.print_section_title_color || '#7A5A10'}; padding-bottom: 4px; margin-bottom: 8px;">تسوية وتوزيع الدفعة على المستندات:</div>
-            <table class="print-table" style="width: 100%; border-collapse: collapse; text-align: right; ${borderStyle}">
-              <thead>
-                <tr style="background-color: ${companySettings?.print_table_header_color || '#B4A078'}; color: ${companySettings?.print_header_text_color || '#ffffff'};">
-                  <th style="padding: 8px; ${borderStyle}">التفاصيل / المستند</th>
-                  <th style="padding: 8px; ${borderStyle}">المرحلة</th>
-                  <th style="padding: 8px; ${borderStyle} text-align: left;">المبلغ المستقطع</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${processedAllocs.map(r => `
-                  <tr>
-                    <td style="padding: 8px; ${borderStyle}">${r.desc}</td>
-                    <td style="padding: 8px; ${borderStyle}">${r.phaseName || "-"}</td>
-                    <td style="padding: 8px; ${borderStyle} text-align: left; font-weight: bold; font-family: 'Manrope', sans-serif;">${formatCurrencyLYD(r.amount)}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-          `;
-        })()}
 
         <!-- Signatures -->
         <div style="margin-top: 60px; display: flex; justify-content: space-between; padding: 0 40px; font-family: 'Tajawal', sans-serif;">

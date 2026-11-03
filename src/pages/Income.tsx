@@ -28,6 +28,22 @@ export default function Income() {
   const [filterType, setFilterType] = React.useState<"all" | "service" | "indirect" | "treasury" | "received" | "expected">("all");
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<IncomeRow | null>(null);
+  const [formType, setFormType] = React.useState<string>("service");
+  const [formTreasuryId, setFormTreasuryId] = React.useState<string>("");
+
+  // Active treasuries: "تعزيز الخزينة" deposits the amount into the chosen treasury
+  const { data: treasuries = [] } = useQuery({
+    queryKey: ["treasuries-active-income"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treasuries")
+        .select("id, name, parent_id, balance")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   // Fetch company settings for printing
   const { data: companySettings } = useQuery({
@@ -46,7 +62,7 @@ export default function Income() {
   const handlePrintReceipt = (item: any) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: `INC-${item.id.slice(0, 8)}`,
+        receiptNumber: `INC-${item.id.toUpperCase()}`,
         date: item.date,
         type: item.type === "treasury" ? "deposit" : "client_receipt",
         amount: Number(item.amount),
@@ -96,10 +112,14 @@ export default function Income() {
   const createMutation = useMutation({
     mutationFn: async (data: IncomeInsert) => {
       const { error } = await supabase.from("income").insert(data);
-      if (error) throw error;
+      if (error) {
+        if (/treasury_id/.test(error.message || "")) throw new Error("يلزم تطبيق تحديث قاعدة البيانات (تعزيز الخزينة) قبل استخدام هذا الخيار.");
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ predicate: (q) => /treasur/.test(String(q.queryKey[0])) });
       toast({ title: "تم الإضافة", description: "تم إضافة الإيراد بنجاح" });
       setDialogOpen(false);
     },
@@ -111,10 +131,14 @@ export default function Income() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: IncomeUpdate }) => {
       const { error } = await supabase.from("income").update(data).eq("id", id);
-      if (error) throw error;
+      if (error) {
+        if (/treasury_id/.test(error.message || "")) throw new Error("يلزم تطبيق تحديث قاعدة البيانات (تعزيز الخزينة) قبل استخدام هذا الخيار.");
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ predicate: (q) => /treasur/.test(String(q.queryKey[0])) });
       toast({ title: "تم التحديث", description: "تم تحديث الإيراد" });
       setDialogOpen(false);
     },
@@ -130,6 +154,7 @@ export default function Income() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["income"] });
+      queryClient.invalidateQueries({ predicate: (q) => /treasur/.test(String(q.queryKey[0])) });
       toast({ title: "تم الحذف", description: "تم حذف الإيراد" });
     },
     onError: (error) => {
@@ -182,11 +207,15 @@ export default function Income() {
 
   function openAdd() {
     setEditing(null);
+    setFormType("service");
+    setFormTreasuryId("");
     setDialogOpen(true);
   }
 
   function openEdit(item: IncomeRow) {
     setEditing(item);
+    setFormType(item.type || "service");
+    setFormTreasuryId((item as any).treasury_id || "");
     setDialogOpen(true);
   }
 
@@ -229,6 +258,13 @@ export default function Income() {
       status: (fd.get("status") as "received" | "expected") ?? "received",
       notes: (fd.get("notes") as string) || null,
     };
+
+    // Capital injection: the server trigger deposits it into the selected treasury
+    (payload as any).treasury_id = payload.type === "treasury" ? (formTreasuryId || null) : null;
+    if (payload.type === "treasury" && payload.status === "received" && !formTreasuryId) {
+      toast({ title: "خطأ", description: "اختر الخزينة التي سيُضاف إليها مبلغ التعزيز", variant: "destructive" });
+      return;
+    }
 
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload });
@@ -370,8 +406,15 @@ export default function Income() {
                     >
                       <Printer className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(it)}><Edit className="h-4 w-4" /></Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleDelete(it.id)}><Trash2 className="h-4 w-4" /></Button>
+                    {(it as any).subtype === "client_payment" ? (
+                      // Linked to a client receipt + treasury deposit: managed only from the client payments page
+                      <span className="text-[10px] text-muted-foreground" title="يُعدّل أو يُلغى من صفحة دفعات الزبون حتى تبقى الخزينة متطابقة">سند قبض زبون</span>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(it)}><Edit className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleDelete(it.id)}><Trash2 className="h-4 w-4" /></Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -391,12 +434,36 @@ export default function Income() {
             <div className="grid gap-3">
               <div>
                 <Label>النوع</Label>
-                <select name="type" defaultValue={editing?.type ?? "service"} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <select name="type" value={formType} onChange={(e) => setFormType(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                   <option value="service">الخدمات المقدمة للعملاء</option>
                   <option value="indirect">الإيرادات غير المباشرة</option>
-                  <option value="treasury">تعزيز الخزينة</option>
+                  <option value="treasury">تعزيز الخزينة (زيادة رأس المال)</option>
                 </select>
               </div>
+
+              {formType === "treasury" && (
+                <div>
+                  <Label>الخزينة المستفيدة *</Label>
+                  <select
+                    value={formTreasuryId}
+                    onChange={(e) => setFormTreasuryId(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">-- اختر الخزينة --</option>
+                    {treasuries.map((t: any) => {
+                      const parent = t.parent_id ? treasuries.find((x: any) => x.id === t.parent_id) : null;
+                      return (
+                        <option key={t.id} value={t.id}>
+                          {parent ? `${parent.name} / ${t.name}` : t.name} (الرصيد: {formatCurrencyLYD(Number(t.balance || 0))})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    يُضاف المبلغ لرصيد الخزينة عند الحفظ بحالة "مستلمة"، ويُعدَّل أو يُلغى تلقائياً عند تعديل أو حذف هذا الإيراد.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <Label>البند / التصنيف</Label>

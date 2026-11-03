@@ -504,7 +504,7 @@ const ProjectItems = () => {
 
   // Add/Update mutation
   const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData & { technician?: { technician_id: string; rate_type: string; rate: number; quantity: number } }) => {
+    mutationFn: async (data: typeof formData & { technician?: { technician_id: string; rate_type: string; rate: number; quantity: number } | null; extra_technicians?: Array<{ technician_id: string; rate_type: string; rate: number; quantity: number }> }) => {
       // Calculate total based on formula or simple multiplication
       let calculatedTotal = 0;
       const qty = parseFloat(data.quantity) || 0;
@@ -556,7 +556,32 @@ const ProjectItems = () => {
       };
 
       const args = { p_item_id: editingItem?.id || null, p_payload: payload, p_technician: data.technician || null };
-      return financialRpc("save_project_item_atomic", { ...args, p_request_key: itemOperation.getKey(args) });
+      const result: any = await financialRpc("save_project_item_atomic", { ...args, p_request_key: itemOperation.getKey(args) });
+      // Additional technicians assigned in the same form (multi-technician support)
+      const extras = (data.extra_technicians || []).filter(t => t.technician_id && t.rate > 0);
+      const savedItemId = result?.id || editingItem?.id;
+      if (extras.length > 0 && savedItemId) {
+        const { data: existing } = await supabase
+          .from("project_item_technicians")
+          .select("technician_id")
+          .eq("project_item_id", savedItemId);
+        const existingIds = new Set((existing || []).map((t: any) => t.technician_id));
+        const toInsert = extras.filter(t => !existingIds.has(t.technician_id));
+        if (toInsert.length > 0) {
+          const { error: techErr } = await supabase.from("project_item_technicians").insert(
+            toInsert.map(t => ({
+              project_item_id: savedItemId,
+              technician_id: t.technician_id,
+              rate_type: t.rate_type,
+              rate: t.rate,
+              quantity: t.quantity,
+              total_cost: t.rate * t.quantity,
+            }))
+          );
+          if (techErr) throw new Error(`تم حفظ البند لكن تعذر تعيين بعض الفنيين: ${techErr.message}`);
+        }
+      }
+      return result;
     },
     onSuccess: () => {
       itemOperation.reset();

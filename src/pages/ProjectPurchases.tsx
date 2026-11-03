@@ -48,7 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Plus, Pencil, Trash2, ShoppingCart, FileText, Printer, AlertTriangle, ArrowRightLeft, CheckSquare, X, Wallet, Landmark, Download, Layers, Coins, User, Paperclip } from "lucide-react";
+import { ArrowRight, Plus, Pencil, Trash2, ShoppingCart, FileText, Printer, AlertTriangle, ArrowRightLeft, CheckSquare, X, Wallet, Landmark, Download, Layers, Coins, User, Paperclip, Link2, Unlink, Filter } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyLYD } from "@/lib/currency";
@@ -82,6 +82,11 @@ interface Purchase {
   invoice_image_url?: string | null;
   project_item_id?: string | null;
   treasury_id?: string | null;
+  technician_id?: string | null;
+  technicians?: {
+    id: string;
+    name: string;
+  } | null;
   project_items?: {
     id: string;
     name: string;
@@ -117,6 +122,33 @@ const statusColors: Record<string, string> = {
 };
 
 
+type PurchaseFilter = "all" | "material" | "service" | "labor";
+
+const purchaseFilterLabels: Record<PurchaseFilter, string> = {
+  all: "الكل",
+  material: "مواد",
+  service: "خدمات",
+  labor: "عمالة وفنيين",
+};
+
+/** Normalised category used by the list filter. Rentals are grouped with materials. */
+const getPurchaseCategory = (p: { purchase_type?: string | null; technician_id?: string | null }): Exclude<PurchaseFilter, "all"> => {
+  if (p.purchase_type === "labor" || (p.technician_id && p.purchase_type !== "service")) return "labor";
+  if (p.purchase_type === "service") return "service";
+  return "material";
+};
+
+/** Name of the party behind a purchase: supplier, technician, or the free-text title. */
+const getPurchasePartyName = (p: Purchase): string =>
+  p.suppliers?.name || p.technicians?.name || "";
+
+const escapeHtml = (value: unknown): string =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 const ProjectPurchases = () => {
   const { id: projectId, phaseId } = useParams<{ id: string; phaseId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -135,7 +167,10 @@ const ProjectPurchases = () => {
   const [targetPhaseId, setTargetPhaseId] = useState<string>("");
   const [selectedParentTreasuryId, setSelectedParentTreasuryId] = useState<string>("");
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
-  const [activeTab, setActiveTab] = useState<"material" | "labor">("material");
+  const [activeTab, setActiveTab] = useState<PurchaseFilter>("all");
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [purchaseToLink, setPurchaseToLink] = useState<Purchase | null>(null);
+  const [linkTargetItemId, setLinkTargetItemId] = useState<string>("none");
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [selectedPurchaseForPay, setSelectedPurchaseForPay] = useState<Purchase | null>(null);
   const [payFormData, setPayFormData] = useState({
@@ -203,6 +238,7 @@ const ProjectPurchases = () => {
         .select(`
           *,
           suppliers (id, name),
+          technicians (id, name),
           project_items (id, name),
           treasuries (id, name, treasury_type),
           purchase_payments (id, amount, payment_method, notes)
@@ -265,12 +301,12 @@ const ProjectPurchases = () => {
   const handlePrintPurchaseReceipt = (purchase: Purchase) => {
     openReceiptPrintWindow(
       {
-        receiptNumber: purchase.invoice_number ? `INV-${purchase.invoice_number}` : `PUR-${purchase.id.slice(0, 8)}`,
+        receiptNumber: purchase.invoice_number ? `INV-${purchase.invoice_number}` : `PUR-${purchase.id.toUpperCase()}`,
         date: purchase.date,
         type: "payment",
         amount: Number(purchase.total_amount),
-        paidToOrBy: purchase.suppliers?.name || purchase.title || "المورد",
-        description: `فاتورة مشتريات: ${purchase.title || purchase.invoice_number || ''}`,
+        paidToOrBy: getPurchasePartyName(purchase) || purchase.title || "المورد",
+        description: `${getPurchaseCategory(purchase) === "labor" ? "فاتورة عمالة" : "فاتورة مشتريات"}: ${purchase.title || purchase.invoice_number || ''}`,
         projectName: project?.name,
         treasuryName: allTreasuries.find(t => t.id === purchase.treasury_id)?.name,
         notes: purchase.notes || undefined,
@@ -412,12 +448,7 @@ const ProjectPurchases = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (purchaseId: string) => {
-      // Delete related client payment allocations (not handled by DB trigger)
-      await supabase
-        .from("client_payment_allocations")
-        .delete()
-        .eq("reference_id", purchaseId);
-
+      // Client receipts are independent from project invoices: nothing on the client side is touched here.
       // Delete the purchase
       // DB trigger (handle_purchase_deletion) automatically:
       // - Deletes related treasury transactions
@@ -449,8 +480,8 @@ const ProjectPurchases = () => {
 
   const payMutation = useMutation({
     mutationFn: async (data: typeof payFormData) => {
-      if (!selectedPurchaseForPay) return;
-      const { error } = await supabase
+      if (!selectedPurchaseForPay) throw new Error("اختر الفاتورة قبل تسجيل الدفعة");
+      const { data: payment, error } = await supabase
         .from("purchase_payments")
         .insert({
           purchase_id: selectedPurchaseForPay.id,
@@ -460,10 +491,11 @@ const ProjectPurchases = () => {
           treasury_id: data.treasury_id,
           commission: parseFloat(data.commission) || 0,
           notes: data.notes || null,
-        });
+        }).select("id").single();
       if (error) throw error;
+      return payment.id;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (paymentId, variables) => {
       queryClient.invalidateQueries({ queryKey: ["project-purchases", projectId] });
       queryClient.invalidateQueries({ queryKey: ["treasuries"] });
       queryClient.invalidateQueries({ queryKey: ["treasury_transactions"] });
@@ -482,11 +514,11 @@ const ProjectPurchases = () => {
             onClick={() => {
               openReceiptPrintWindow(
                 {
-                  receiptNumber: `PAY-${purchaseSnapshot?.invoice_number || purchaseSnapshot?.id?.slice(0, 8) || Date.now().toString().slice(-6)}`,
+                  receiptNumber: `PAY-${paymentId.toUpperCase()}`,
                   date: variables.date,
                   type: "payment",
                   amount: parseFloat(variables.amount),
-                  paidToOrBy: purchaseSnapshot?.suppliers?.name || purchaseSnapshot?.title || "المورد",
+                  paidToOrBy: (purchaseSnapshot && getPurchasePartyName(purchaseSnapshot)) || purchaseSnapshot?.title || "المورد",
                   description: `سداد دفعة مشتريات: ${purchaseSnapshot?.title || purchaseSnapshot?.invoice_number || ''}`,
                   projectName: project?.name,
                   treasuryName: treasuryName,
@@ -604,6 +636,37 @@ const ProjectPurchases = () => {
     },
   });
 
+  // Link / unlink a purchase to a BOQ item (server triggers validate project & phase ownership)
+  const linkItemMutation = useMutation({
+    mutationFn: async ({ purchaseId, itemId }: { purchaseId: string; itemId: string | null }) => {
+      const { error } = await supabase
+        .from("purchases")
+        .update({ project_item_id: itemId })
+        .eq("id", purchaseId);
+      if (error) {
+        if (error.message?.includes("PHASE_ATTRIBUTION_CONFLICT")) {
+          throw new Error("البند المختار يتبع مرحلة مختلفة عن مرحلة الفاتورة. انقل الفاتورة للمرحلة الصحيحة أولاً.");
+        }
+        throw error;
+      }
+      return itemId;
+    },
+    onSuccess: (itemId) => {
+      queryClient.invalidateQueries({ queryKey: ["project-purchases", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-items", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["phase-summary"] });
+      toast({
+        title: itemId ? "تم ربط الفاتورة بالبند" : "تم فك ربط الفاتورة",
+        description: itemId ? "أصبحت تكلفة الفاتورة محسوبة على البند المختار" : "لم تعد الفاتورة مرتبطة بأي بند",
+      });
+      setLinkDialogOpen(false);
+      setPurchaseToLink(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error.message || "تعذر تحديث ربط البند", variant: "destructive" });
+    },
+  });
+
   // Bulk move purchases mutation
   const bulkMovePurchasesMutation = useMutation({
     mutationFn: async ({ purchaseIds, newPhaseId }: { purchaseIds: string[]; newPhaseId: string | null }) => {
@@ -636,12 +699,7 @@ const ProjectPurchases = () => {
   // Bulk delete purchases mutation
   const bulkDeletePurchasesMutation = useMutation({
     mutationFn: async (purchaseIds: string[]) => {
-      // Delete related client payment allocations (not handled by DB trigger)
-      await supabase
-        .from("client_payment_allocations")
-        .delete()
-        .in("reference_id", purchaseIds);
-
+      // Client receipts are independent from project invoices: nothing on the client side is touched here.
       // Delete purchases one by one to trigger handle_purchase_deletion for each
       // which automatically cleans up treasury transactions and recalculates balance
       for (const pid of purchaseIds) {
@@ -983,11 +1041,17 @@ const ProjectPurchases = () => {
     const checkTransactions: any[] = [];
 
     purchases.forEach((p) => {
-      const isCheck = p.purchase_payments?.some((pay: any) => pay.payment_method === 'check') || (p as any).purchase_type === 'check';
+      const isCheck = p.purchase_payments?.some((pay: any) => pay.payment_method === 'check' || pay.payment_method === 'cheque') || false;
+      const itemNames = Array.isArray(p.items)
+        ? (p.items as any[]).map((it: any) => it?.name).filter(Boolean).join("، ")
+        : "";
+      const category = getPurchaseCategory(p);
       const itemData = {
-        description: p.notes || p.title || "مشتريات خدمات ومواد",
-        supplier: p.suppliers?.name || "غير محدد",
-        invoice_number: p.invoice_number || "-",
+        description: escapeHtml(p.title || itemNames || (category === "labor" ? "أعمال عمالة" : "مشتريات خدمات ومواد")),
+        projectItem: escapeHtml(p.project_items?.name || ""),
+        supplier: escapeHtml(getPurchasePartyName(p) || "غير محدد"),
+        invoice_number: escapeHtml(p.invoice_number || "-"),
+        notes: escapeHtml(p.notes || ""),
         amount: Number(p.total_amount || 0)
       };
 
@@ -1066,27 +1130,29 @@ const ProjectPurchases = () => {
             <table class="print-table">
               <thead>
                 <tr>
-                  <th style="width: 6%; text-align: center;">ر.م</th>
-                  <th style="text-align: right;">البند</th>
-                  <th style="width: 22%; text-align: center;">المورد/العامل</th>
-                  <th style="width: 14%; text-align: center;">رقم الفاتورة</th>
-                  <th style="width: 16%; text-align: center;">القيمة</th>
+                  <th style="width: 5%; text-align: center;">ر.م</th>
+                  <th style="text-align: right;">عنوان الفاتورة</th>
+                  <th style="width: 18%; text-align: center;">المورد / الفني</th>
+                  <th style="width: 11%; text-align: center;">رقم الفاتورة</th>
+                  <th style="width: 20%; text-align: right;">ملاحظات</th>
+                  <th style="width: 14%; text-align: center;">القيمة</th>
                 </tr>
               </thead>
               <tbody>
                 ${cashTransactions.map((t, idx) => `
                   <tr>
                     <td style="text-align: center;">${idx + 1}</td>
-                    <td style="text-align: right; font-weight: 500;">${t.description}</td>
+                    <td style="text-align: right; font-weight: 500;">${t.description}${t.projectItem ? `<div style="font-size: 8pt; color: #666;">البند: ${t.projectItem}</div>` : ""}</td>
                     <td style="text-align: center;">${t.supplier}</td>
                     <td style="text-align: center;">${t.invoice_number}</td>
+                    <td style="text-align: right; font-size: 8.5pt; color: #444;">${t.notes || "-"}</td>
                     <td style="text-align: center; font-weight: bold;">${formatCurrencyLYD(t.amount)}</td>
                   </tr>
                 `).join("")}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="4" style="text-align: right; font-weight: bold;">إجمالي الفواتير المسددة نقداً</td>
+                  <td colspan="5" style="text-align: right; font-weight: bold;">إجمالي الفواتير المسددة نقداً</td>
                   <td style="text-align: center; font-weight: bold;">${formatCurrencyLYD(totalCash)}</td>
                 </tr>
               </tfoot>
@@ -1101,27 +1167,29 @@ const ProjectPurchases = () => {
             <table class="print-table">
               <thead>
                 <tr>
-                  <th style="width: 6%; text-align: center;">ر.م</th>
-                  <th style="text-align: right;">البند</th>
-                  <th style="width: 22%; text-align: center;">المورد/العامل</th>
-                  <th style="width: 14%; text-align: center;">رقم الفاتورة</th>
-                  <th style="width: 16%; text-align: center;">القيمة</th>
+                  <th style="width: 5%; text-align: center;">ر.م</th>
+                  <th style="text-align: right;">عنوان الفاتورة</th>
+                  <th style="width: 18%; text-align: center;">المورد / الفني</th>
+                  <th style="width: 11%; text-align: center;">رقم الفاتورة</th>
+                  <th style="width: 20%; text-align: right;">ملاحظات</th>
+                  <th style="width: 14%; text-align: center;">القيمة</th>
                 </tr>
               </thead>
               <tbody>
                 ${checkTransactions.map((t, idx) => `
                   <tr>
                     <td style="text-align: center;">${idx + 1}</td>
-                    <td style="text-align: right; font-weight: 500;">${t.description}</td>
+                    <td style="text-align: right; font-weight: 500;">${t.description}${t.projectItem ? `<div style="font-size: 8pt; color: #666;">البند: ${t.projectItem}</div>` : ""}</td>
                     <td style="text-align: center;">${t.supplier}</td>
                     <td style="text-align: center;">${t.invoice_number}</td>
+                    <td style="text-align: right; font-size: 8.5pt; color: #444;">${t.notes || "-"}</td>
                     <td style="text-align: center; font-weight: bold;">${formatCurrencyLYD(t.amount)}</td>
                   </tr>
                 `).join("")}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="4" style="text-align: right; font-weight: bold;">إجمالي الفواتير المسددة بصك</td>
+                  <td colspan="5" style="text-align: right; font-weight: bold;">إجمالي الفواتير المسددة بصك</td>
                   <td style="text-align: center; font-weight: bold;">${formatCurrencyLYD(totalCheck)}</td>
                 </tr>
               </tfoot>
@@ -1236,14 +1304,19 @@ const ProjectPurchases = () => {
 
   const filteredPurchases = useMemo(() => {
     if (!purchases) return [];
-    return purchases.filter(p => {
-      const type = (p as any).purchase_type || "material";
-      if (activeTab === "labor") {
-        return type === "labor";
-      }
-      return type === "material" || type === "rental";
-    });
+    if (activeTab === "all") return purchases;
+    return purchases.filter(p => getPurchaseCategory(p) === activeTab);
   }, [purchases, activeTab]);
+
+  const filterCounts = useMemo(() => {
+    const counts: Record<PurchaseFilter, number> = { all: 0, material: 0, service: 0, labor: 0 };
+    (purchases || []).forEach(p => {
+      counts.all += 1;
+      counts[getPurchaseCategory(p)] += 1;
+    });
+    return counts;
+  }, [purchases]);
+  const filteredTotal = filteredPurchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
 
   const totalPurchases = purchases?.reduce((sum, p) => sum + Number(p.total_amount), 0) || 0;
   const paidPurchases = purchases?.reduce((sum, p) => sum + Number((p as any).paid_amount || 0), 0) || 0;
@@ -1520,22 +1593,42 @@ const ProjectPurchases = () => {
         )}
       </div>
 
-      {/* Tab Selector */}
-      <Tabs value={activeTab} onValueChange={(v) => {
-        setActiveTab(v as "material" | "labor");
-        setSelectedPurchaseIds([]);
-      }} className="w-full" dir="rtl">
-        <TabsList className="grid w-[400px] grid-cols-2">
-          <TabsTrigger value="material">مشتريات مواد وخدمات</TabsTrigger>
-          <TabsTrigger value="labor">فواتير العمالة واليوميات</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* Unified list filter (all records in one list, optional filtering by type) */}
+      <div className="flex flex-wrap items-center gap-2" dir="rtl">
+        <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          تصفية حسب النوع:
+        </span>
+        {(Object.keys(purchaseFilterLabels) as PurchaseFilter[])
+          // Subcontract / supplier-service invoices were removed as a new operation type;
+          // the filter only appears while legacy service records still exist.
+          .filter((key) => key !== "service" || filterCounts.service > 0)
+          .map((key) => (
+          <Button
+            key={key}
+            type="button"
+            size="sm"
+            variant={activeTab === key ? "default" : "outline"}
+            className="h-8 text-xs gap-1.5 cursor-pointer"
+            onClick={() => {
+              setActiveTab(key);
+              setSelectedPurchaseIds([]);
+            }}
+          >
+            {purchaseFilterLabels[key]}
+            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{filterCounts[key]}</Badge>
+          </Button>
+        ))}
+      </div>
 
       {/* Purchases Table */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>
-            {activeTab === "labor" ? "سجلات العمالة واليوميات" : "قائمة المشتريات والمواد"}
+            {activeTab === "all" ? "سجل الفواتير (مواد، خدمات، عمالة)" : `فواتير: ${purchaseFilterLabels[activeTab]}`}
+            <span className="block text-xs font-normal text-muted-foreground mt-1">
+              {filteredPurchases.length} فاتورة · الإجمالي {formatCurrencyLYD(filteredTotal)}
+            </span>
           </CardTitle>
           {selectedPurchaseIds.length > 0 && (
             <div className="flex items-center gap-2">
@@ -1586,7 +1679,7 @@ const ProjectPurchases = () => {
                     />
                   </TableHead>
                   <TableHead className="text-right">
-                    {activeTab === "labor" ? "العامل / العنوان" : "المورد / الجهة"}
+                    المورد / الفني
                   </TableHead>
                   <TableHead className="text-right">رقم الفاتورة</TableHead>
                   <TableHead className="text-right">التاريخ</TableHead>
@@ -1605,10 +1698,13 @@ const ProjectPurchases = () => {
                     ? projectPhases?.find(p => p.id === purchase.phase_id) 
                     : currentPhase;
                   
-                  const operationTypeLabel = 
-                    purchase.purchase_type === "service" 
-                      ? "خدمة" 
-                      : (purchase.purchase_type === "labor" ? "عمالة" : "مواد");
+                  const purchaseCategory = getPurchaseCategory(purchase);
+                  const operationTypeLabel =
+                    purchaseCategory === "service"
+                      ? "خدمة"
+                      : purchaseCategory === "labor"
+                        ? "عمالة"
+                        : purchase.purchase_type === "rental" ? "إيجار" : "مواد";
 
                   return (
                   <TableRow key={purchase.id} className={isSelected ? "bg-muted/50" : ""}>
@@ -1625,19 +1721,23 @@ const ProjectPurchases = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {activeTab === "labor" ? (
-                        <span className="font-bold text-foreground">
-                          {purchase.title || "يومية عمالة"}
-                        </span>
-                      ) : purchase.suppliers ? (
-                        <Link 
+                      {purchase.suppliers ? (
+                        <Link
                           to={`/suppliers/${purchase.suppliers.id}`}
                           className="font-medium hover:text-primary"
                         >
                           {purchase.suppliers.name}
                         </Link>
+                      ) : purchase.technicians ? (
+                        <Link
+                          to={`/technicians/${purchase.technicians.id}`}
+                          className="font-medium hover:text-primary inline-flex items-center gap-1"
+                        >
+                          <User className="h-3.5 w-3.5 text-amber-600" />
+                          {purchase.technicians.name}
+                        </Link>
                       ) : (
-                        <span className="font-bold text-foreground">{purchase.title || "مورد غير محدد"}</span>
+                        <span className="text-muted-foreground text-xs">غير محدد</span>
                       )}
                     </TableCell>
                     <TableCell>{purchase.invoice_number || "-"}</TableCell>
@@ -1648,10 +1748,15 @@ const ProjectPurchases = () => {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {activeTab === "labor" ? (
-                        <span className="text-xs text-muted-foreground">
-                          {purchase.notes || "يومية عمالة - قيمة إجمالية"}
-                        </span>
+                      {purchase.title && (
+                        <div className="font-bold text-sm text-foreground">{purchase.title}</div>
+                      )}
+                      {purchaseCategory === "labor" ? (
+                        Array.isArray(purchase.items) && purchase.items.length > 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            {(purchase.items as any[])[0]?.qty} × {formatCurrencyLYD((purchase.items as any[])[0]?.price || 0)}
+                          </span>
+                        ) : null
                       ) : (
                         <div className="space-y-1">
                           {Array.isArray(purchase.items) && purchase.items.length > 0 ? (
@@ -1668,8 +1773,13 @@ const ProjectPurchases = () => {
                               )}
                             </>
                           ) : (
-                            <span className="text-xs text-muted-foreground">{purchase.title || "فاتورة إجمالية مبسطة"}</span>
+                            !purchase.title && <span className="text-xs text-muted-foreground">فاتورة إجمالية مبسطة</span>
                           )}
+                        </div>
+                      )}
+                      {purchase.notes && (
+                        <div className="text-[11px] text-muted-foreground mt-1 line-clamp-2" title={purchase.notes}>
+                          ملاحظات: {purchase.notes}
                         </div>
                       )}
                     </TableCell>
@@ -1713,6 +1823,25 @@ const ProjectPurchases = () => {
                         >
                           <Printer className="h-4 w-4" />
                         </Button>
+                        {project?.project_type !== "finishing" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setPurchaseToLink(purchase);
+                              setLinkTargetItemId(purchase.project_item_id || "none");
+                              setLinkDialogOpen(true);
+                            }}
+                            title={purchase.project_item_id ? "تغيير / فك الربط بالبند" : "ربط ببند المقايسة"}
+                            className="cursor-pointer"
+                          >
+                            {purchase.project_item_id ? (
+                              <Link2 className="h-4 w-4 text-primary" />
+                            ) : (
+                              <Link2 className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1859,6 +1988,69 @@ const ProjectPurchases = () => {
         }
       />
 
+      {/* Link / Unlink Purchase to BOQ Item Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={(open) => { setLinkDialogOpen(open); if (!open) setPurchaseToLink(null); }}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5" />
+              ربط الفاتورة ببند المقايسة
+            </DialogTitle>
+            <DialogDescription>
+              {purchaseToLink && `${purchaseToLink.title || purchaseToLink.invoice_number || "فاتورة"} — ${getPurchasePartyName(purchaseToLink) || "بدون جهة"}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {purchaseToLink?.project_items?.name && (
+              <div className="text-xs p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+                مرتبطة حالياً بالبند: <span className="font-bold">{purchaseToLink.project_items.name}</span>
+              </div>
+            )}
+            <Label>البند</Label>
+            <Select value={linkTargetItemId} onValueChange={setLinkTargetItemId}>
+              <SelectTrigger dir="rtl">
+                <SelectValue placeholder="اختر البند" />
+              </SelectTrigger>
+              <SelectContent dir="rtl" className="max-h-64">
+                <SelectItem value="none">بدون ربط ببند</SelectItem>
+                {projectItems
+                  .filter((item: any) => !purchaseToLink?.phase_id || !item.phase_id || item.phase_id === purchaseToLink.phase_id)
+                  .map((item: any) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">تظهر فقط بنود نفس مرحلة الفاتورة.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            {purchaseToLink?.project_item_id && (
+              <Button
+                variant="outline"
+                className="text-destructive gap-1.5"
+                disabled={linkItemMutation.isPending}
+                onClick={() => purchaseToLink && linkItemMutation.mutate({ purchaseId: purchaseToLink.id, itemId: null })}
+              >
+                <Unlink className="h-4 w-4" />
+                فك الربط
+              </Button>
+            )}
+            <Button
+              disabled={
+                linkItemMutation.isPending ||
+                !purchaseToLink ||
+                (linkTargetItemId === "none" ? !purchaseToLink?.project_item_id : linkTargetItemId === purchaseToLink?.project_item_id)
+              }
+              onClick={() => purchaseToLink && linkItemMutation.mutate({
+                purchaseId: purchaseToLink.id,
+                itemId: linkTargetItemId === "none" ? null : linkTargetItemId,
+              })}
+            >
+              {linkItemMutation.isPending ? "جاري الحفظ..." : "حفظ الربط"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Move Purchase to Phase Dialog */}
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent className="max-w-sm" dir="rtl">
@@ -2001,7 +2193,7 @@ const ProjectPurchases = () => {
           <DialogHeader>
             <DialogTitle>تسجيل دفعة مالية للمورد / العامل</DialogTitle>
             <DialogDescription className="text-right text-xs">
-              تسجيل سداد نقدي أو بنكي للفاتورة رقم: {selectedPurchaseForPay?.invoice_number || "غير محدد"} - {selectedPurchaseForPay?.title || selectedPurchaseForPay?.suppliers?.name}
+              تسجيل سداد نقدي أو بنكي للفاتورة رقم: {selectedPurchaseForPay?.invoice_number || "غير محدد"} - {selectedPurchaseForPay?.title || (selectedPurchaseForPay && getPurchasePartyName(selectedPurchaseForPay)) || selectedPurchaseForPay?.suppliers?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4" dir="rtl">

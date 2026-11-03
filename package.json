@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:workflow-isolated": "node scripts/diagnostics/isolated-workflow-tests.mjs && node scripts/diagnostics/isolated-ui-regressions.mjs",
     "test:financial": "node scripts/test-phase-15-accounting-invariants.mjs",
+    "test:payroll-receipts": "node scripts/financial-tests/payroll-receipts-invariants.mjs",
     "test:navigation": "node scripts/navigation-tests/navigation-safety-invariants.mjs",
     "test:ux-phase2": "node scripts/navigation-tests/ux-phase-2-invariants.mjs",
     "test:ux-phase3": "node scripts/navigation-tests/ux-phase-3-invariants.mjs",

@@ -228,175 +228,7 @@ const ProjectPayments = () => {
     enabled: !!activeProjectId,
   });
 
-  // Fetch payment allocations for all payments
-  const { data: allAllocations } = useQuery({
-    queryKey: ["payment-allocations", activeProjectId],
-    queryFn: async () => {
-      if (!payments?.length) return [];
-      const paymentIds = payments.map(p => p.id);
-      const { data, error } = await supabase
-        .from("client_payment_allocations")
-        .select("*")
-        .in("payment_id", paymentIds);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!payments && payments.length > 0,
-  });
-
-  // Fetch purchases referenced by allocations
-  const allocationRefIds = allAllocations?.map(a => a.reference_id) || [];
-  const { data: allocPurchases } = useQuery({
-    queryKey: ["alloc-purchases", allocationRefIds],
-    queryFn: async () => {
-      if (!allocationRefIds.length) return [];
-      const { data, error } = await supabase
-        .from("purchases")
-        .select("id, date, invoice_number, supplier_id, suppliers:supplier_id(name)")
-        .in("id", allocationRefIds);
-      if (error) throw error;
-      return data;
-    },
-    enabled: allocationRefIds.length > 0,
-  });
-
-  // Fetch unpaid invoices
-  const { data: unpaidInvoices } = useQuery({
-    queryKey: ["unpaid-invoices", activeProjectId],
-    queryFn: async () => {
-      const invoices: UnpaidInvoice[] = [];
-
-      // 1. Purchases (non-rental)
-      const { data: purchases } = await supabase
-        .from("purchases")
-        .select("id, total_amount, paid_amount, date, phase_id, invoice_number, supplier_id, rental_id, treasury_id, suppliers:supplier_id(name)")
-        .eq("project_id", activeProjectId!)
-        .is("rental_id", null);
-
-      const { data: existingAllocations } = await supabase
-        .from("client_payment_allocations")
-        .select("reference_id, amount")
-        .in("reference_id", [...(purchases?.map(p => p.id) || [])]);
-
-      const allocatedMap: Record<string, number> = {};
-      existingAllocations?.forEach(a => {
-        allocatedMap[a.reference_id] = (allocatedMap[a.reference_id] || 0) + Number(a.amount);
-      });
-
-      purchases?.forEach(p => {
-        const totalAllocated = allocatedMap[p.id] || 0;
-        const remaining = Number(p.total_amount) - totalAllocated;
-        if (remaining > 0) {
-          const srcTreasury = allTreasuries?.find(t => t.id === (p as any).treasury_id);
-          const srcParent = srcTreasury?.parent_id ? allTreasuries?.find(t => t.id === srcTreasury.parent_id) : null;
-          const phase = phases?.find(ph => ph.id === p.phase_id);
-          const pct = phase?.has_percentage 
-            ? Number(phase.percentage_value) 
-            : (project?.project_type === "finishing" ? Number(project.finishing_percentage || 0) : 0);
-          invoices.push({
-            id: p.id, type: "purchase",
-            description: `فاتورة مشتريات ${p.invoice_number || ''}`.trim(),
-            total_amount: Number(p.total_amount), paid_amount: totalAllocated, remaining,
-            service_fee: pct > 0 ? remaining * pct / 100 : 0, service_fee_percentage: pct,
-            phase_id: p.phase_id, phase_name: phase?.name || null,
-            phase_treasury_id: phase?.treasury_id || null,
-            source_treasury_id: (p as any).treasury_id || null,
-            source_treasury_name: srcTreasury ? (srcParent ? `${srcParent.name} / ${srcTreasury.name}` : srcTreasury.name) : null,
-            date: p.date, supplier_name: (p.suppliers as any)?.name,
-          });
-        }
-      });
-
-      // 2. Rental purchases
-      const { data: rentalPurchases } = await supabase
-        .from("purchases")
-        .select("id, total_amount, paid_amount, date, phase_id, rental_id, treasury_id, suppliers:supplier_id(name)")
-        .eq("project_id", activeProjectId!)
-        .not("rental_id", "is", null);
-
-      const rentalIds = rentalPurchases?.map(r => r.id) || [];
-      if (rentalIds.length > 0) {
-        const { data: rentalAllocs } = await supabase
-          .from("client_payment_allocations")
-          .select("reference_id, amount")
-          .in("reference_id", rentalIds);
-        rentalAllocs?.forEach(a => {
-          allocatedMap[a.reference_id] = (allocatedMap[a.reference_id] || 0) + Number(a.amount);
-        });
-      }
-
-      rentalPurchases?.forEach(p => {
-        const totalAllocated = allocatedMap[p.id] || 0;
-        const remaining = Number(p.total_amount) - totalAllocated;
-        if (remaining > 0) {
-          const srcTreasury = allTreasuries?.find(t => t.id === (p as any).treasury_id);
-          const srcParent = srcTreasury?.parent_id ? allTreasuries?.find(t => t.id === srcTreasury.parent_id) : null;
-          const phase = phases?.find(ph => ph.id === p.phase_id);
-          const pct = phase?.has_percentage 
-            ? Number(phase.percentage_value) 
-            : (project?.project_type === "finishing" ? Number(project.finishing_percentage || 0) : 0);
-          invoices.push({
-            id: p.id, type: "rental",
-            description: `فاتورة إيجار معدات`,
-            total_amount: Number(p.total_amount), paid_amount: totalAllocated, remaining,
-            service_fee: pct > 0 ? remaining * pct / 100 : 0, service_fee_percentage: pct,
-            phase_id: p.phase_id, phase_name: phase?.name || null,
-            phase_treasury_id: phase?.treasury_id || null,
-            source_treasury_id: (p as any).treasury_id || null,
-            source_treasury_name: srcTreasury ? (srcParent ? `${srcParent.name} / ${srcTreasury.name}` : srcTreasury.name) : null,
-            date: p.date, supplier_name: (p.suppliers as any)?.name,
-          });
-        }
-      });
-
-      // 3. Project items
-      const { data: items } = await supabase
-        .from("project_items")
-        .select("id, name, total_price, phase_id")
-        .eq("project_id", activeProjectId!);
-
-      const itemIds = items?.map(i => i.id) || [];
-      if (itemIds.length > 0) {
-        const { data: itemAllocs } = await supabase
-          .from("client_payment_allocations")
-          .select("reference_id, amount")
-          .in("reference_id", itemIds);
-        itemAllocs?.forEach(a => {
-          allocatedMap[a.reference_id] = (allocatedMap[a.reference_id] || 0) + Number(a.amount);
-        });
-      }
-
-      items?.forEach(item => {
-        const totalAllocated = allocatedMap[item.id] || 0;
-        const remaining = Number(item.total_price) - totalAllocated;
-        if (remaining > 0) {
-          const phase = phases?.find(ph => ph.id === item.phase_id);
-          const pct = phase?.has_percentage ? Number(phase.percentage_value) : 0;
-          invoices.push({
-            id: item.id, type: "item",
-            description: `بند: ${item.name}`,
-            total_amount: Number(item.total_price), paid_amount: totalAllocated, remaining,
-            service_fee: pct > 0 ? remaining * pct / 100 : 0,
-            service_fee_percentage: pct,
-            phase_id: item.phase_id, phase_name: phase?.name || null,
-            phase_treasury_id: phase?.treasury_id || null,
-            source_treasury_id: phase?.treasury_id || null,
-            source_treasury_name: (() => {
-              const phaseTid = phase?.treasury_id;
-              if (!phaseTid) return null;
-              const t = allTreasuries?.find(tr => tr.id === phaseTid);
-              const p = t?.parent_id ? allTreasuries?.find(tr => tr.id === t.parent_id) : null;
-              return t ? (p ? `${p.name} / ${t.name}` : t.name) : null;
-            })(),
-            date: "",
-          });
-        }
-      });
-
-      return invoices;
-    },
-    enabled: !!activeProjectId && !!phases,
-  });
+  // Client receipts are project-level only: they are NOT allocated to supplier / technician invoices.
 
   // Pure Project-Level Receipt Form State
   const initialReceiptForm = {
@@ -544,7 +376,7 @@ const ProjectPayments = () => {
   };
 
   const handlePrintReceipt = async (payment: any, includeAlloc: boolean, action: 'print' | 'pdf') => {
-    const paymentAllocs = includeAlloc ? (allAllocations?.filter(a => a.payment_id === payment.id) || []) : [];
+    void includeAlloc; // allocation details removed: client receipts are independent from project invoices
     const clientName = (project?.clients as any)?.name || "بدون عميل";
     const companyName = companySettings?.company_name || "شركة الفارس الذهبي للدعاية";
     const dateStr = format(new Date(payment.date), "dd/MM/yyyy");
@@ -592,74 +424,7 @@ const ProjectPayments = () => {
           </table>
         </div>
 
-        <!-- Allocations list if available -->
-        ${(() => {
-          if (!paymentAllocs || paymentAllocs.length === 0) return '';
-          
-          const processedAllocs = paymentAllocs.map(alloc => {
-            const purchase = allocPurchases?.find(p => p.id === alloc.reference_id);
-            const phase = phases?.find(p => p.id === alloc.phase_id);
-            const desc = alloc.reference_type === 'purchase' ? 'مشتريات' : alloc.reference_type === 'rental' ? 'إيجار معدات' : 'بند مقاولات';
-            
-            const cleanRefNum = purchase?.invoice_number ? `فاتورة رقم ${purchase.invoice_number}` : '';
-            const displayRefNum = (cleanRefNum === "" || cleanRefNum === "-") ? "" : cleanRefNum;
 
-            const cleanPhaseName = (phase?.name || "").trim();
-            const displayPhaseName = (cleanPhaseName === "" || cleanPhaseName === "-") ? "" : cleanPhaseName;
-
-            return {
-              desc,
-              refNum: displayRefNum,
-              phaseName: displayPhaseName,
-              amount: Number(alloc.amount)
-            };
-          });
-
-          const hasRefNum = processedAllocs.some(r => r.refNum !== "");
-          const hasPhase = processedAllocs.some(r => r.phaseName !== "");
-
-          // Distribute remaining width dynamically (Fixed: Amount = 20%, Type = 30%. Remaining = 50%)
-          const varCols = [
-            { key: 'refNum', header: "رقم المرجع / التفاصيل", defaultWidth: 25, align: "center", active: hasRefNum },
-            { key: 'phaseName', header: "المرحلة", defaultWidth: 25, align: "right", active: hasPhase }
-          ];
-          const activeVar = varCols.filter(c => c.active);
-          const totalVarDefault = activeVar.reduce((sum, c) => sum + c.defaultWidth, 0);
-
-          const cols = [
-            { header: "نوع الفاتورة / البند", width: activeVar.length > 0 ? "30%" : "80%", align: "right", render: (r: any) => `${r.desc}` },
-            ...activeVar.map(c => {
-              const w = totalVarDefault > 0 ? Math.round((c.defaultWidth / totalVarDefault) * 50) : 50;
-              return {
-                header: c.header,
-                width: `${w}%`,
-                align: c.align,
-                render: (r: any) => `${r[c.key] || "-"}`
-              };
-            }),
-            { header: "المبلغ المستقطع", width: "20%", align: "left", render: (r: any) => `<span style="font-weight: bold;">${formatCurrencyLYD(r.amount)}</span>` }
-          ];
-
-          return `
-          <div class="print-section" style="margin-bottom: 25px;">
-            <div class="print-section-title" style="font-weight: bold; font-size: 12pt; color: ${companySettings?.print_section_title_color || '#7A5A10'}; border-bottom: 1.5px solid ${companySettings?.print_section_title_color || '#7A5A10'}; padding-bottom: 4px; margin-bottom: 8px;">تفاصيل تسوية وتوزيع الدفعة</div>
-            <table class="print-table" style="width: 100%; border-collapse: collapse; text-align: right; ${borderStyle}">
-              <thead>
-                <tr style="background-color: ${companySettings?.print_table_header_color || '#B4A078'}; color: ${companySettings?.print_header_text_color || '#ffffff'};">
-                  ${cols.map(c => `<th style="width: ${c.width}; padding: 8px; ${borderStyle} text-align: ${c.align === 'left' ? 'left' : c.align === 'right' ? 'right' : 'center'};">${c.header}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                ${processedAllocs.map(r => `
-                  <tr>
-                    ${cols.map(c => `<td style="padding: 8px; ${borderStyle} text-align: ${c.align === 'left' ? 'left' : c.align === 'right' ? 'right' : 'center'};">${c.render(r)}</td>`).join("")}
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-          `;
-        })()}
 
         <!-- Signatures -->
         <div style="margin-top: 60px; display: flex; justify-content: space-between; padding: 0 40px;">
@@ -931,8 +696,8 @@ const ProjectPayments = () => {
                 <Receipt className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">الفواتير الغير مسددة</p>
-                <p className="text-xl font-bold">{unpaidInvoices?.length || 0}</p>
+                <p className="text-sm text-muted-foreground">المستحق على الزبون</p>
+                <p className="text-xl font-bold">{formatCurrencyLYD(projectTotalObligation || 0)}</p>
               </div>
             </div>
           </CardContent>
@@ -944,9 +709,9 @@ const ProjectPayments = () => {
                 <Receipt className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">إجمالي المستحق</p>
+                <p className="text-sm text-muted-foreground">المتبقي على الزبون</p>
                 <p className="text-xl font-bold text-destructive">
-                  {formatCurrencyLYD(unpaidInvoices?.reduce((s, i) => s + i.remaining, 0) || 0)}
+                  {formatCurrencyLYD(projectRemainingBefore || 0)}
                 </p>
               </div>
             </div>
@@ -975,11 +740,8 @@ const ProjectPayments = () => {
       ) : (
         <div className="space-y-3">
           {payments?.map(payment => {
-            const paymentAllocs = allAllocations?.filter(a => a.payment_id === payment.id) || [];
             const isExpanded = expandedPayments.has(payment.id);
             const treasury = allTreasuries?.find(t => t.id === payment.treasury_id);
-            const totalAllocated = paymentAllocs.reduce((s, a) => s + Number(a.amount), 0);
-            const surplusAmount = Math.max(0, Number(payment.amount) - totalAllocated);
 
             return (
               <Collapsible key={payment.id} open={isExpanded} onOpenChange={() => togglePaymentExpand(payment.id)}>
@@ -991,16 +753,9 @@ const ProjectPayments = () => {
                         <div className="text-right">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold">{formatCurrencyLYD(Number(payment.amount))}</p>
-                            {surplusAmount > 0 && (
-                              <Badge variant="outline" className="text-yellow-600 border-yellow-500/30 bg-yellow-500/10 text-[10px] px-1.5 py-0">
-                                رصيد فائض: {formatCurrencyLYD(surplusAmount)}
-                              </Badge>
-                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{format(new Date(payment.date), "dd MMM yyyy", { locale: ar })}</span>
-                            <span>•</span>
-                            <span>{paymentAllocs.length} فاتورة</span>
                             {treasury && (
                               <>
                                 <span>•</span>
@@ -1038,109 +793,6 @@ const ProjectPayments = () => {
                   </CardHeader>
                   <CollapsibleContent>
                     <CardContent className="pt-0 space-y-3">
-                      {(() => {
-                        const phaseGroups: Record<string, { phase: any; treasuryName: string; treasuryType: string; allocs: typeof paymentAllocs }> = {};
-                        const noPhaseAllocs: typeof paymentAllocs = [];
-
-                        paymentAllocs.forEach(alloc => {
-                          const phase = phases?.find(p => p.id === alloc.phase_id);
-                          if (!phase) { noPhaseAllocs.push(alloc); return; }
-                          const key = phase.id;
-                          if (!phaseGroups[key]) {
-                            const t = allTreasuries?.find(tr => tr.id === phase.treasury_id);
-                            const parent = t?.parent_id ? allTreasuries?.find(tr => tr.id === t.parent_id) : null;
-                            phaseGroups[key] = {
-                              phase,
-                              treasuryName: t ? (parent ? `${parent.name} / ${t.name}` : t.name) : "غير محددة",
-                              treasuryType: t?.treasury_type || "cash",
-                              allocs: [],
-                            };
-                          }
-                          phaseGroups[key].allocs.push(alloc);
-                        });
-
-                        const renderAllocRow = (alloc: typeof paymentAllocs[0]) => {
-                          const purchase = allocPurchases?.find(p => p.id === alloc.reference_id);
-                          const supplierName = (purchase?.suppliers as any)?.name;
-                          const invoiceNum = purchase?.invoice_number;
-                          const phase = phases?.find(p => p.id === alloc.phase_id);
-                          const pct = phase?.has_percentage ? Number(phase.percentage_value) : 0;
-                          const feeAmount = pct > 0 ? Number(alloc.amount) * pct / 100 : 0;
-                          const desc = alloc.reference_type === 'purchase'
-                            ? `فاتورة مشتريات${invoiceNum ? ` #${invoiceNum}` : ''}${supplierName ? ` - ${supplierName}` : ''}`
-                            : alloc.reference_type === 'rental'
-                            ? `فاتورة إيجار معدات${supplierName ? ` - ${supplierName}` : ''}`
-                            : getTypeLabel(alloc.reference_type);
-
-                          return (
-                            <div key={alloc.id} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/30 transition-colors">
-                              <div className="flex items-center gap-2">
-                                {getTypeIcon(alloc.reference_type)}
-                                <span className="text-sm">{desc}</span>
-                                {purchase?.date && (
-                                  <span className="text-xs text-muted-foreground">{format(new Date(purchase.date), "dd/MM/yyyy")}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="font-semibold text-sm">{formatCurrencyLYD(Number(alloc.amount))}</span>
-                                {pct > 0 && (
-                                  <span className="text-xs text-primary">+ {formatCurrencyLYD(feeAmount)} ({pct}%)</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        };
-
-                        let totalFee = 0;
-                        paymentAllocs.forEach(alloc => {
-                          const phase = phases?.find(p => p.id === alloc.phase_id);
-                          const pct = phase?.has_percentage ? Number(phase.percentage_value) : 0;
-                          totalFee += pct > 0 ? Number(alloc.amount) * pct / 100 : 0;
-                        });
-
-                        return (
-                          <>
-                            {Object.entries(phaseGroups).map(([key, group]) => {
-                              const groupTotal = group.allocs.reduce((s, a) => s + Number(a.amount), 0);
-                              const groupFee = group.allocs.reduce((s, a) => {
-                                const pct = group.phase?.has_percentage ? Number(group.phase.percentage_value) : 0;
-                                return s + (pct > 0 ? Number(a.amount) * pct / 100 : 0);
-                              }, 0);
-                              return (
-                                <div key={key} className="border rounded-lg overflow-hidden">
-                                  <div className="bg-muted/40 px-3 py-2 flex items-center justify-between border-b">
-                                    <div className="flex items-center gap-2">
-                                      {group.treasuryType === 'cash' ? <Wallet className="h-3.5 w-3.5 text-primary" /> : <Landmark className="h-3.5 w-3.5 text-primary" />}
-                                      <span className="text-xs font-medium">{group.treasuryName}</span>
-                                      <span className="text-xs text-muted-foreground">• {group.phase.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-semibold">{formatCurrencyLYD(groupTotal)}</span>
-                                      {groupFee > 0 && <span className="text-xs text-primary">+ {formatCurrencyLYD(groupFee)}</span>}
-                                    </div>
-                                  </div>
-                                  <div className="divide-y divide-border/50">{group.allocs.map(renderAllocRow)}</div>
-                                </div>
-                              );
-                            })}
-                            {noPhaseAllocs.length > 0 && (
-                              <div className="border rounded-lg overflow-hidden">
-                                <div className="bg-muted/40 px-3 py-2 flex items-center gap-2 border-b">
-                                  <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <span className="text-xs font-medium">بدون مرحلة</span>
-                                </div>
-                                <div className="divide-y divide-border/50">{noPhaseAllocs.map(renderAllocRow)}</div>
-                              </div>
-                            )}
-                            {totalFee > 0 && (
-                              <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
-                                <span className="text-sm font-medium">إجمالي النسب المحصلة</span>
-                                <span className="font-bold text-primary">{formatCurrencyLYD(totalFee)}</span>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
                       {payment.notes && (
                         <p className="text-sm text-muted-foreground mt-1 p-2 bg-muted/50 rounded">{payment.notes}</p>
                       )}
@@ -1342,17 +994,9 @@ const ProjectPayments = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="flex items-center gap-2 rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors">
-              <Checkbox 
-                id="include-alloc" 
-                checked={includeAllocationDetails} 
-                onCheckedChange={(checked) => setIncludeAllocationDetails(!!checked)}
-                className="cursor-pointer"
-              />
-              <Label htmlFor="include-alloc" className="text-sm font-medium cursor-pointer select-none">
-                تضمين تفاصيل تسوية وتوزيع الدفعة على الفواتير
-              </Label>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              إيصال قبض من الزبون عن المشروع. دفعات الزبون مستقلة عن سداد فواتير الموردين والفنيين.
+            </p>
           </div>
 
           <DialogFooter className="flex gap-2">

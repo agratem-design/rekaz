@@ -150,20 +150,36 @@ const QuickAddSection = () => {
   // Mutations
   const addPurchase = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("purchases").insert({
+      const total = Number(purchaseForm.total_amount) || 0;
+      const paid = Number(purchaseForm.paid_amount) || 0;
+      const commission = Number(purchaseForm.commission) || 0;
+      if (paid < 0 || paid > total) throw new Error("المبلغ المدفوع يجب أن يكون بين صفر وإجمالي الفاتورة");
+      if (paid > 0 && !purchaseForm.treasury_id) throw new Error("اختر الخزينة التي سيُصرف منها المبلغ المدفوع");
+
+      // The invoice itself never moves cash; paid status is derived from payment records.
+      const { data: created, error } = await supabase.from("purchases").insert({
         project_id: selectedProjectId,
         phase_id: selectedPhaseId && selectedPhaseId !== "none" ? selectedPhaseId : null,
         supplier_id: purchaseForm.supplier_id || null,
         invoice_number: purchaseForm.invoice_number || null,
-        total_amount: Number(purchaseForm.total_amount) || 0,
-        paid_amount: Number(purchaseForm.paid_amount) || 0,
-        commission: Number(purchaseForm.commission) || 0,
+        total_amount: total,
         date: purchaseForm.date,
-        treasury_id: purchaseForm.treasury_id || null,
         notes: purchaseForm.notes || null,
-        status: Number(purchaseForm.paid_amount) >= Number(purchaseForm.total_amount) ? "paid" : Number(purchaseForm.paid_amount) > 0 ? "partial" : "due",
-      });
+      }).select("id").single();
       if (error) throw error;
+
+      if (paid > 0) {
+        const { error: payErr } = await supabase.from("purchase_payments").insert({
+          purchase_id: created.id,
+          amount: paid,
+          commission,
+          date: purchaseForm.date,
+          payment_method: "cash",
+          treasury_id: purchaseForm.treasury_id,
+          notes: "دفعة عند تسجيل الفاتورة",
+        });
+        if (payErr) throw new Error(`تم حفظ الفاتورة لكن تعذر تسجيل الدفعة: ${payErr.message}`);
+      }
     },
     onSuccess: () => {
       toast({ title: "تمت إضافة فاتورة المشتريات بنجاح" });

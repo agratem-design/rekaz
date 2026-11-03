@@ -1,0 +1,4985 @@
+{
+  "tables": [
+    {
+      "table_schema": "public",
+      "table_name": "audit_logs"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "cash_flow_forecast"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "checklist_items"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "client_credit_ledger"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "client_payment_allocations"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "client_payments"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "clients"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "company_settings"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "contract_clause_templates"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "contract_clauses"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "contract_items"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "contracts"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "custody_settlements"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "employee_advance_repayments"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "employee_advances"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "employee_payroll_slips"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "employee_payrolls"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "employees"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "engineers"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "equipment"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "equipment_rentals"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "expenses"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "general_item_technician_requirements"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "general_project_items"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "income"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "inspection_checklists"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "materials"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "measurement_configs"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "phase_reference_seq"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "profiles"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_custody"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_item_technician_requirements"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_item_technicians"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_items"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_phases"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_schedules"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_suppliers"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "project_technicians"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "projects"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "purchase_payments"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "purchases"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "risk_register"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "stock_movements"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "supplier_payment_allocations"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "supplier_payments"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "suppliers"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "technician_deposits"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "technician_payments"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "technician_progress_records"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "technician_types"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "technicians"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "transfers"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "treasuries"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "treasury_debts"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "treasury_transactions"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "user_roles"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "variation_orders"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "workflow_requests"
+    }
+  ],
+  "foreignKeys": [
+    {
+      "table_name": "cash_flow_forecast",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "checklist_items",
+      "column_name": "checklist_id",
+      "foreign_table": "inspection_checklists",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "column_name": "client_id",
+      "foreign_table": "clients",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "column_name": "reference_entry_id",
+      "foreign_table": "client_credit_ledger",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "column_name": "source_payment_id",
+      "foreign_table": "client_payments",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "column_name": "target_project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_payment_allocations",
+      "column_name": "payment_id",
+      "foreign_table": "client_payments",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_payment_allocations",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_payments",
+      "column_name": "client_id",
+      "foreign_table": "clients",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_payments",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "client_payments",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "company_settings",
+      "column_name": "contracting_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "company_settings",
+      "column_name": "finishing_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contract_clauses",
+      "column_name": "contract_id",
+      "foreign_table": "contracts",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contract_items",
+      "column_name": "contract_id",
+      "foreign_table": "contracts",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contract_items",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "client_id",
+      "foreign_table": "clients",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "custody_settlements",
+      "column_name": "custody_id",
+      "foreign_table": "project_custody",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "custody_settlements",
+      "column_name": "expense_id",
+      "foreign_table": "expenses",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "custody_settlements",
+      "column_name": "return_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "column_name": "advance_id",
+      "foreign_table": "employee_advances",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "column_name": "employee_id",
+      "foreign_table": "employees",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_advances",
+      "column_name": "employee_id",
+      "foreign_table": "employees",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_advances",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "column_name": "advance_id",
+      "foreign_table": "employee_advances",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "column_name": "employee_id",
+      "foreign_table": "employees",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "column_name": "payroll_id",
+      "foreign_table": "employee_payrolls",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "column_name": "equipment_id",
+      "foreign_table": "equipment",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "supplier_id",
+      "foreign_table": "suppliers",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "column_name": "general_item_id",
+      "foreign_table": "general_project_items",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "column_name": "technician_type_id",
+      "foreign_table": "technician_types",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "general_project_items",
+      "column_name": "measurement_config_id",
+      "foreign_table": "measurement_configs",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "income",
+      "column_name": "client_id",
+      "foreign_table": "clients",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "income",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "employee_id",
+      "foreign_table": "employees",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "engineer_id",
+      "foreign_table": "engineers",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "column_name": "source_general_item_requirement_id",
+      "foreign_table": "general_item_technician_requirements",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "column_name": "technician_type_id",
+      "foreign_table": "technician_types",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_items",
+      "column_name": "engineer_id",
+      "foreign_table": "engineers",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_items",
+      "column_name": "general_item_id",
+      "foreign_table": "general_project_items",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_items",
+      "column_name": "measurement_config_id",
+      "foreign_table": "measurement_configs",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_items",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_items",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_phases",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_phases",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_schedules",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_schedules",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_suppliers",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_suppliers",
+      "column_name": "supplier_id",
+      "foreign_table": "suppliers",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_technicians",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "project_technicians",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "projects",
+      "column_name": "client_id",
+      "foreign_table": "clients",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "projects",
+      "column_name": "default_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "projects",
+      "column_name": "supervising_engineer_id",
+      "foreign_table": "engineers",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchase_payments",
+      "column_name": "purchase_id",
+      "foreign_table": "purchases",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchase_payments",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "custody_id",
+      "foreign_table": "project_custody",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "rental_id",
+      "foreign_table": "equipment_rentals",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "return_for_purchase_id",
+      "foreign_table": "purchases",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "supplier_id",
+      "foreign_table": "suppliers",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "risk_register",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "stock_movements",
+      "column_name": "material_id",
+      "foreign_table": "materials",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "stock_movements",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "stock_movements",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "column_name": "payment_id",
+      "foreign_table": "supplier_payments",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "column_name": "purchase_id",
+      "foreign_table": "purchases",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "supplier_payments",
+      "column_name": "supplier_id",
+      "foreign_table": "suppliers",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "supplier_payments",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_deposits",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_deposits",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_payments",
+      "column_name": "context_project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_payments",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_payments",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "project_item_id",
+      "foreign_table": "project_items",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "technician_id",
+      "foreign_table": "technicians",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "technicians",
+      "column_name": "technician_type_id",
+      "foreign_table": "technician_types",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "transfers",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "NO ACTION",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "treasuries",
+      "column_name": "parent_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "treasury_debts",
+      "column_name": "creditor_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "treasury_debts",
+      "column_name": "debtor_treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "column_name": "treasury_id",
+      "foreign_table": "treasuries",
+      "foreign_column": "id",
+      "delete_rule": "RESTRICT",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "phase_id",
+      "foreign_table": "project_phases",
+      "foreign_column": "id",
+      "delete_rule": "SET NULL",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "project_id",
+      "foreign_table": "projects",
+      "foreign_column": "id",
+      "delete_rule": "CASCADE",
+      "update_rule": "NO ACTION"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "audit_logs",
+      "conname": "audit_logs_action_check",
+      "contype": "c",
+      "definition": "CHECK ((action = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])))"
+    },
+    {
+      "table_name": "audit_logs",
+      "conname": "audit_logs_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "cash_flow_forecast",
+      "conname": "cash_flow_forecast_period_month_check",
+      "contype": "c",
+      "definition": "CHECK (((period_month >= 1) AND (period_month <= 12)))"
+    },
+    {
+      "table_name": "cash_flow_forecast",
+      "conname": "cash_flow_forecast_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "cash_flow_forecast",
+      "conname": "cash_flow_forecast_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "checklist_items",
+      "conname": "checklist_items_checklist_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (checklist_id) REFERENCES inspection_checklists(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "checklist_items",
+      "conname": "checklist_items_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "chk_credit_ledger_entry_context",
+      "contype": "c",
+      "definition": "CHECK ((((entry_type = 'CREDIT_CREATED'::text) AND (source_payment_id IS NOT NULL)) OR ((entry_type = 'CREDIT_APPLIED'::text) AND (target_project_id IS NOT NULL)) OR ((entry_type = 'CREDIT_APPLICATION_REVERSED'::text) AND (reference_entry_id IS NOT NULL)) OR ((entry_type = 'CREDIT_CREATION_REVERSED'::text) AND (reference_entry_id IS NOT NULL))))"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_client_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_entry_type_check",
+      "contype": "c",
+      "definition": "CHECK ((entry_type = ANY (ARRAY['CREDIT_CREATED'::text, 'CREDIT_APPLIED'::text, 'CREDIT_APPLICATION_REVERSED'::text, 'CREDIT_CREATION_REVERSED'::text])))"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_reference_entry_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (reference_entry_id) REFERENCES client_credit_ledger(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_source_payment_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (source_payment_id) REFERENCES client_payments(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "conname": "client_credit_ledger_target_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (target_project_id) REFERENCES projects(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "client_payment_allocations",
+      "conname": "client_payment_allocations_payment_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (payment_id) REFERENCES client_payments(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "client_payment_allocations",
+      "conname": "client_payment_allocations_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id)"
+    },
+    {
+      "table_name": "client_payment_allocations",
+      "conname": "client_payment_allocations_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "client_payments",
+      "conname": "client_payments_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "client_payments",
+      "conname": "client_payments_client_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+    },
+    {
+      "table_name": "client_payments",
+      "conname": "client_payments_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "client_payments",
+      "conname": "client_payments_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "client_payments",
+      "conname": "client_payments_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "clients",
+      "conname": "clients_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "company_settings",
+      "conname": "company_settings_contracting_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (contracting_treasury_id) REFERENCES treasuries(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "company_settings",
+      "conname": "company_settings_finishing_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (finishing_treasury_id) REFERENCES treasuries(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "company_settings",
+      "conname": "company_settings_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "contract_clause_templates",
+      "conname": "contract_clause_templates_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "contract_clauses",
+      "conname": "contract_clauses_contract_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "contract_clauses",
+      "conname": "contract_clauses_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "contract_items",
+      "conname": "contract_items_contract_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "contract_items",
+      "conname": "contract_items_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "contract_items",
+      "conname": "contract_items_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "contracts",
+      "conname": "contracts_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "contracts",
+      "conname": "contracts_client_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+    },
+    {
+      "table_name": "contracts",
+      "conname": "contracts_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "contracts",
+      "conname": "contracts_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "contracts",
+      "conname": "contracts_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_custody_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (custody_id) REFERENCES project_custody(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_expense_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (expense_id) REFERENCES expenses(id)"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_return_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (return_treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "custody_settlements",
+      "conname": "custody_settlements_settlement_type_check",
+      "contype": "c",
+      "definition": "CHECK ((settlement_type = ANY (ARRAY['expense'::text, 'cash_return'::text])))"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_advance_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (advance_id) REFERENCES employee_advances(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_employee_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_repayment_type_check",
+      "contype": "c",
+      "definition": "CHECK ((repayment_type = ANY (ARRAY['cash_return'::text, 'payroll_deduction'::text])))"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "conname": "employee_advance_repayments_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "employee_advances",
+      "conname": "employee_advances_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "employee_advances",
+      "conname": "employee_advances_employee_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "employee_advances",
+      "conname": "employee_advances_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "employee_advances",
+      "conname": "employee_advances_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'settled'::text, 'cancelled'::text])))"
+    },
+    {
+      "table_name": "employee_advances",
+      "conname": "employee_advances_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_advance_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (advance_id) REFERENCES employee_advances(id)"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_employee_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_payroll_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (payroll_id) REFERENCES employee_payrolls(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'cancelled'::text])))"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "conname": "employee_payroll_slips_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "employee_payrolls",
+      "conname": "employee_payrolls_month_check",
+      "contype": "c",
+      "definition": "CHECK (((month >= 1) AND (month <= 12)))"
+    },
+    {
+      "table_name": "employee_payrolls",
+      "conname": "employee_payrolls_month_year_key",
+      "contype": "u",
+      "definition": "UNIQUE (month, year)"
+    },
+    {
+      "table_name": "employee_payrolls",
+      "conname": "employee_payrolls_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "employee_payrolls",
+      "conname": "employee_payrolls_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['draft'::text, 'approved'::text, 'disbursed'::text, 'cancelled'::text])))"
+    },
+    {
+      "table_name": "employee_payrolls",
+      "conname": "employee_payrolls_year_check",
+      "contype": "c",
+      "definition": "CHECK ((year >= 2020))"
+    },
+    {
+      "table_name": "employees",
+      "conname": "employees_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "engineers",
+      "conname": "engineers_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "equipment",
+      "conname": "equipment_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "conname": "equipment_rentals_equipment_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "conname": "equipment_rentals_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "conname": "equipment_rentals_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_supplier_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id)"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id)"
+    },
+    {
+      "table_name": "expenses",
+      "conname": "expenses_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "conname": "general_item_technician_requirements_general_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (general_item_id) REFERENCES general_project_items(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "conname": "general_item_technician_requirements_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "conname": "general_item_technician_requirements_required_count_check",
+      "contype": "c",
+      "definition": "CHECK ((required_count > 0))"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "conname": "general_item_technician_requirements_technician_type_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_type_id) REFERENCES technician_types(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "general_item_technician_requirements",
+      "conname": "uq_general_item_tech_req",
+      "contype": "u",
+      "definition": "UNIQUE (general_item_id, technician_type_id)"
+    },
+    {
+      "table_name": "general_project_items",
+      "conname": "general_items_measurement_config_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (measurement_config_id) REFERENCES measurement_configs(id)"
+    },
+    {
+      "table_name": "general_project_items",
+      "conname": "general_items_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "income",
+      "conname": "income_client_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+    },
+    {
+      "table_name": "income",
+      "conname": "income_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "income",
+      "conname": "income_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "conname": "inspection_checklists_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "conname": "inspection_checklists_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "conname": "inspection_checklists_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "materials",
+      "conname": "materials_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "measurement_configs",
+      "conname": "measurement_configs_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "phase_reference_seq",
+      "conname": "phase_reference_seq_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (year)"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_access_code_key",
+      "contype": "u",
+      "definition": "UNIQUE (access_code)"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_user_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_user_id_key",
+      "contype": "u",
+      "definition": "UNIQUE (user_id)"
+    },
+    {
+      "table_name": "profiles",
+      "conname": "profiles_username_key",
+      "contype": "u",
+      "definition": "UNIQUE (username)"
+    },
+    {
+      "table_name": "project_custody",
+      "conname": "custody_employee_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id)"
+    },
+    {
+      "table_name": "project_custody",
+      "conname": "custody_engineer_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (engineer_id) REFERENCES engineers(id)"
+    },
+    {
+      "table_name": "project_custody",
+      "conname": "custody_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_custody",
+      "conname": "custody_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "project_custody",
+      "conname": "project_custody_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "project_item_technician_requi_source_general_item_requirem_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (source_general_item_requirement_id) REFERENCES general_item_technician_requirements(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "project_item_technician_requirements_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "project_item_technician_requirements_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "project_item_technician_requirements_required_count_check",
+      "contype": "c",
+      "definition": "CHECK ((required_count > 0))"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "project_item_technician_requirements_technician_type_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_type_id) REFERENCES technician_types(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "project_item_technician_requirements",
+      "conname": "uq_project_item_tech_req",
+      "contype": "u",
+      "definition": "UNIQUE (project_item_id, technician_type_id)"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "conname": "project_item_technicians_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "conname": "project_item_technicians_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "conname": "project_item_technicians_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "conname": "uq_project_item_technicians_assignment",
+      "contype": "u",
+      "definition": "UNIQUE (project_item_id, technician_id)"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_engineer_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (engineer_id) REFERENCES engineers(id)"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_general_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (general_item_id) REFERENCES general_project_items(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_measurement_config_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (measurement_config_id) REFERENCES measurement_configs(id)"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_items",
+      "conname": "project_items_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_phases",
+      "conname": "project_phases_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_phases",
+      "conname": "project_phases_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_phases",
+      "conname": "project_phases_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "project_schedules",
+      "conname": "project_schedules_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "project_schedules",
+      "conname": "project_schedules_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_schedules",
+      "conname": "project_schedules_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_suppliers",
+      "conname": "project_suppliers_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_suppliers",
+      "conname": "project_suppliers_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_suppliers",
+      "conname": "project_suppliers_supplier_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_technicians",
+      "conname": "project_technicians_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "project_technicians",
+      "conname": "project_technicians_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "project_technicians",
+      "conname": "project_technicians_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "projects",
+      "conname": "projects_client_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+    },
+    {
+      "table_name": "projects",
+      "conname": "projects_default_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (default_treasury_id) REFERENCES treasuries(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "projects",
+      "conname": "projects_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "projects",
+      "conname": "projects_project_type_check",
+      "contype": "c",
+      "definition": "CHECK ((project_type = ANY (ARRAY['contracting'::text, 'finishing'::text])))"
+    },
+    {
+      "table_name": "projects",
+      "conname": "projects_supervising_engineer_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (supervising_engineer_id) REFERENCES engineers(id)"
+    },
+    {
+      "table_name": "purchase_payments",
+      "conname": "purchase_payments_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "purchase_payments",
+      "conname": "purchase_payments_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "purchase_payments",
+      "conname": "purchase_payments_purchase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "purchase_payments",
+      "conname": "purchase_payments_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_custody_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (custody_id) REFERENCES project_custody(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_purchase_type_check",
+      "contype": "c",
+      "definition": "CHECK ((purchase_type = ANY (ARRAY['material'::text, 'labor'::text, 'rental'::text])))"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_rental_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (rental_id) REFERENCES equipment_rentals(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_return_for_purchase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (return_for_purchase_id) REFERENCES purchases(id)"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_supplier_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id)"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id)"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_total_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((total_amount > (0)::numeric))"
+    },
+    {
+      "table_name": "purchases",
+      "conname": "purchases_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id)"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_impact_check",
+      "contype": "c",
+      "definition": "CHECK (((impact >= 1) AND (impact <= 5)))"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_probability_check",
+      "contype": "c",
+      "definition": "CHECK (((probability >= 1) AND (probability <= 5)))"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_risk_category_check",
+      "contype": "c",
+      "definition": "CHECK ((risk_category = ANY (ARRAY['technical'::text, 'financial'::text, 'weather'::text, 'supplier'::text, 'scope'::text, 'safety'::text, 'other'::text])))"
+    },
+    {
+      "table_name": "risk_register",
+      "conname": "risk_register_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['open'::text, 'mitigated'::text, 'occurred'::text, 'closed'::text, 'monitoring'::text])))"
+    },
+    {
+      "table_name": "stock_movements",
+      "conname": "stock_movements_material_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "stock_movements",
+      "conname": "stock_movements_movement_type_check",
+      "contype": "c",
+      "definition": "CHECK ((movement_type = ANY (ARRAY['in'::text, 'out'::text, 'return'::text, 'adjustment'::text])))"
+    },
+    {
+      "table_name": "stock_movements",
+      "conname": "stock_movements_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "stock_movements",
+      "conname": "stock_movements_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "stock_movements",
+      "conname": "stock_movements_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "conname": "supplier_payment_allocations_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "conname": "supplier_payment_allocations_payment_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (payment_id) REFERENCES supplier_payments(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "conname": "supplier_payment_allocations_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "supplier_payment_allocations",
+      "conname": "supplier_payment_allocations_purchase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_created_by_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id)"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_idempotency_key_key",
+      "contype": "u",
+      "definition": "UNIQUE (idempotency_key)"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_payment_method_check",
+      "contype": "c",
+      "definition": "CHECK ((payment_method = ANY (ARRAY['cash'::text, 'transfer'::text, 'check'::text])))"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_supplier_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "supplier_payments",
+      "conname": "supplier_payments_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "suppliers",
+      "conname": "suppliers_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technician_deposits",
+      "conname": "technician_deposits_amount_check",
+      "contype": "c",
+      "definition": "CHECK (((amount > (0)::numeric) AND ((amount)::text <> ALL (ARRAY['NaN'::text, 'Infinity'::text, '-Infinity'::text]))))"
+    },
+    {
+      "table_name": "technician_deposits",
+      "conname": "technician_deposits_entry_type_check",
+      "contype": "c",
+      "definition": "CHECK ((entry_type = ANY (ARRAY['receipt'::text, 'refund'::text])))"
+    },
+    {
+      "table_name": "technician_deposits",
+      "conname": "technician_deposits_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technician_deposits",
+      "conname": "technician_deposits_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_deposits",
+      "conname": "technician_deposits_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_context_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (context_project_id) REFERENCES projects(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_created_by_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id)"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_idempotency_key_key",
+      "contype": "u",
+      "definition": "UNIQUE (idempotency_key)"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_payment_method_check",
+      "contype": "c",
+      "definition": "CHECK ((payment_method = ANY (ARRAY['cash'::text, 'transfer'::text, 'check'::text])))"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_reversed_by_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (reversed_by) REFERENCES auth.users(id)"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['completed'::text, 'reversed'::text])))"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_payments",
+      "conname": "technician_payments_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_earned_check",
+      "contype": "c",
+      "definition": "CHECK (((earned_amount > (0)::numeric) AND (quantity_completed > (0)::numeric)))"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_project_item_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_item_id) REFERENCES project_items(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "conname": "technician_progress_records_technician_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "technician_types",
+      "conname": "technician_types_code_key",
+      "contype": "u",
+      "definition": "UNIQUE (code)"
+    },
+    {
+      "table_name": "technician_types",
+      "conname": "technician_types_name_key",
+      "contype": "u",
+      "definition": "UNIQUE (name)"
+    },
+    {
+      "table_name": "technician_types",
+      "conname": "technician_types_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technicians",
+      "conname": "technicians_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "technicians",
+      "conname": "technicians_technician_type_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (technician_type_id) REFERENCES technician_types(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "transfers",
+      "conname": "transfers_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "transfers",
+      "conname": "transfers_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "transfers",
+      "conname": "transfers_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id)"
+    },
+    {
+      "table_name": "treasuries",
+      "conname": "treasuries_parent_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (parent_id) REFERENCES treasuries(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "treasuries",
+      "conname": "treasuries_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "treasuries",
+      "conname": "treasuries_project_category_check",
+      "contype": "c",
+      "definition": "CHECK ((project_category = ANY (ARRAY['contracting'::text, 'finishing'::text])))"
+    },
+    {
+      "table_name": "treasury_debts",
+      "conname": "treasury_debts_creditor_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (creditor_treasury_id) REFERENCES treasuries(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "treasury_debts",
+      "conname": "treasury_debts_debtor_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (debtor_treasury_id) REFERENCES treasuries(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "treasury_debts",
+      "conname": "treasury_debts_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "conname": "treasury_transactions_amount_check",
+      "contype": "c",
+      "definition": "CHECK ((amount > (0)::numeric))"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "conname": "treasury_transactions_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "conname": "treasury_transactions_source_identity_check",
+      "contype": "c",
+      "definition": "CHECK ((((reference_id IS NULL) AND (reference_type IS NULL)) OR ((reference_id IS NOT NULL) AND (reference_type IS NOT NULL))))"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "conname": "treasury_transactions_treasury_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (treasury_id) REFERENCES treasuries(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "conname": "treasury_transactions_type_check",
+      "contype": "c",
+      "definition": "CHECK ((type = ANY (ARRAY['deposit'::text, 'withdrawal'::text])))"
+    },
+    {
+      "table_name": "user_roles",
+      "conname": "user_roles_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "user_roles",
+      "conname": "user_roles_user_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "user_roles",
+      "conname": "user_roles_user_id_role_key",
+      "contype": "u",
+      "definition": "UNIQUE (user_id, role)"
+    },
+    {
+      "table_name": "variation_orders",
+      "conname": "variation_orders_phase_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "variation_orders",
+      "conname": "variation_orders_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "variation_orders",
+      "conname": "variation_orders_project_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "workflow_requests",
+      "conname": "workflow_requests_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (actor_id, operation, request_key)"
+    }
+  ],
+  "triggers": [
+    {
+      "table_name": "cash_flow_forecast",
+      "trigger_name": "update_cash_flow_forecast_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "trigger_name": "trg_client_credit_ledger_immutable",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION prevent_direct_credit_ledger_mutation()"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "trigger_name": "trg_client_credit_ledger_immutable",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION prevent_direct_credit_ledger_mutation()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "audit_client_payments",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "audit_client_payments",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "audit_client_payments",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "trg_client_payment_deletion",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION handle_client_payment_deletion()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "trg_post_client_payment_to_treasury",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION post_client_payment_to_treasury()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "trg_post_client_payment_to_treasury",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION post_client_payment_to_treasury()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "trg_validate_client_payment_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_client_payment_domain()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "trg_validate_client_payment_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_client_payment_domain()"
+    },
+    {
+      "table_name": "client_payments",
+      "trigger_name": "update_client_payments_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "clients",
+      "trigger_name": "audit_clients",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "clients",
+      "trigger_name": "audit_clients",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "clients",
+      "trigger_name": "audit_clients",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "clients",
+      "trigger_name": "update_clients_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "company_settings",
+      "trigger_name": "audit_company_settings",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "company_settings",
+      "trigger_name": "audit_company_settings",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "company_settings",
+      "trigger_name": "audit_company_settings",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "company_settings",
+      "trigger_name": "update_company_settings_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "contract_clause_templates",
+      "trigger_name": "update_contract_clause_templates_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "contract_clauses",
+      "trigger_name": "audit_contract_clauses",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_clauses",
+      "trigger_name": "audit_contract_clauses",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_clauses",
+      "trigger_name": "audit_contract_clauses",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_items",
+      "trigger_name": "audit_contract_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_items",
+      "trigger_name": "audit_contract_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_items",
+      "trigger_name": "audit_contract_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contract_items",
+      "trigger_name": "update_contract_items_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "contracts",
+      "trigger_name": "audit_contracts",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contracts",
+      "trigger_name": "audit_contracts",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contracts",
+      "trigger_name": "audit_contracts",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "contracts",
+      "trigger_name": "update_contracts_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "employees",
+      "trigger_name": "audit_employees",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "employees",
+      "trigger_name": "audit_employees",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "employees",
+      "trigger_name": "audit_employees",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "employees",
+      "trigger_name": "update_employees_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "engineers",
+      "trigger_name": "audit_engineers",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "engineers",
+      "trigger_name": "audit_engineers",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "engineers",
+      "trigger_name": "audit_engineers",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "engineers",
+      "trigger_name": "update_engineers_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "equipment",
+      "trigger_name": "audit_equipment",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment",
+      "trigger_name": "audit_equipment",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment",
+      "trigger_name": "audit_equipment",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment",
+      "trigger_name": "update_equipment_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "audit_equipment_rentals",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "audit_equipment_rentals",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "audit_equipment_rentals",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "trg_rentals_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "trg_rentals_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "trg_rentals_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "trigger_name": "update_equipment_rentals_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "audit_expenses",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "audit_expenses",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "audit_expenses",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expense_treasury_sync",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION handle_expense_treasury_sync()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expense_treasury_sync",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION handle_expense_treasury_sync()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expense_treasury_sync",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION handle_expense_treasury_sync()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expenses_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expenses_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_expenses_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_expense_item_ownership",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_project_item_ownership()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_expense_item_ownership",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_project_item_ownership()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_expense_phase_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_phase_attribution_integrity()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_expense_phase_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_phase_attribution_integrity()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_project_expense_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_project_expense_domain()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "trg_validate_project_expense_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_project_expense_domain()"
+    },
+    {
+      "table_name": "expenses",
+      "trigger_name": "update_expenses_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "general_project_items",
+      "trigger_name": "update_general_items_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "income",
+      "trigger_name": "audit_income",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "income",
+      "trigger_name": "audit_income",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "income",
+      "trigger_name": "audit_income",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "income",
+      "trigger_name": "update_income_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "trigger_name": "audit_inspection_checklists",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "trigger_name": "audit_inspection_checklists",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "trigger_name": "audit_inspection_checklists",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "trigger_name": "update_inspection_checklists_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "materials",
+      "trigger_name": "audit_materials",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "materials",
+      "trigger_name": "audit_materials",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "materials",
+      "trigger_name": "audit_materials",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "materials",
+      "trigger_name": "update_materials_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "measurement_configs",
+      "trigger_name": "update_measurement_configs_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "profiles",
+      "trigger_name": "update_profiles_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "audit_project_custody",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "audit_project_custody",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "audit_project_custody",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "trg_custody_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "trg_custody_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "trg_custody_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "project_custody",
+      "trigger_name": "update_custody_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "trigger_name": "audit_project_item_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "trigger_name": "audit_project_item_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "trigger_name": "audit_project_item_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "trigger_name": "trg_auto_compute_item_technician_cost",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION trg_auto_compute_project_item_technician_cost()"
+    },
+    {
+      "table_name": "project_item_technicians",
+      "trigger_name": "trg_auto_compute_item_technician_cost",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION trg_auto_compute_project_item_technician_cost()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "audit_project_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "audit_project_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "audit_project_items",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "trg_auto_allocate_project_item",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION trg_func_auto_allocate_on_project_item()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "trg_project_items_auto_snapshot_requirements",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION trg_auto_snapshot_project_item_requirements()"
+    },
+    {
+      "table_name": "project_items",
+      "trigger_name": "update_project_items_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "audit_project_phases",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "audit_project_phases",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "audit_project_phases",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "generate_phase_reference_trigger",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION generate_phase_reference()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "set_phase_reference",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION generate_phase_reference()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "trg_validate_phase_treasury_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_phase_treasury_domain()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "trg_validate_phase_treasury_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_phase_treasury_domain()"
+    },
+    {
+      "table_name": "project_phases",
+      "trigger_name": "update_project_phases_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "project_schedules",
+      "trigger_name": "audit_project_schedules",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_schedules",
+      "trigger_name": "audit_project_schedules",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_schedules",
+      "trigger_name": "audit_project_schedules",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_schedules",
+      "trigger_name": "update_project_schedules_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "project_suppliers",
+      "trigger_name": "audit_project_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_suppliers",
+      "trigger_name": "audit_project_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_suppliers",
+      "trigger_name": "audit_project_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_technicians",
+      "trigger_name": "audit_project_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_technicians",
+      "trigger_name": "audit_project_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "project_technicians",
+      "trigger_name": "audit_project_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "audit_projects",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "audit_projects",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "audit_projects",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "trg_auto_allocate_project",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION trg_func_auto_allocate_on_project()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "trg_auto_allocate_project",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION trg_func_auto_allocate_on_project()"
+    },
+    {
+      "table_name": "projects",
+      "trigger_name": "update_projects_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "purchase_payments",
+      "trigger_name": "trg_sync_purchase_payment",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_payment_sync()"
+    },
+    {
+      "table_name": "purchase_payments",
+      "trigger_name": "trg_sync_purchase_payment",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_payment_sync()"
+    },
+    {
+      "table_name": "purchase_payments",
+      "trigger_name": "trg_sync_purchase_payment",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_payment_sync()"
+    },
+    {
+      "table_name": "purchase_payments",
+      "trigger_name": "trg_validate_purchase_payment_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_purchase_payment_domain()"
+    },
+    {
+      "table_name": "purchase_payments",
+      "trigger_name": "trg_validate_purchase_payment_domain",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_purchase_payment_domain()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "audit_purchases",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "audit_purchases",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "audit_purchases",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_auto_allocate_purchase",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION trg_func_auto_allocate_on_purchase()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchase_cleanup_allocations",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_allocations_cleanup()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchase_deletion",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_deletion()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchases_treasury_sync",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_treasury_sync()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchases_treasury_sync",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION handle_purchase_treasury_sync()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchases_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchases_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_purchases_update_spent",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_project_spent()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_validate_purchase_edit_invariants",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_purchase_edit_invariants()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_validate_purchase_item_ownership",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_project_item_ownership()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_validate_purchase_item_ownership",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_project_item_ownership()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_validate_purchase_phase_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_phase_attribution_integrity()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "trg_validate_purchase_phase_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_phase_attribution_integrity()"
+    },
+    {
+      "table_name": "purchases",
+      "trigger_name": "update_purchases_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "risk_register",
+      "trigger_name": "audit_risk_register",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "risk_register",
+      "trigger_name": "audit_risk_register",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "risk_register",
+      "trigger_name": "audit_risk_register",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "risk_register",
+      "trigger_name": "update_risk_register_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "stock_movements",
+      "trigger_name": "audit_stock_movements",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "stock_movements",
+      "trigger_name": "audit_stock_movements",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "stock_movements",
+      "trigger_name": "audit_stock_movements",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "stock_movements",
+      "trigger_name": "sync_material_stock",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION update_material_stock()"
+    },
+    {
+      "table_name": "stock_movements",
+      "trigger_name": "sync_material_stock",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_material_stock()"
+    },
+    {
+      "table_name": "supplier_payments",
+      "trigger_name": "trg_protect_supplier_payments",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION trg_prevent_payment_header_mutation()"
+    },
+    {
+      "table_name": "supplier_payments",
+      "trigger_name": "trg_protect_supplier_payments",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION trg_prevent_payment_header_mutation()"
+    },
+    {
+      "table_name": "suppliers",
+      "trigger_name": "audit_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "suppliers",
+      "trigger_name": "audit_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "suppliers",
+      "trigger_name": "audit_suppliers",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "suppliers",
+      "trigger_name": "update_suppliers_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "technician_deposits",
+      "trigger_name": "technician_deposits_immutable",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION prevent_deposit_mutation()"
+    },
+    {
+      "table_name": "technician_deposits",
+      "trigger_name": "technician_deposits_immutable",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION prevent_deposit_mutation()"
+    },
+    {
+      "table_name": "technician_payments",
+      "trigger_name": "trg_protect_technician_payments",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION trg_prevent_payment_header_mutation()"
+    },
+    {
+      "table_name": "technician_payments",
+      "trigger_name": "trg_protect_technician_payments",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION trg_prevent_payment_header_mutation()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "audit_technician_progress",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "audit_technician_progress",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "audit_technician_progress",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "trg_technician_earned_guard",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION trg_validate_technician_earned_guard()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "trg_technician_earned_guard",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION trg_validate_technician_earned_guard()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "trg_validate_technician_progress_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_technician_progress_integrity()"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "trigger_name": "trg_validate_technician_progress_integrity",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_technician_progress_integrity()"
+    },
+    {
+      "table_name": "technician_types",
+      "trigger_name": "trg_technician_types_propagate_rename",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION propagate_technician_type_rename()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "audit_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "audit_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "audit_technicians",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "trg_sync_technician_specialty",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION sync_technician_specialty()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "trg_sync_technician_specialty",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION sync_technician_specialty()"
+    },
+    {
+      "table_name": "technicians",
+      "trigger_name": "update_technicians_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "transfers",
+      "trigger_name": "audit_transfers",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "transfers",
+      "trigger_name": "audit_transfers",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "transfers",
+      "trigger_name": "audit_transfers",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "transfers",
+      "trigger_name": "update_transfers_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "audit_treasuries",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "audit_treasuries",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "audit_treasuries",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "trg_validate_treasury_lifecycle",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_treasury_lifecycle()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "trg_validate_treasury_lifecycle",
+      "action_timing": "BEFORE",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION validate_treasury_lifecycle()"
+    },
+    {
+      "table_name": "treasuries",
+      "trigger_name": "update_treasuries_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "treasury_debts",
+      "trigger_name": "update_treasury_debts_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "audit_treasury_transactions",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "audit_treasury_transactions",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "audit_treasury_transactions",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_auto_sync_treasury_balance",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION auto_sync_treasury_balance()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_auto_sync_treasury_balance",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION auto_sync_treasury_balance()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_auto_sync_treasury_balance",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION auto_sync_treasury_balance()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_update_balance_after",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION update_balance_after()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_validate_treasury_opening_balance",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION validate_treasury_opening_balance()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "trg_validate_treasury_opening_balance",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION validate_treasury_opening_balance()"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "trigger_name": "update_treasury_transactions_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    },
+    {
+      "table_name": "user_roles",
+      "trigger_name": "audit_user_roles",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "user_roles",
+      "trigger_name": "audit_user_roles",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "user_roles",
+      "trigger_name": "audit_user_roles",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "variation_orders",
+      "trigger_name": "audit_variation_orders",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "variation_orders",
+      "trigger_name": "audit_variation_orders",
+      "action_timing": "AFTER",
+      "event_manipulation": "DELETE",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "variation_orders",
+      "trigger_name": "audit_variation_orders",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT",
+      "action_statement": "EXECUTE FUNCTION audit_trigger_func()"
+    },
+    {
+      "table_name": "variation_orders",
+      "trigger_name": "update_variation_orders_updated_at",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE",
+      "action_statement": "EXECUTE FUNCTION update_updated_at_column()"
+    }
+  ],
+  "rls": [
+    {
+      "schema_name": "public",
+      "table_name": "audit_logs",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can view audit_logs\",\"System can insert audit_logs\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "cash_flow_forecast",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can manage cash_flow_forecast\",\"Authenticated can view cash_flow_forecast\",\"Accountants can manage cash_flow_forecast\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "checklist_items",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can manage checklist_items\",\"Admins can manage checklist_items\",\"Authenticated can view checklist_items\",\"Engineers can manage checklist_items\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "client_credit_ledger",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view client_credit_ledger\",\"Direct insert blocked for clients\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "client_payment_allocations",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update client_payment_allocations\",\"Admins can insert client_payment_allocations\",\"Admins can delete client_payment_allocations\",\"Accountants can update client_payment_allocations\",\"Accountants can insert client_payment_allocations\",\"Accountants can delete client_payment_allocations\",\"Authenticated users can view client_payment_allocations\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "client_payments",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can insert client_payments\",\"Accountants can update client_payments\",\"Authenticated users can view client_payments\",\"Accountants can insert client_payments\",\"Accountants can delete client_payments\",\"Admins can update client_payments\",\"Admins can delete client_payments\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "clients",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update clients\",\"Enable read access for all\",\"Admins can delete clients\",\"Admins can insert clients\",\"Authenticated users can view clients\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "company_settings",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can insert settings\",\"Enable read access for all users\",\"Admins can update settings\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "contract_clause_templates",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can insert clause templates\",\"Authenticated users can view clause templates\",\"Admins can update clause templates\",\"Admins can delete clause templates\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "contract_clauses",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can delete contract clauses\",\"Admins can insert contract clauses\",\"Authenticated users can view contract clauses\",\"Admins can update contract clauses\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "contract_items",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view contract_items\",\"Admins can delete contract_items\",\"Admins can insert contract_items\",\"Admins can update contract_items\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "contracts",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view contracts\",\"Admins can delete contracts\",\"Admins can update contracts\",\"Admins can insert contracts\",\"Enable read access for all\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "custody_settlements",
+      "rls_enabled": false,
+      "force_rls": false,
+      "policies": "{}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "employee_advance_repayments",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{payroll_authenticated_read}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "employee_advances",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{payroll_authenticated_read}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "employee_payroll_slips",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{payroll_authenticated_read}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "employee_payrolls",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{payroll_authenticated_read}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "employees",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update employees\",\"Authenticated users can view employees\",\"Enable read access for all\",\"Admins can delete employees\",\"Admins can insert employees\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "engineers",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can insert engineers\",\"Admins can delete engineers\",\"Admins can update engineers\",\"Authenticated users can view engineers\",\"Enable read access for all\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "equipment",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Enable read access for all\",\"Admins can delete equipment\",\"Authenticated users can view equipment\",\"Admins can update equipment\",\"Admins can insert equipment\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "equipment_rentals",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can insert equipment_rentals\",\"Supervisors can update equipment_rentals\",\"Admins can delete equipment_rentals\",\"Admins can insert equipment_rentals\",\"Admins can update equipment_rentals\",\"Authenticated users can view equipment_rentals\",\"Enable read access for all\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "expenses",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update expenses\",\"Authenticated users can view expenses\",\"Enable read access for all\",\"Accountants can insert expenses\",\"Accountants can delete expenses\",\"Accountants can update expenses\",\"Admins can insert expenses\",\"Admins can delete expenses\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "general_item_technician_requirements",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can manage general_item_technician_requirements\",\"Authenticated users can view general_item_technician_requiremen\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "general_project_items",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update general_items\",\"Admins can delete general_items\",\"Admins can insert general_items\",\"Anyone can view general_items\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "income",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update income\",\"Enable read access for all\",\"Authenticated users can view income\",\"Admins can insert income\",\"Admins can delete income\",\"Accountants can update income\",\"Accountants can insert income\",\"Accountants can delete income\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "inspection_checklists",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Engineers can manage inspection_checklists\",\"Supervisors can manage inspection_checklists\",\"Admins can manage inspection_checklists\",\"Authenticated can view inspection_checklists\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "materials",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can manage materials\",\"Supervisors can manage materials\",\"Authenticated can view materials\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "measurement_configs",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can delete measurement_configs\",\"Anyone can view measurement_configs\",\"Admins can update measurement_configs\",\"Admins can insert measurement_configs\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "phase_reference_seq",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view phase_reference_seq\",\"Admins can manage phase_reference_seq\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "profiles",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Service role can insert profiles\",\"Users can update own profile\",\"Users can insert own profile\",\"Admins can view all profiles\",\"Users can view own profile\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_custody",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can update project_custody\",\"Admins can delete custody\",\"Admins can insert custody\",\"Admins can update custody\",\"Authenticated users can view custody\",\"Enable read access for all\",\"Supervisors can insert project_custody\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_item_technician_requirements",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins and supervisors can manage project_item_technician_requi\",\"Authenticated users can view project_item_technician_requiremen\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_item_technicians",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can delete project_item_technicians\",\"Admins can insert project_item_technicians\",\"Admins can update project_item_technicians\",\"Authenticated users can view project_item_technicians\",\"Enable read access for all\",\"Supervisors can insert project_item_technicians\",\"Supervisors can delete project_item_technicians\",\"Supervisors can update project_item_technicians\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_items",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can insert project_items\",\"Admins can delete project_items\",\"Admins can insert project_items\",\"Admins can update project_items\",\"Authenticated users can view project_items\",\"Enable read access for all\",\"Supervisors can update project_items\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_phases",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view project_phases\",\"Supervisors can update project_phases\",\"Supervisors can insert project_phases\",\"Enable read access for all\",\"Admins can update project_phases\",\"Admins can insert project_phases\",\"Admins can delete project_phases\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_schedules",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Engineers can manage project_schedules\",\"Authenticated can view project_schedules\",\"Admins can manage project_schedules\",\"Supervisors can manage project_schedules\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_suppliers",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can delete project_suppliers\",\"Supervisors can insert project_suppliers\",\"Admins can delete project_suppliers\",\"Admins can insert project_suppliers\",\"Authenticated users can view project_suppliers\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "project_technicians",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can delete project_technicians\",\"Supervisors can insert project_technicians\",\"Admins can delete project_technicians\",\"Admins can insert project_technicians\",\"Authenticated users can view project_technicians\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "projects",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can update projects\",\"Supervisors can update projects\",\"Admins can insert projects\",\"Admins can delete projects\",\"Supervisors can insert projects\",\"Enable read access for all\",\"Authenticated users can view projects\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "purchase_payments",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins and accountants can manage purchase_payments\",\"Authenticated can view purchase_payments\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "purchases",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Accountants can insert purchases\",\"Enable read access for all\",\"Authenticated users can view purchases\",\"Admins can update purchases\",\"Admins can insert purchases\",\"Admins can delete purchases\",\"Accountants can update purchases\",\"Accountants can delete purchases\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "risk_register",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can manage risk_register\",\"Authenticated can view risk_register\",\"Supervisors can manage risk_register\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "stock_movements",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated can view stock_movements\",\"Supervisors can manage stock_movements\",\"Admins can manage stock_movements\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "supplier_payment_allocations",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Allow read for authenticated on supplier_payment_allocations\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "supplier_payments",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Allow read for authenticated on supplier_payments\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "suppliers",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Admins can insert suppliers\",\"Enable read access for all\",\"Authenticated users can view suppliers\",\"Admins can update suppliers\",\"Admins can delete suppliers\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "technician_deposits",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{technician_deposits_finance_read}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "technician_payments",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Allow read for authenticated on technician_payments\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "technician_progress_records",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Supervisors can insert technician_progress\",\"Supervisors can update technician_progress\",\"Authenticated users can view technician_progress_records\",\"Supervisors can delete technician_progress\",\"Admins can delete technician_progress_records\",\"Admins can insert technician_progress_records\",\"Admins can update technician_progress_records\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "technician_types",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Anyone can view technician_types\",\"Admins can manage technician_types\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "technicians",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Enable read access for all\",\"Admins can insert technicians\",\"Admins can update technicians\",\"Authenticated users can view technicians\",\"Admins can delete technicians\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "transfers",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Accountants can delete transfers\",\"Accountants can insert transfers\",\"Accountants can update transfers\",\"Admins can delete transfers\",\"Admins can insert transfers\",\"Admins can update transfers\",\"Authenticated users can view transfers\",\"Enable read access for all\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "treasuries",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated users can view treasuries\",\"Accountants can delete treasuries\",\"Accountants can insert treasuries\",\"Accountants can update treasuries\",\"Admins can delete treasuries\",\"Admins can insert treasuries\",\"Admins can update treasuries\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "treasury_debts",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Accountants can manage treasury_debts\",\"Enable read access for all\",\"Authenticated users can view treasury_debts\",\"Admins can manage treasury_debts\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "treasury_transactions",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Accountants can insert treasury_transactions\",\"Admins can update treasury_transactions\",\"Admins can insert treasury_transactions\",\"Authenticated users can view treasury_transactions\",\"Accountants can delete treasury_transactions\",\"Accountants can update treasury_transactions\",\"Admins can delete treasury_transactions\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "user_roles",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Users can view own role\",\"Admins can insert roles\",\"Admins can delete roles\",\"Admins can view all roles\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "variation_orders",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{\"Authenticated can view variation_orders\",\"Supervisors can manage variation_orders\",\"Admins can manage variation_orders\"}"
+    },
+    {
+      "schema_name": "public",
+      "table_name": "workflow_requests",
+      "rls_enabled": true,
+      "force_rls": false,
+      "policies": "{}"
+    }
+  ],
+  "orphans": [],
+  "nullableSensitive": [
+    {
+      "table_name": "cash_flow_forecast",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "checklist_items",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "client_credit_ledger",
+      "column_name": "target_project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "client_payments",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "company_settings",
+      "column_name": "contract_show_project_info",
+      "is_nullable": "YES",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "company_settings",
+      "column_name": "contracting_treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "company_settings",
+      "column_name": "finishing_treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "contract_items",
+      "column_name": "project_item_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "contracts",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "custody_settlements",
+      "column_name": "return_treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "column_name": "payroll_slip_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "employee_advance_repayments",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "employee_payroll_slips",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "equipment_rentals",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "project_item_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "expenses",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "income",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "income",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "inspection_checklists",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "employee_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "remaining_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "spent_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "project_custody",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "project_phases",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "project_schedules",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "projects",
+      "column_name": "default_treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "projects",
+      "column_name": "supervision_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "project_item_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "purchases",
+      "column_name": "treasury_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "risk_register",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "stock_movements",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "suppliers",
+      "column_name": "payment_status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "technician_payments",
+      "column_name": "context_project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "earned_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "technician_progress_records",
+      "column_name": "project_item_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "transfers",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "transfers",
+      "column_name": "remaining_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "transfers",
+      "column_name": "spent_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "transfers",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "treasuries",
+      "column_name": "project_category",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "treasury_transactions",
+      "column_name": "project_id",
+      "is_nullable": "YES",
+      "data_type": "uuid"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "original_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "revised_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "status",
+      "is_nullable": "YES",
+      "data_type": "text"
+    },
+    {
+      "table_name": "variation_orders",
+      "column_name": "variation_amount",
+      "is_nullable": "YES",
+      "data_type": "numeric"
+    }
+  ],
+  "duplicateIndexes": [
+    {
+      "tablename": "audit_logs",
+      "indexname": "audit_logs_pkey",
+      "indexdef": "CREATE UNIQUE INDEX audit_logs_pkey ON public.audit_logs USING btree (id)"
+    },
+    {
+      "tablename": "cash_flow_forecast",
+      "indexname": "cash_flow_forecast_pkey",
+      "indexdef": "CREATE UNIQUE INDEX cash_flow_forecast_pkey ON public.cash_flow_forecast USING btree (id)"
+    },
+    {
+      "tablename": "checklist_items",
+      "indexname": "checklist_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX checklist_items_pkey ON public.checklist_items USING btree (id)"
+    },
+    {
+      "tablename": "client_credit_ledger",
+      "indexname": "client_credit_ledger_pkey",
+      "indexdef": "CREATE UNIQUE INDEX client_credit_ledger_pkey ON public.client_credit_ledger USING btree (id)"
+    },
+    {
+      "tablename": "client_payment_allocations",
+      "indexname": "client_payment_allocations_pkey",
+      "indexdef": "CREATE UNIQUE INDEX client_payment_allocations_pkey ON public.client_payment_allocations USING btree (id)"
+    },
+    {
+      "tablename": "client_payments",
+      "indexname": "client_payments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX client_payments_pkey ON public.client_payments USING btree (id)"
+    },
+    {
+      "tablename": "clients",
+      "indexname": "clients_pkey",
+      "indexdef": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)"
+    },
+    {
+      "tablename": "company_settings",
+      "indexname": "company_settings_pkey",
+      "indexdef": "CREATE UNIQUE INDEX company_settings_pkey ON public.company_settings USING btree (id)"
+    },
+    {
+      "tablename": "contract_clause_templates",
+      "indexname": "contract_clause_templates_pkey",
+      "indexdef": "CREATE UNIQUE INDEX contract_clause_templates_pkey ON public.contract_clause_templates USING btree (id)"
+    },
+    {
+      "tablename": "contract_clauses",
+      "indexname": "contract_clauses_pkey",
+      "indexdef": "CREATE UNIQUE INDEX contract_clauses_pkey ON public.contract_clauses USING btree (id)"
+    },
+    {
+      "tablename": "contract_items",
+      "indexname": "contract_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX contract_items_pkey ON public.contract_items USING btree (id)"
+    },
+    {
+      "tablename": "contracts",
+      "indexname": "contracts_pkey",
+      "indexdef": "CREATE UNIQUE INDEX contracts_pkey ON public.contracts USING btree (id)"
+    },
+    {
+      "tablename": "custody_settlements",
+      "indexname": "custody_settlements_pkey",
+      "indexdef": "CREATE UNIQUE INDEX custody_settlements_pkey ON public.custody_settlements USING btree (id)"
+    },
+    {
+      "tablename": "employee_advance_repayments",
+      "indexname": "employee_advance_repayments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX employee_advance_repayments_pkey ON public.employee_advance_repayments USING btree (id)"
+    },
+    {
+      "tablename": "employee_advances",
+      "indexname": "employee_advances_pkey",
+      "indexdef": "CREATE UNIQUE INDEX employee_advances_pkey ON public.employee_advances USING btree (id)"
+    },
+    {
+      "tablename": "employee_payroll_slips",
+      "indexname": "employee_payroll_slips_pkey",
+      "indexdef": "CREATE UNIQUE INDEX employee_payroll_slips_pkey ON public.employee_payroll_slips USING btree (id)"
+    },
+    {
+      "tablename": "employee_payrolls",
+      "indexname": "employee_payrolls_month_year_key",
+      "indexdef": "CREATE UNIQUE INDEX employee_payrolls_month_year_key ON public.employee_payrolls USING btree (month, year)"
+    },
+    {
+      "tablename": "employee_payrolls",
+      "indexname": "employee_payrolls_pkey",
+      "indexdef": "CREATE UNIQUE INDEX employee_payrolls_pkey ON public.employee_payrolls USING btree (id)"
+    },
+    {
+      "tablename": "employees",
+      "indexname": "employees_pkey",
+      "indexdef": "CREATE UNIQUE INDEX employees_pkey ON public.employees USING btree (id)"
+    },
+    {
+      "tablename": "engineers",
+      "indexname": "engineers_pkey",
+      "indexdef": "CREATE UNIQUE INDEX engineers_pkey ON public.engineers USING btree (id)"
+    },
+    {
+      "tablename": "equipment",
+      "indexname": "equipment_pkey",
+      "indexdef": "CREATE UNIQUE INDEX equipment_pkey ON public.equipment USING btree (id)"
+    },
+    {
+      "tablename": "equipment_rentals",
+      "indexname": "equipment_rentals_pkey",
+      "indexdef": "CREATE UNIQUE INDEX equipment_rentals_pkey ON public.equipment_rentals USING btree (id)"
+    },
+    {
+      "tablename": "expenses",
+      "indexname": "expenses_pkey",
+      "indexdef": "CREATE UNIQUE INDEX expenses_pkey ON public.expenses USING btree (id)"
+    },
+    {
+      "tablename": "general_item_technician_requirements",
+      "indexname": "general_item_technician_requirements_pkey",
+      "indexdef": "CREATE UNIQUE INDEX general_item_technician_requirements_pkey ON public.general_item_technician_requirements USING btree (id)"
+    },
+    {
+      "tablename": "general_item_technician_requirements",
+      "indexname": "uq_general_item_tech_req",
+      "indexdef": "CREATE UNIQUE INDEX uq_general_item_tech_req ON public.general_item_technician_requirements USING btree (general_item_id, technician_type_id)"
+    },
+    {
+      "tablename": "general_project_items",
+      "indexname": "general_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX general_items_pkey ON public.general_project_items USING btree (id)"
+    },
+    {
+      "tablename": "income",
+      "indexname": "income_pkey",
+      "indexdef": "CREATE UNIQUE INDEX income_pkey ON public.income USING btree (id)"
+    },
+    {
+      "tablename": "inspection_checklists",
+      "indexname": "inspection_checklists_pkey",
+      "indexdef": "CREATE UNIQUE INDEX inspection_checklists_pkey ON public.inspection_checklists USING btree (id)"
+    },
+    {
+      "tablename": "materials",
+      "indexname": "materials_pkey",
+      "indexdef": "CREATE UNIQUE INDEX materials_pkey ON public.materials USING btree (id)"
+    },
+    {
+      "tablename": "measurement_configs",
+      "indexname": "measurement_configs_pkey",
+      "indexdef": "CREATE UNIQUE INDEX measurement_configs_pkey ON public.measurement_configs USING btree (id)"
+    },
+    {
+      "tablename": "phase_reference_seq",
+      "indexname": "phase_reference_seq_pkey",
+      "indexdef": "CREATE UNIQUE INDEX phase_reference_seq_pkey ON public.phase_reference_seq USING btree (year)"
+    },
+    {
+      "tablename": "profiles",
+      "indexname": "profiles_access_code_key",
+      "indexdef": "CREATE UNIQUE INDEX profiles_access_code_key ON public.profiles USING btree (access_code)"
+    },
+    {
+      "tablename": "profiles",
+      "indexname": "profiles_pkey",
+      "indexdef": "CREATE UNIQUE INDEX profiles_pkey ON public.profiles USING btree (id)"
+    },
+    {
+      "tablename": "profiles",
+      "indexname": "profiles_user_id_key",
+      "indexdef": "CREATE UNIQUE INDEX profiles_user_id_key ON public.profiles USING btree (user_id)"
+    },
+    {
+      "tablename": "profiles",
+      "indexname": "profiles_username_key",
+      "indexdef": "CREATE UNIQUE INDEX profiles_username_key ON public.profiles USING btree (username)"
+    },
+    {
+      "tablename": "project_custody",
+      "indexname": "custody_pkey",
+      "indexdef": "CREATE UNIQUE INDEX custody_pkey ON public.project_custody USING btree (id)"
+    },
+    {
+      "tablename": "project_item_technician_requirements",
+      "indexname": "project_item_technician_requirements_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_item_technician_requirements_pkey ON public.project_item_technician_requirements USING btree (id)"
+    },
+    {
+      "tablename": "project_item_technician_requirements",
+      "indexname": "uq_project_item_tech_req",
+      "indexdef": "CREATE UNIQUE INDEX uq_project_item_tech_req ON public.project_item_technician_requirements USING btree (project_item_id, technician_type_id)"
+    },
+    {
+      "tablename": "project_item_technicians",
+      "indexname": "project_item_technicians_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_item_technicians_pkey ON public.project_item_technicians USING btree (id)"
+    },
+    {
+      "tablename": "project_item_technicians",
+      "indexname": "uq_project_item_technicians_assignment",
+      "indexdef": "CREATE UNIQUE INDEX uq_project_item_technicians_assignment ON public.project_item_technicians USING btree (project_item_id, technician_id)"
+    },
+    {
+      "tablename": "project_items",
+      "indexname": "project_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_items_pkey ON public.project_items USING btree (id)"
+    },
+    {
+      "tablename": "project_phases",
+      "indexname": "project_phases_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_phases_pkey ON public.project_phases USING btree (id)"
+    },
+    {
+      "tablename": "project_schedules",
+      "indexname": "project_schedules_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_schedules_pkey ON public.project_schedules USING btree (id)"
+    },
+    {
+      "tablename": "project_suppliers",
+      "indexname": "project_suppliers_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_suppliers_pkey ON public.project_suppliers USING btree (id)"
+    },
+    {
+      "tablename": "project_technicians",
+      "indexname": "project_technicians_pkey",
+      "indexdef": "CREATE UNIQUE INDEX project_technicians_pkey ON public.project_technicians USING btree (id)"
+    },
+    {
+      "tablename": "projects",
+      "indexname": "projects_pkey",
+      "indexdef": "CREATE UNIQUE INDEX projects_pkey ON public.projects USING btree (id)"
+    },
+    {
+      "tablename": "purchase_payments",
+      "indexname": "idx_purchase_payments_idempotency",
+      "indexdef": "CREATE UNIQUE INDEX idx_purchase_payments_idempotency ON public.purchase_payments USING btree (purchase_id, idempotency_key) WHERE (idempotency_key IS NOT NULL)"
+    },
+    {
+      "tablename": "purchase_payments",
+      "indexname": "idx_purchase_payments_idempotency_global",
+      "indexdef": "CREATE UNIQUE INDEX idx_purchase_payments_idempotency_global ON public.purchase_payments USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL)"
+    },
+    {
+      "tablename": "purchase_payments",
+      "indexname": "purchase_payments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX purchase_payments_pkey ON public.purchase_payments USING btree (id)"
+    },
+    {
+      "tablename": "purchases",
+      "indexname": "purchases_pkey",
+      "indexdef": "CREATE UNIQUE INDEX purchases_pkey ON public.purchases USING btree (id)"
+    },
+    {
+      "tablename": "risk_register",
+      "indexname": "risk_register_pkey",
+      "indexdef": "CREATE UNIQUE INDEX risk_register_pkey ON public.risk_register USING btree (id)"
+    },
+    {
+      "tablename": "stock_movements",
+      "indexname": "stock_movements_pkey",
+      "indexdef": "CREATE UNIQUE INDEX stock_movements_pkey ON public.stock_movements USING btree (id)"
+    },
+    {
+      "tablename": "supplier_payment_allocations",
+      "indexname": "supplier_payment_allocations_pkey",
+      "indexdef": "CREATE UNIQUE INDEX supplier_payment_allocations_pkey ON public.supplier_payment_allocations USING btree (id)"
+    },
+    {
+      "tablename": "supplier_payments",
+      "indexname": "supplier_payments_idempotency_key_key",
+      "indexdef": "CREATE UNIQUE INDEX supplier_payments_idempotency_key_key ON public.supplier_payments USING btree (idempotency_key)"
+    },
+    {
+      "tablename": "supplier_payments",
+      "indexname": "supplier_payments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX supplier_payments_pkey ON public.supplier_payments USING btree (id)"
+    },
+    {
+      "tablename": "suppliers",
+      "indexname": "suppliers_pkey",
+      "indexdef": "CREATE UNIQUE INDEX suppliers_pkey ON public.suppliers USING btree (id)"
+    },
+    {
+      "tablename": "technician_deposits",
+      "indexname": "technician_deposits_pkey",
+      "indexdef": "CREATE UNIQUE INDEX technician_deposits_pkey ON public.technician_deposits USING btree (id)"
+    },
+    {
+      "tablename": "technician_payments",
+      "indexname": "technician_payments_idempotency_key_key",
+      "indexdef": "CREATE UNIQUE INDEX technician_payments_idempotency_key_key ON public.technician_payments USING btree (idempotency_key)"
+    },
+    {
+      "tablename": "technician_payments",
+      "indexname": "technician_payments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX technician_payments_pkey ON public.technician_payments USING btree (id)"
+    },
+    {
+      "tablename": "technician_progress_records",
+      "indexname": "idx_tech_progress_idempotency",
+      "indexdef": "CREATE UNIQUE INDEX idx_tech_progress_idempotency ON public.technician_progress_records USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL)"
+    },
+    {
+      "tablename": "technician_progress_records",
+      "indexname": "technician_progress_records_pkey",
+      "indexdef": "CREATE UNIQUE INDEX technician_progress_records_pkey ON public.technician_progress_records USING btree (id)"
+    },
+    {
+      "tablename": "technician_types",
+      "indexname": "technician_types_code_key",
+      "indexdef": "CREATE UNIQUE INDEX technician_types_code_key ON public.technician_types USING btree (code)"
+    },
+    {
+      "tablename": "technician_types",
+      "indexname": "technician_types_name_key",
+      "indexdef": "CREATE UNIQUE INDEX technician_types_name_key ON public.technician_types USING btree (name)"
+    },
+    {
+      "tablename": "technician_types",
+      "indexname": "technician_types_pkey",
+      "indexdef": "CREATE UNIQUE INDEX technician_types_pkey ON public.technician_types USING btree (id)"
+    },
+    {
+      "tablename": "technicians",
+      "indexname": "technicians_pkey",
+      "indexdef": "CREATE UNIQUE INDEX technicians_pkey ON public.technicians USING btree (id)"
+    },
+    {
+      "tablename": "transfers",
+      "indexname": "transfers_pkey",
+      "indexdef": "CREATE UNIQUE INDEX transfers_pkey ON public.transfers USING btree (id)"
+    },
+    {
+      "tablename": "treasuries",
+      "indexname": "treasuries_pkey",
+      "indexdef": "CREATE UNIQUE INDEX treasuries_pkey ON public.treasuries USING btree (id)"
+    },
+    {
+      "tablename": "treasury_debts",
+      "indexname": "treasury_debts_pkey",
+      "indexdef": "CREATE UNIQUE INDEX treasury_debts_pkey ON public.treasury_debts USING btree (id)"
+    },
+    {
+      "tablename": "treasury_transactions",
+      "indexname": "idx_treasury_tx_unique_source_posting",
+      "indexdef": "CREATE UNIQUE INDEX idx_treasury_tx_unique_source_posting ON public.treasury_transactions USING btree (reference_id, reference_type, type) WHERE ((reference_id IS NOT NULL) AND (reference_type IS NOT NULL))"
+    },
+    {
+      "tablename": "treasury_transactions",
+      "indexname": "idx_unique_treasury_opening_balance",
+      "indexdef": "CREATE UNIQUE INDEX idx_unique_treasury_opening_balance ON public.treasury_transactions USING btree (treasury_id) WHERE ((source = 'opening_balance'::text) OR (reference_type = 'opening_balance'::text))"
+    },
+    {
+      "tablename": "treasury_transactions",
+      "indexname": "treasury_transactions_pkey",
+      "indexdef": "CREATE UNIQUE INDEX treasury_transactions_pkey ON public.treasury_transactions USING btree (id)"
+    },
+    {
+      "tablename": "user_roles",
+      "indexname": "user_roles_pkey",
+      "indexdef": "CREATE UNIQUE INDEX user_roles_pkey ON public.user_roles USING btree (id)"
+    },
+    {
+      "tablename": "user_roles",
+      "indexname": "user_roles_user_id_role_key",
+      "indexdef": "CREATE UNIQUE INDEX user_roles_user_id_role_key ON public.user_roles USING btree (user_id, role)"
+    },
+    {
+      "tablename": "variation_orders",
+      "indexname": "variation_orders_pkey",
+      "indexdef": "CREATE UNIQUE INDEX variation_orders_pkey ON public.variation_orders USING btree (id)"
+    },
+    {
+      "tablename": "workflow_requests",
+      "indexname": "workflow_requests_pkey",
+      "indexdef": "CREATE UNIQUE INDEX workflow_requests_pkey ON public.workflow_requests USING btree (actor_id, operation, request_key)"
+    }
+  ]
+}

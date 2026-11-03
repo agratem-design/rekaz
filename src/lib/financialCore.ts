@@ -312,7 +312,25 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
   const supplierAllocations = (data.supplierPaymentAllocations || [])
     .filter(a => supplierPurchaseIds.has(a.purchase_id))
     .reduce((sum, a) => sum + Number(a.amount || 0), 0);
-  const supplierPaid = directSupplierCashPaid + supplierAllocations;
+  // Legacy invoices paid directly before payment records existed: their paid_amount (derived on the
+  // server from the legacy treasury withdrawal) is real cash that has no purchase_payments row.
+  const paymentRecordsByPurchase = new Map<string, number>();
+  allPurchasePayments.forEach(pp => {
+    if (!pp.purchase_id) return;
+    paymentRecordsByPurchase.set(pp.purchase_id, (paymentRecordsByPurchase.get(pp.purchase_id) || 0) + Number(pp.amount || 0));
+  });
+  (data.supplierPaymentAllocations || []).forEach(a => {
+    paymentRecordsByPurchase.set(a.purchase_id, (paymentRecordsByPurchase.get(a.purchase_id) || 0) + Number(a.amount || 0));
+  });
+  const legacyDirectPaidFor = (rows: Array<{ id: string; paid_amount?: number | null }>) =>
+    rows.reduce((sum, p) => {
+      if (paymentRecordsByPurchase.has(p.id)) return sum;
+      return sum + Math.max(0, Number(p.paid_amount || 0));
+    }, 0);
+  const legacySupplierCashPaid = legacyDirectPaidFor([...materialPurchasesRows, ...servicePurchasesRows, ...rentalPurchasesRows]);
+  const legacyLaborCashPaid = legacyDirectPaidFor(laborPurchasesRows);
+
+  const supplierPaid = directSupplierCashPaid + supplierAllocations + legacySupplierCashPaid;
 
   const totalSupplierPurchases = materials + supplierServices + rentalPurchasesTotal;
   const supplierRemaining = totalSupplierPurchases - supplierPaid;
@@ -323,7 +341,7 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
 
   const techPurchasePaymentsPaid = allPurchasePayments
     .filter(pp => laborPurchaseIds.has(pp.purchase_id || ""))
-    .reduce((sum, pp) => sum + Number(pp.amount || 0), 0);
+    .reduce((sum, pp) => sum + Number(pp.amount || 0), 0) + legacyLaborCashPaid;
 
   const technicianPaid = techExpensesPaid + techPurchasePaymentsPaid;
   const technicianRemaining = technicianEarned - technicianPaid;
@@ -334,7 +352,7 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
   // Pure Cash Flow: actual Cash In is strictly actual cash payments (credit applied does not enter cash flow)
   // Actual Cash Out is strictly cash disbursements (allocations of advance payments do not draw treasury cash again)
   const actualCashIn = cashReceived;
-  const actualCashOut = directSupplierCashPaid + techExpensesPaid + techPurchasePaymentsPaid + directProjectExpenses;
+  const actualCashOut = directSupplierCashPaid + legacySupplierCashPaid + techExpensesPaid + techPurchasePaymentsPaid + directProjectExpenses;
   const netCashFlow = actualCashIn - actualCashOut;
 
   const cashFlow: CashFlowSummary = {
@@ -343,7 +361,7 @@ export function calculateProjectFinancials(data: RawFinancialData): ProjectFinan
     netCashFlow,
     supplierPaid,
     supplierRemaining,
-    supplierCashPaid: directSupplierCashPaid,
+    supplierCashPaid: directSupplierCashPaid + legacySupplierCashPaid,
     supplierAllocated: supplierAllocations,
     technicianPaid,
     technicianRemaining,

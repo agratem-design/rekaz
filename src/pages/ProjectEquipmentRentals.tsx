@@ -447,7 +447,7 @@ const ProjectEquipmentRentals = () => {
         .update({
           items: purchaseItems,
           total_amount: totalAmount,
-          status: "paid" as const,
+          // status is derived from actual payments (returning equipment does not pay the invoice)
         })
         .eq("rental_id", rental.id);
       
@@ -544,7 +544,7 @@ const ProjectEquipmentRentals = () => {
 
     openReceiptPrintWindow(
       {
-        receipt_number: `RNT-${rental.id.slice(0, 8).toUpperCase()}`,
+        receipt_number: `RNT-${rental.id.toUpperCase()}`,
         type: "rental_payment",
         amount: Number(rental.total_amount) || 0,
         date: rental.start_date || new Date().toISOString(),
