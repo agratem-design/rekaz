@@ -29,15 +29,18 @@ const Auth = () => {
   const { data: settings } = useQuery({
     queryKey: ["company-settings-auth"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("company_settings")
-        .select("company_name, company_logo")
-        .limit(1)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data;
+      try {
+        const { data } = await supabase
+          .from("company_settings")
+          .select("company_name, company_logo")
+          .limit(1)
+          .maybeSingle();
+        return data;
+      } catch {
+        return null;
+      }
     },
+    retry: false,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,23 +67,35 @@ const Auth = () => {
     const normalizedIdentifier = result.data.identifier;
     let email = normalizedIdentifier;
     
-    // If it doesn't contain @, resolve via secure server-side edge function
+    // If it doesn't contain @, resolve via RPC, alias, or edge function
     if (!normalizedIdentifier.includes('@')) {
-      const { data, error: resolveError } = await supabase.functions.invoke("resolve-username", {
-        body: { identifier: normalizedIdentifier },
-      });
+      const clean = normalizedIdentifier.trim().toLowerCase();
+      if (clean === 'admin' || clean === 'rekazabdo') {
+        email = 'rekazabdo@admin.com';
+      } else if (clean === 'tester') {
+        email = 'tester@rikaz.local';
+      } else {
+        const { data: rpcEmail } = await supabase.rpc('get_auth_email_by_username', { p_identifier: clean });
+        if (rpcEmail) {
+          email = rpcEmail;
+        } else {
+          const { data, error: resolveError } = await supabase.functions.invoke("resolve-username", {
+            body: { identifier: normalizedIdentifier },
+          });
 
-      if (resolveError || !data?.email) {
-        toast({
-          title: "خطأ",
-          description: "اسم المستخدم أو رمز الدخول غير موجود",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+          if (resolveError || !data?.email) {
+            toast({
+              title: "خطأ",
+              description: "اسم المستخدم أو رمز الدخول غير موجود",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+
+          email = data.email;
+        }
       }
-
-      email = data.email;
     }
 
     const { error } = await signIn(email, password);
